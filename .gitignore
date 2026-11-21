@@ -10,6 +10,7 @@ __pycache__/
 
 # Purchased art packs: their licences may not allow redistributing the files.
 artwork/packs/
+artwork/BURST_VFX/
 
 # Reference images from other games: for looking at, not redistributing.
 inspiration/
