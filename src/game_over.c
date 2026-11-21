@@ -1,0 +1,37 @@
+#pragma bank 255
+// Full time: who won, and the score. START (or A), after a moment so a held
+// button doesn't skip it, returns to the title.
+#include <gb/gb.h>
+#include "state.h"
+#include "input.h"
+#include "gfx.h"
+#include "game.h"
+#include "scene_text.h"
+
+#define INPUT_DELAY 30  // frames before START counts
+
+uint8_t game_over_timer;
+
+void game_over_enter(void) BANKED {
+    game_over_timer = 0;
+    palettes_menu();
+    VBK_REG = 1;
+    fill_bkg_rect(0, 0, 32, 32, TITLE_PAL_TEXT);
+    VBK_REG = 0;
+    uint8_t t = SCENE_TILES;
+    t += draw(FONT_DISPLAY, TEXT_CENTER, 4, winner == SIDE_YOU ? "YOU WIN!" : "CPU WINS", t, TITLE_PAL_GOLD);
+    // "YOU 5 - 3 CPU" (one digit each: the match ends at WIN_GOALS).
+    char line[] = "YOU 0 - 0 CPU";
+    line[4] = '0' + score[SIDE_YOU];
+    line[8] = '0' + score[SIDE_CPU];
+    t += text_draw(FONT_COMPACT, TEXT_CENTER, 8, line, t, TITLE_PAL_TEXT);
+    draw(FONT_COMPACT, TEXT_CENTER, 14, "PRESS START", t, TITLE_PAL_TEXT);
+}
+
+void game_over_update(void) BANKED {
+    if (game_over_timer < INPUT_DELAY) {
+        game_over_timer++;
+        return;
+    }
+    if (joy_pressed & (J_START | J_A)) state_change(STATE_TITLE);
+}
