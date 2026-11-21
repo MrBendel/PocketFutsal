@@ -1,12 +1,14 @@
 # PocketFutsal
 
 A Game Boy Color arcade futsal game in the spirit of Mario Tennis: 1-on-1 against the
-CPU, each side a player and a keeper, shots you charge by pressing early. Built in C
+CPU on a court seen in perspective, each of you in your own half defending the goal
+behind you, strikes you charge by pressing early. Built in C
 with [GBDK-2020](https://gbdk.org/) 4.5.0 on the engine from
 [RogueGB](https://github.com/MrBendel/RogueGB) (by way of Danger Noodle): its build,
 VRAM queue, text, fades, sound engine, headless emulator harness, tests and playtest page.
 
-**Status: v0.1, first playable.** One pitch, one CPU opponent, first to five goals.
+**Status: v0.2, the tennis-style rebuild.** One court, one CPU opponent, first to
+seven by two. Proportions measured from Mario Tennis (GBC): see the design doc.
 The design is in [docs/design/README.md](docs/design/README.md).
 
 ## Quick start
@@ -26,23 +28,27 @@ extracted on first build.
 
 ## How to play
 
-You're blue, attacking the goal on the right. The ball is always loose: you strike it
-rather than carry it.
+You're blue, at the bottom, defending the near goal; the CPU is red, at the top. You
+each keep to your own half, like tennis. The ball is always loose: you strike it
+rather than carry it, and a goal is a point.
 
 | Button | What it does |
 |---|---|
-| D-pad | Run (eight ways). Into the ball, you dribble it ahead; standing still, you trap it |
-| A | Ready a **driven shot** along the ground |
-| B | Ready a **chip**, up and over the keeper |
-| UP / DOWN as the shot goes | Aim at that corner of the goal |
+| D-pad | Run (eight ways) in your half. Serving: along your line |
+| A | Ready a **drive**. Serving: toss the ball up |
+| B | Ready a **chip** (a lob). Serving: toss it up for a chipped serve |
+| A or B, the ball just out of reach coming past | **Dive** for it |
+| LEFT / RIGHT as the strike goes | Aim at that corner of the goal |
 | START | Pause |
 
-Press A or B *before* the ball reaches you: the shot charges for as long as the ball
+Press A or B *before* the ball reaches you: the strike charges for as long as the ball
 takes to arrive (the meter in the HUD), then fires by itself the moment it's in reach.
 While charging you only shuffle, so charging early is a gamble on where the ball goes.
-A full meter is a **power shot**: the ball catches fire, and a keeper can only beat it
-away, and only if it's straight at them. Keepers hold anything softer that they reach,
-then throw it out. A charged chip floats over a keeper standing on its line.
+The ball's height picks the strike: a **kick** on the ground, a **volley** at the
+waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
+A full meter on a drive is a **power shot**: the ball catches fire, and a player who
+meets it with less than half a meter is knocked down. Without a strike ready, the ball
+bounces off you. The side that conceded serves: the ball is struck on the way down.
 
 ## Code structure
 
@@ -50,8 +56,8 @@ then throw it out. A charged chip floats over a keeper standing on its line.
 |---|---|
 | `src/main.c` | Boot and the main loop. One scene update per frame; scene changes fade out, `enter()` the new scene, fade in |
 | `src/state.h` | Scene IDs (`STATE_TITLE`, `STATE_PLAY`, `STATE_GAME_OVER`), `state_change()`, `wait_frame()` |
-| `src/game.h` | The match's watchable state and the pitch's measurements |
-| `src/play.c` | The match: players, CPU, keepers, the ball's physics, goals, the HUD |
+| `src/game.h` | The match's watchable state, the court's measurements and its perspective |
+| `src/play.c` | The match: the perspective, players, strikes, the CPU, the ball's physics, goals, the HUD |
 | `src/title.c` | Title screen. START seeds the match from the frame it lands on |
 | `src/game_over.c` | Full time: who won and the score; START returns to the title |
 | `src/input.c` | Reads the joypad once per frame: `joy` (held), `joy_pressed`, `joy_released` |
@@ -64,7 +70,7 @@ then throw it out. A charged chip floats over a keeper standing on its line.
 | `src/palettes.c` | Banked: each scene's Color palettes |
 | `tools/build.mjs` | The build: assets, compile, link, bank 0 and work RAM checks |
 | `tools/assets.mjs` | PNG → tiles and 16×16 sprite animations; ASCII-art tiles, and tile maps, from `tools/tile-art.mjs` |
-| `tools/tile-art.mjs` | Placeholder art: the pitch drawn in code (cut into unique tiles and a map), ASCII sprites |
+| `tools/tile-art.mjs` | Placeholder art: the court drawn in perspective in code (cut into unique tiles and a map), ASCII sprites |
 | `tools/fonts.mjs` | The font sheet → glyph tables for `text.c` |
 | `tools/serve.mjs` | The local playtest server (live rebuild + reload, saves replays to `replays/`) |
 | `tools/bundle.mjs` | The playtest page, emulator and ROM in one HTML file |
@@ -91,7 +97,7 @@ Text drawing reads strings from RAM: banked scenes copy their constants first
 (`scene_text.h`). The build fails if bank 0 overflows or passes 90%.
 
 **HUD at the bottom.** The HUD is the window layer at line 136 (`HUD_WY` in `gfx.h`),
-under a 160×136 pitch. The hardware draws the window to the bottom of the screen
+over the bottom of a 160×168 court that scrolls up and down after the ball (`cam_y`). The hardware draws the window to the bottom of the screen
 for free; a top HUD would need a scanline interrupt every frame. `gfx_sprite_split`
 keeps sprites off it.
 
@@ -107,6 +113,9 @@ Set `cpu_idle` to 1 (the playtest page's watches can) to make the CPU stand stil
 
 - `artwork/fonts/font-sheet.png`: the three proportional fonts (from RogueGB).
 - `artwork/Fonts for GB Studio/`: the 8×8 tile font and the dialog frame.
-- `tools/tile-art.mjs`: placeholder art. The pitch is drawn a pixel at a time in code
-  (grass stripes, lines, boards, nets) and cut into unique tiles; the players, keepers,
-  ball, shadow and marker are 16×16 and 8×8 ASCII sprites.
+- `tools/tile-art.mjs`: placeholder art. The court is drawn a pixel at a time in code,
+  in perspective (bands, lines, goals, boards), and cut into unique tiles. The player
+  is a generic 16×24 ASCII sprite, Mario Tennis's size, in two views (from behind for
+  you, from the front for the CPU) with ten poses each, plus a dive; they load into
+  VRAM bank 1. The ball and its shadow are 8×8.
+- `inspiration/` (not in the repo): Mario Tennis sheets, for proportions only.

@@ -30,40 +30,35 @@ static void set_obj(uint8_t p, const uint16_t *c) {
     memcpy(&pal_base_obj[p << 2], c, 8);
 }
 
-// Play (tools/tile-art.mjs draws the pitch in these color indices).
-// The field: light and dark grass stripes, white lines.
-#define GRASS C(96, 176, 72)
-#define GRASS_DARK C(72, 148, 56)
-#define LINE C(240, 248, 232)
-static const uint16_t field[4] = {GRASS, GRASS_DARK, C(40, 88, 40), LINE};
+// Play (tools/tile-art.mjs draws the court in these color indices).
+// The court: teal in light and dark bands (and the nets), the navy floor round
+// it, white lines and posts.
+#define COURT C(64, 160, 176)
+#define COURT_DARK C(48, 136, 152)
+#define FLOOR C(40, 56, 88)
+#define LINE C(240, 248, 240)
+static const uint16_t field[4] = {COURT, COURT_DARK, FLOOR, LINE};
 // The boards: blue face, navy top and shadow, a white stripe.
-static const uint16_t boards[4] = {GRASS, C(64, 112, 200), C(24, 40, 96), LINE};
-// The nets: the dark inside of the goal, the net, the white posts.
-static const uint16_t nets[4] = {C(24, 32, 40), C(176, 184, 192), C(96, 104, 112), LINE};
+static const uint16_t boards[4] = {FLOOR, C(64, 112, 200), C(24, 40, 96), LINE};
 // Sprites (color 0 is see-through): 1 skin, 2 jersey, 3 outline.
 #define SKIN C(248, 200, 152)
 #define INK C(24, 20, 32)
 static const uint16_t you[4] = {0, SKIN, C(56, 112, 248), INK};
 static const uint16_t cpu[4] = {0, SKIN, C(232, 48, 48), INK};
-static const uint16_t keep_you[4] = {0, SKIN, C(48, 200, 96), INK};
-static const uint16_t keep_cpu[4] = {0, SKIN, C(248, 208, 32), INK};
 // The ball: white, grey patches; on fire after a power shot.
 static const uint16_t ball[4] = {0, C(255, 255, 255), C(96, 96, 112), INK};
 static const uint16_t power[4] = {0, C(255, 240, 120), C(255, 112, 24), C(176, 24, 16)};
-// The shadow (3) and the marker over you (1, outlined 3).
-static const uint16_t marks[4] = {0, C(255, 232, 64), C(40, 88, 40), C(40, 96, 40)};
+// The ball's shadow (3).
+static const uint16_t marks[4] = {0, C(255, 232, 64), C(32, 88, 104), C(32, 96, 112)};
 // The HUD row (the GB Studio font): a navy band, light letters; the meter in gold.
 static const uint16_t hud[4] = {C(24, 32, 64), C(24, 32, 64), C(254, 196, 52), C(232, 236, 255)};
 
 void palettes_play(void) BANKED {
     set_bg(PLAY_PAL_FIELD, field);
     set_bg(PLAY_PAL_BOARD, boards);
-    set_bg(PLAY_PAL_NET, nets);
     set_bg(BG_PAL_UI, hud);  // the window: the HUD
     set_obj(SPR_PAL_YOU, you);
     set_obj(SPR_PAL_CPU, cpu);
-    set_obj(SPR_PAL_KEEP_YOU, keep_you);
-    set_obj(SPR_PAL_KEEP_CPU, keep_cpu);
     set_obj(SPR_PAL_BALL, ball);
     set_obj(SPR_PAL_POWER, power);
     set_obj(SPR_PAL_UI, marks);

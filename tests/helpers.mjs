@@ -122,10 +122,14 @@ export const FRAME_LIMIT = FRAME_CYCLES - 9120;  // 131,328
 
 // Scene IDs, must match src/state.h.
 export const TITLE = 0, PLAY = 1, GAME_OVER = 2;
-// Sides, shots and positions, must match src/game.h.
+// Sides, shots, strikes and phases, must match src/game.h.
 export const YOU = 0, CPU = 1, NOBODY = 0xFF;
 export const SHOT_NONE = 0, SHOT_DRIVE = 1, SHOT_CHIP = 2;
 export const CHARGE_MAX = 32;
+export const MOVE_NONE = 0, MOVE_KICK = 1, MOVE_VOLLEY = 2, MOVE_HEADER = 3, MOVE_BICYCLE = 4, MOVE_DIVE = 5, MOVE_DOWN = 6;
+export const PHASE_SERVE = 0, PHASE_TOSS = 1, PHASE_RALLY = 2;
+// The court (flat coordinates, px).
+export const COURT_FAR = 0, COURT_NEAR = 224, HALFWAY = 112, CENTER_X = 80;
 /** Sixteenths of a pixel -> pixels. */
 export const px = (sub) => Math.floor(sub / 16);
 
@@ -149,9 +153,9 @@ export function startGame(emu = bootToTitle(), seed = 4242) {
   return settle(emu.tap('START'), PLAY, 'play state');
 }
 
-/** Wait out the kickoff whistle. */
-export function kickedOff(emu) {
-  return emu.until((e) => e.v('kickoff_timer') === 0, 120, 'the whistle');
+/** Wait until the server may toss the ball up. */
+export function served(emu) {
+  return emu.until((e) => e.v('serve_timer') === 0, 120, 'the serve');
 }
 
 /** Write a signed 16-bit global. */

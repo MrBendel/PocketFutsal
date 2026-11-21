@@ -6,7 +6,9 @@
   carried over yet (sprite slots, camera/scrolling, actors, save files in SRAM, far
   RAM, dialogue, music hooks) before writing new ones.
 - The design: `docs/design/README.md`. The match is `src/play.c`; its state and the
-  pitch's measurements are in `src/game.h` (tools/tile-art.mjs draws the pitch to match).
+  court's measurements and perspective are in `src/game.h` (tools/tile-art.mjs draws the
+  court to match: change both together). `inspiration/` (gitignored) holds Mario Tennis
+  sheets for proportions only: never copy from them.
 - Engine: GBDK-2020 4.5.0. Reference docs are in `docs/gbdk/` (start with `docs/gbdk/README.md`).
 - The user builds and tests with `npm run play` / `npm test` (Node 22+).
 - In a cloud session: download GBDK into `tools/` first
@@ -15,9 +17,10 @@
 - Verify every change with `node tools/test.mjs`. Look at screenshots in
   `build/test-output/` with Read when visuals change; `node tools/test.mjs --update`
   accepts new golden screens.
-- Balance changes (keeper reach, shot speeds, the CPU): the tests pin a few outcomes
-  (a weak corner shot is saved, a charged one scores, a chip beats a keeper on its
-  line, the CPU can score). Try a spread of shots in a scratch script before and after.
+- Balance changes (strike speeds, reach, the CPU): the tests pin a few outcomes
+  (the strike for each ball height, a power shot knocks down an unready player, a dive
+  reaches, the CPU returns a serve and scores). Try a spread of shots in a scratch
+  script before and after, and a bot match against the CPU.
 - The HUD goes at the bottom, on the window layer (`HUD_WY` in `src/gfx.h`): free in hardware,
   where a top HUD needs a scanline interrupt every frame. Don't move it to the top.
 - Keep watchable game state in global, non-static variables.

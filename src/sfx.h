@@ -11,14 +11,14 @@
 #include <stdint.h>
 
 #define SFX_START 0    // a game starts (title)
-#define SFX_KICK 1     // a shot
-#define SFX_TOUCH 2    // a soft tick: a dribble touch, a trap
+#define SFX_KICK 1     // a strike
+#define SFX_TOUCH 2    // a soft tick: off a player, the serve's toss, a diving touch
 #define SFX_POWER 3    // a full-charge power shot
 #define SFX_GOAL 4     // a goal: a chime up a chord
-#define SFX_WHISTLE 5  // kickoff
+#define SFX_WHISTLE 5  // the match starts
 #define SFX_BOARD 6    // the ball off the boards
-#define SFX_CATCH 7    // the keeper holds it
-#define SFX_PARRY 8    // the keeper beats a power shot away
+#define SFX_CATCH 7    // a dive
+#define SFX_PARRY 8    // knocked down by a power shot
 #define SFX_CHARGE 9   // the meter is full
 #define SFX_COUNT 10
 

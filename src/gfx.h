@@ -93,11 +93,10 @@ void win_frame(uint8_t x, uint8_t y, uint8_t w, uint8_t h) BANKED;
 #define SPR_PAL_YOU 0     // your player: blue
 #define SPR_PAL_FLASH 1   // colors inverted, for a warning or a hit
 #define SPR_PAL_CPU 2     // the CPU's player: red
-#define SPR_PAL_KEEP_YOU 3  // your keeper: green
-#define SPR_PAL_KEEP_CPU 4  // the CPU's keeper: yellow
+                          // 3, 4: free
 #define SPR_PAL_BALL 5
 #define SPR_PAL_POWER 6   // a power shot: the ball on fire
-#define SPR_PAL_UI 7      // the ball's shadow and your marker
+#define SPR_PAL_UI 7      // the ball's shadow
 extern uint16_t pal_base_bg[PAL_COUNT * 4], pal_base_obj[PAL_COUNT * 4];
 // Put the base palettes on screen at fade step `step` (0 = as they are,
 // FADE_STEPS = white); uploaded at the next vblank.
@@ -124,9 +123,8 @@ extern uint8_t split_box;
 #define TITLE_PAL_PROMPT 3
 void palettes_title(void) BANKED;
 // Play: the field (grass and lines), the boards, the goal nets (tools/tile-art.mjs).
-#define PLAY_PAL_FIELD 0
-#define PLAY_PAL_BOARD 1
-#define PLAY_PAL_NET 2
+#define PLAY_PAL_FIELD 0  // the court, its lines, the floor round it, the goals
+#define PLAY_PAL_BOARD 1  // the boards along the top and bottom
 void palettes_play(void) BANKED;
 // Menus (game over): the title's colors.
 void palettes_menu(void) BANKED;

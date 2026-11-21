@@ -29,7 +29,8 @@ let plan;
 if (scenario === 'title') plan = Array(300).fill('');
 else {
   step('START'); step('', 40);  // into play
-  // Run about the pitch, readying shots now and then, so the CPU and keepers are busy.
+  // Serve, then run about the court readying strikes now and then, so the CPU is busy.
+  step('', 60); step('A'); step('', 40);
   const legs = ['RIGHT', 'RIGHT+A', 'DOWN', 'LEFT+B', 'UP', ''];
   plan = Array.from({ length: 600 }, (_, f) => legs[Math.floor(f / 30) % legs.length]);
 }

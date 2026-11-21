@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { PITCH, HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
+import { PITCH, HUD_TILES, SPRITE_TILES, PLAYER_TILES, asciiTile } from './tile-art.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const GEN_DIR = path.join(ROOT, 'build', 'gen');
@@ -42,13 +42,15 @@ export const ASSETS = [
   { name: 'font', bank: true, src: 'artwork/Fonts for GB Studio/light/default/ascii.png', first: 0, count: 64 },
   // 3x3 dialog frame: corners, edges and fill, row-major.
   { name: 'frame', bank: true, src: 'artwork/Fonts for GB Studio/light/frame.png' },
-  // The pitch, drawn in code in tools/tile-art.mjs: its unique tiles, plus a
-  // 20x17 map (tile indices from mapBase on) and the tiles' palettes.
+  // The court, drawn in code in tools/tile-art.mjs: its unique tiles, plus a
+  // 20x21 map (tile indices from mapBase on) and the tiles' palettes.
   { name: 'pitch', bank: true, ascii: PITCH.tiles, map: PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
-  // The players, keepers, ball, its shadow and the marker (8x16 sprite mode).
+  // The ball and its shadow (8x16 sprite mode, VRAM bank 0).
   { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs' },
+  // The players' frames, both views (VRAM bank 1).
+  { name: 'players', bank: true, ascii: PLAYER_TILES, src: 'tools/tile-art.mjs' },
 ];
 
 /** "player walk down", 4 -> ["player walk down (1).png", ..., "player walk down (4).png"] */
