@@ -124,9 +124,10 @@ export const FRAME_LIMIT = FRAME_CYCLES - 9120;  // 131,328
 export const TITLE = 0, PLAY = 1, GAME_OVER = 2;
 // Sides, shots, strikes and phases, must match src/game.h.
 export const YOU = 0, CPU = 1, NOBODY = 0xFF;
-export const SHOT_NONE = 0, SHOT_DRIVE = 1, SHOT_CHIP = 2;
-export const CHARGE_MAX = 32;
-export const MOVE_NONE = 0, MOVE_KICK = 1, MOVE_VOLLEY = 2, MOVE_HEADER = 3, MOVE_BICYCLE = 4, MOVE_DIVE = 5, MOVE_DOWN = 6;
+export const SHOT_NONE = 0, SHOT_POWER = 1, SHOT_CURVE = 2, SHOT_LOB = 3, SHOT_DROP = 4;
+export const CHARGE_MAX = 32, TAP_CHARGE = 3, TAP_MAX = 8;
+export const MOVE_NONE = 0, MOVE_KICK = 1, MOVE_VOLLEY = 2, MOVE_HEADER = 3, MOVE_BICYCLE = 4, MOVE_SLIDE = 5,
+  MOVE_DOWN = 6, MOVE_BLOCK = 7;
 export const PHASE_SERVE = 0, PHASE_TOSS = 1, PHASE_RALLY = 2;
 // The court (flat coordinates, px).
 export const COURT_FAR = 0, COURT_NEAR = 224, HALFWAY = 112, CENTER_X = 80;

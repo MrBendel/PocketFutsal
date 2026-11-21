@@ -41,32 +41,52 @@ getting up), win, lose. PocketFutsal's, per view:
 |---|---|
 | stand | idle |
 | run A / run B | running |
-| ready | crouched, charging a strike; also tossing the serve |
+| ready | planted, charging a strike; also tossing the serve |
 | kick | a ground strike (the ball under 5 px up) |
 | volley | the ball 5-15 px up: faster and flatter |
-| header | the ball 16-27 px up, in front: knocked down at the other half |
-| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): a power strike if charged half way |
-| dive | (one set, both views) stretching for a ball out of reach; then lying there a moment |
+| header | the ball 16-27 px up, in front: driven down at the other half |
+| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way |
+| lying | (one set, both views) a slide, feet first, for a ball out of reach; knocked down |
 | win / lose | the end of the match |
 
 ### Rules
 
-- **Strikes, Mario Tennis style.** A readies a driven strike, B a chip (a lob). It
-  charges until the ball arrives and fires by itself in reach; which strike depends on
-  the ball's height. Charging slows you to a shuffle. LEFT / RIGHT as it goes aims at
-  that corner of the goal. A full meter on a drive is a **power shot**: on fire, and a
-  player who meets it without at least half a meter is knocked down.
-- **Dive**: A or B with the ball just out of reach, coming past you: a lunge sideways.
-  Catch it and it's a weak return; miss and you're on the floor for a moment.
-- **Without a strike ready**, the ball bounces off you.
+Decided 2026-11-21 (the second pass): A and B are straight vs. curve, Mario Tennis's
+topspin and slice turned into football; readying plants you; mashing adds power;
+the game slides you to a ball out of reach; a ball only just reached pops up, to be
+slammed (the Captain Tsubasa feel).
+
+- **Readying a strike** is only possible with the ball coming your way (or loose in
+  your half), and plants you until it goes. The meter fills as you wait (a step every
+  other frame) and each tap of the button again adds 3, up to 8 taps. The strike goes
+  by itself as the ball arrives; the ball's height picks kick, volley, header or
+  bicycle kick. Plant too early in the wrong place and you'll be sliding for it.
+- **A: power**, straight where the d-pad points (LEFT / RIGHT: that corner of the goal).
+- **B: curve**: set off wide and bent back in to the side the d-pad holds.
+- **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
+  dying just past halfway. (Mario Tennis has these the other way round.)
+- **A full meter** (on A or B) sets the ball on fire. Meeting a ball on fire cleanly
+  takes three quarters of a meter.
+- **Out of reach, planted**: you slide for it (24 px either side, more than your reach
+  of 10). Get there and it pops up, and you're down a short while; miss and you're down
+  longer.
+- **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
+  ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
+  on fire. A slam met with three quarters of a meter is returned clean; less, and it
+  pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
+- **Unready**, the ball pops up off you (a ball on fire knocks you down).
 - **The court**: each goal is two thirds of its back line; boards round the rest, and
   above the crossbar, so the ball only stops for a goal.
 - **Serve**: the side that conceded serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT.
 - **Scoring**: a goal is a point. First to 7, by 2.
-- **CPU**: works out where the ball will cross its line (every 8 frames), goes there,
-  readies a strike as it comes (a chip one time in four), and aims away from you. It
-  dives for balls it can't reach. It's a little slower than you.
+- **CPU**: works out where the ball will cross its line (every 8 frames, in a straight
+  line, so curves fool it), goes there, and plants once it's in place with the ball
+  within 72 px (or at the last moment). It taps now and then, lobs you if you're up near
+  halfway, drops it short if you're back on your line, curves one time in four, and aims
+  away from you. Same slides and pop-ups as you. A little slower than you.
+- **Balance so far** (build/scratch/sim2.mjs, a bot that re-reads the ball every 12
+  frames): close matches, 1,300-2,500 frames a point. Not yet tested by hand.
 
 ## v0.1 (2026-11-21): first playable (replaced)
 

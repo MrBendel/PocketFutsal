@@ -35,20 +35,22 @@ rather than carry it, and a goal is a point.
 | Button | What it does |
 |---|---|
 | D-pad | Run (eight ways) in your half. Serving: along your line |
-| A | Ready a **drive**. Serving: toss the ball up |
-| B | Ready a **chip** (a lob). Serving: toss it up for a chipped serve |
-| A or B, the ball just out of reach coming past | **Dive** for it |
+| A | Ready a **power shot**, straight. Serving: toss the ball up |
+| B | Ready a **curve**, bending in to the side you hold |
+| B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
+| A or B again while ready | Tap for more power |
 | LEFT / RIGHT as the strike goes | Aim at that corner of the goal |
 | START | Pause |
 
-Press A or B *before* the ball reaches you: the strike charges for as long as the ball
-takes to arrive (the meter in the HUD), then fires by itself the moment it's in reach.
-While charging you only shuffle, so charging early is a gamble on where the ball goes.
-The ball's height picks the strike: a **kick** on the ground, a **volley** at the
-waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
-A full meter on a drive is a **power shot**: the ball catches fire, and a player who
-meets it with less than half a meter is knocked down. Without a strike ready, the ball
-bounces off you. The side that conceded serves: the ball is struck on the way down.
+Press A or B once the ball is coming your way: you plant, and the strike charges as you
+wait (the meter in the HUD; tap again for more), then goes by itself as the ball
+arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
+the waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
+Planted out of reach, you **slide** for it: it pops up, and you're on the floor a
+moment. A pop-up met in the air is a **slam**, on fire, and so is a full-meter strike;
+meeting a ball on fire takes three quarters of a meter, or it pops up off you (or knocks
+you down, if you slide to it or aren't ready). The side that conceded serves: the ball is
+struck on the way down.
 
 ## Code structure
 

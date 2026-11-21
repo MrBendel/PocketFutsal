@@ -41,15 +41,21 @@
 
 #define WIN_POINTS 7  // first to seven, by two
 
-// Strikes: A drives the ball, B chips it (a lob).
+// Strikes, readied before the ball arrives: A a power shot, straight where the
+// d-pad points; B a curve, bending in to the side the d-pad holds. B then A is a
+// lob over the other player; A then B a drop shot, dying just past halfway.
 #define SHOT_NONE 0
-#define SHOT_DRIVE 1
-#define SHOT_CHIP 2
-// Readying a strike (pressing A or B) charges it for as long as the ball takes to
-// arrive, Mario Tennis style: the player slows to a shuffle while charging. A full
-// meter on a drive is a power shot: on fire, and it knocks down a player who meets
-// it with less than half a meter.
+#define SHOT_POWER 1
+#define SHOT_CURVE 2
+#define SHOT_LOB 3
+#define SHOT_DROP 4
+// Readying a strike plants you until it goes, and you can only ready one with the
+// ball coming your way (or loose in your half). The meter fills as you wait, and
+// each tap of the button again adds more (up to TAP_MAX taps). A full meter on A or
+// B sets the ball on fire. Meeting a ball on fire needs half a meter.
 #define CHARGE_MAX 32
+#define TAP_CHARGE 3
+#define TAP_MAX 8
 
 // What a strike turned out to be, by the ball's height (pl_move, the pose).
 #define MOVE_NONE 0
@@ -57,8 +63,11 @@
 #define MOVE_VOLLEY 2   // 5-15 px up
 #define MOVE_HEADER 3   // head high, in front
 #define MOVE_BICYCLE 4  // overhead and just behind
-#define MOVE_DIVE 5     // stretching for one out of reach, then on the floor
+#define MOVE_SLIDE 5    // planted out of reach: a slide for it, then on the floor
 #define MOVE_DOWN 6     // knocked down by a power shot
+#define MOVE_BLOCK 7    // hit by the ball unready: it pops up off you
+// A ball only just reached (a slide, a block, or a ball on fire met with less than
+// half a meter) pops up into the other half: met in the air, it's a slam, on fire.
 
 // The rally's phase.
 #define PHASE_SERVE 0  // the server has the ball at their feet
@@ -84,14 +93,16 @@ extern uint8_t cam_y;         // the background's scroll, 0 .. CAM_MAX
 // --- the players, by side ---
 extern int16_t pl_x[2], pl_y[2];
 extern int8_t pl_vx[2], pl_vy[2];  // this frame's step
-extern uint8_t pl_face[2];         // 0 right, 1 left (which way strikes and dives go)
-extern uint8_t pl_shot[2];         // SHOT_* readied, or SHOT_NONE
+extern uint8_t pl_face[2];         // 0 right, 1 left (which way strikes and slides go)
+extern uint8_t pl_shot[2];         // SHOT_* readied (planted), or SHOT_NONE
 extern uint8_t pl_charge[2];       // 0 .. CHARGE_MAX
 extern uint8_t pl_hold[2];         // frames charged at the full meter (it gives up after a while)
 extern uint8_t pl_move[2];         // MOVE_*: the strike or dive in progress
 extern uint8_t pl_move_timer[2];   // its pose shows while this counts down; no touches meanwhile
 extern uint8_t pl_shots[2];        // strikes this match
 extern uint8_t pl_last_move[2];    // the last strike's MOVE_*, for the tests
+extern uint8_t pl_taps[2];         // taps added to this charge
+extern int8_t pl_slide_vx[2], pl_slide_vy[2];  // a slide's step a frame
 extern int16_t cpu_tx, cpu_ty;     // where the CPU is heading (court px)
 extern uint8_t cpu_aim;            // its next aim: 0 left corner, 1 middle, 2 right
 extern uint8_t cpu_idle;           // non-zero: the CPU's player stands still
@@ -100,6 +111,10 @@ extern uint8_t cpu_idle;           // non-zero: the CPU's player stands still
 extern int16_t ball_x, ball_y, ball_z;
 extern int16_t ball_vx, ball_vy, ball_vz;
 extern uint8_t ball_power;  // a power shot, on fire until it slows or is met
+extern int8_t ball_curve;   // a curve's sideways push a frame, in 1/16 SUB
+extern uint8_t ball_curve_t; // frames of it left
+extern uint8_t ball_pop;    // a pop-up: met in the air, a slam
+extern uint8_t ball_drop;   // a drop shot: it dies where it lands
 extern uint8_t last_touch;  // the side that touched it last
 extern uint8_t bounces;     // board bounces (the tests watch them)
 
