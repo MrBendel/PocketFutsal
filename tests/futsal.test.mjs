@@ -11,10 +11,14 @@ const put=(e,n,v)=>e.write8(e.symbols.addr(n),v);
 test('four AI players pass, shoot, and finish a match',()=>{
  const e=startGame();
  assert.equal(e.v('fs_spectator'),1);
- let frames=0;
- while(e.v('game_state')===PLAY && frames<24000){e.idle(60); frames+=60;}
+ let frames=0,worst=0;
+ while(e.v('game_state')===PLAY && frames<24000){
+  e.idle();frames++;
+  if(e.v('game_state')===PLAY&&!e.v('in_transition'))worst=Math.max(worst,e.lastFrameCycles);
+ }
  console.log({frames,passes:e.v('fs_pass_count','u16'),shots:e.v('fs_shot_count','u16'),completed:e.v('fs_completed_passes','u16'),blue:at(e,'score',0),red:at(e,'score',1)});
  assert.ok(e.v('fs_pass_count','u16')>0); assert.ok(e.v('fs_shot_count','u16')>0);
+ assert.ok(worst<65664,`full-match frame budget: ${worst} cycles`);
  settle(e,GAME_OVER,'full time');
  assert.ok(at(e,'score',0)===5 || at(e,'score',1)===5);
  e.shot('futsal-full-time');
@@ -126,6 +130,13 @@ function setPlayer(e,i,x,y){
 function humanSpace(){
  const e=startGame();put(e,'fs_spectator',0);put(e,'fs_owner',0);
  setPlayer(e,0,80,180);setPlayer(e,1,112,96);setPlayer(e,2,20,20);setPlayer(e,3,30,30);
+ // Keep defenders away from the lane when testing delivery mechanics.
+ for(const i of [2,3]){
+  e.write8(e.symbols.addr('fs_think')+i,200);
+  for(const n of ['fs_ai_tx','fs_ai_ty']){
+   const v=(i===2?20:30)*16;e.writeBytes(e.symbols.addr(n)+i*2,[v&255,v>>8]);
+  }
+ }
  e.idle(2);return e;
 }
 test('movement accelerates, carries momentum through a cut, and brakes to rest',()=>{
@@ -138,12 +149,12 @@ test('movement accelerates, carries momentum through a cut, and brakes to rest',
  e.idle(12);assert.equal(at(e,'fs_vx',0,'i8'),0);
 });
 test('a lofted pass clears feet, has a ground shadow, and reaches its teammate',()=>{
- const e=humanSpace();e.tap('B').idle(12);
+ const e=humanSpace();setPlayer(e,1,128,48);e.tap('B').idle(12);
  assert.equal(e.v('fs_owner'),255,'airborne pass remains loose');
- assert.ok(e.v('fs_ball_z','i16')>8*16,'pass rises above tackling height');
+ assert.ok(e.v('fs_ball_z','i16')>2*16,'pass rises above the court');
  e.tap('START').idle(3);
  const ball=e.read8(0xfe00+e.v('fs_ball_oam')*4),shadow=e.read8(0xfe00+30*4);
- assert.ok(shadow-ball>8,'visible separation from court shadow');
+ assert.ok(shadow-ball>3,'visible separation from court shadow');
  e.shot('futsal-lofted-pass');e.tap('START');
  e.until(e=>e.v('fs_owner')===1,100,'teammate receiving the pass');
  assert.ok(e.v('fs_completed_passes','u16')>=1);
@@ -219,4 +230,56 @@ test('an unfulfilled return request expires rather than triggering a later pass'
  e.idle(49);
  assert.equal(e.v('fs_return_call'),0);
  assert.equal(e.v('fs_pass_count','u16'),1);
+});
+
+function launchPassTo(x,y){
+ const e=humanSpace();setPlayer(e,1,x,y);
+ e.write8(e.symbols.addr('fs_think')+1,40);
+ for(const [n,v]of[['fs_ai_tx',x*16],['fs_ai_ty',y*16]])e.writeBytes(e.symbols.addr(n)+2,[v&255,v>>8]);
+ set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',180*16);
+ e.hold('B');return e;
+}
+
+test('futsal launches precise non-eight-way vectors at a consistent passing speed',()=>{
+ const velocities=[];
+ for(const x of [101,118,132]){
+  const e=launchPassTo(x,96),vx=e.v('fs_ball_vx','i16'),vy=e.v('fs_ball_vy','i16');
+  assert.ok(vx>0&&vy<0&&vx!==-vy,'pass has its own slope rather than a diagonal');
+  assert.equal(vx-vy,64,'distance changes flight time rather than passing speed');
+  assert.ok(Math.abs(vx-((x-80)*64/(x-80+84)))<1,'angle follows the actual target vector');
+  velocities.push(vx);
+ }
+ assert.equal(new Set(velocities).size,3,'nearby targets produce distinct angles');
+});
+
+test('long passes take longer and arc higher than short exchanges',()=>{
+ const short=launchPassTo(100,156),long=launchPassTo(120,70);
+ assert.ok(long.v('fs_flight_left')>short.v('fs_flight_left')*2);
+ let shortPeak=0,longPeak=0;
+ for(let f=0;f<80;f++){
+  shortPeak=Math.max(shortPeak,short.v('fs_ball_z','i16'));
+  longPeak=Math.max(longPeak,long.v('fs_ball_z','i16'));
+  short.idle();long.idle();
+ }
+ assert.ok(longPeak>shortPeak*2,'height is derived from travel time');
+});
+
+test('futsal bounces shed horizontal and vertical energy like futnet',()=>{
+ const e=humanSpace();put(e,'fs_owner',255);put(e,'fs_is_shot',1);
+ set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',80*16);
+ set16(e,'fs_ball_z',1);set16(e,'fs_ball_vz',-20);
+ set16(e,'fs_ball_vx',40);set16(e,'fs_ball_vy',20);
+ e.idle();
+ assert.equal(e.v('fs_ball_z','i16'),0);
+ assert.ok(e.v('fs_ball_vx','i16')>=29&&e.v('fs_ball_vx','i16')<=30);
+ assert.ok(e.v('fs_ball_vy','i16')>=14&&e.v('fs_ball_vy','i16')<=15);
+ assert.ok(e.v('fs_ball_vz','i16')>0&&e.v('fs_ball_vz','i16')<20);
+});
+
+test('the dribbled ball follows the actual momentum vector through a turn',()=>{
+ const e=humanSpace();e.hold('RIGHT',8).hold('UP',4);
+ const vx=at(e,'fs_vx',0,'i8'),vy=at(e,'fs_vy',0,'i8');
+ assert.ok(vx>0&&vy<0&&vx!==-vy,'turn retains an intermediate direction');
+ assert.equal(e.v('fs_ball_x','i16')-at(e,'fs_pl_x',0,'i16'),vx*5);
+ assert.equal(e.v('fs_ball_y','i16')-at(e,'fs_pl_y',0,'i16'),vy*5);
 });

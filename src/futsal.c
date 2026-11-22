@@ -32,6 +32,7 @@ int16_t fs_ball_z, fs_ball_vz, fs_target_x, fs_target_y;
 uint8_t fs_receiver, fs_flight_left, fs_is_shot;
 uint16_t fs_completed_passes;
 uint8_t fs_return_call;
+uint8_t fs_ball_fall,fs_kicked;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
 uint8_t fs_tackling[4];
 uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
@@ -76,6 +77,7 @@ static void kickoff(uint8_t side) {
     fs_ball_x=fs_pl_x[fs_owner]; fs_ball_y=fs_pl_y[fs_owner]; fs_ball_vx=fs_ball_vy=0;
     fs_held_ticks=0; fs_pickup_lock=0; fs_last_kicker=NOBODY;
     fs_return_call=0;
+    fs_ball_fall=0;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -84,16 +86,26 @@ static void kickoff(uint8_t side) {
         fs_think[i]=i<<1; fs_ai_tx[i]=fs_pl_x[i]; fs_ai_ty[i]=fs_pl_y[i];
     }
 }
-// Plan one ballistic flight at release; only additions and gravity per frame.
+// Futnet's launch model: a precise vector at a chosen court speed, then an arc
+// calculated from travel time. No direction table and no fixed-duration flight.
 static void kick(uint8_t i, int16_t tx, int16_t ty) {
+    static int16_t dx,dy,sum,t;
+    static uint8_t speed;
     tx=clamp(tx,14*16,146*16); ty=clamp(ty,0,224*16);
-    int16_t dx=tx-fs_ball_x,dy=ty-fs_ball_y;
-    // One readable half-second arc. A power-of-two duration makes launch
-    // velocities exact shifts instead of expensive software division.
-    fs_target_x=tx;fs_target_y=ty;fs_flight_left=32;
-    fs_ball_vx=dx<0?-((-dx)>>5):dx>>5;
-    fs_ball_vy=dy<0?-((-dy)>>5):dy>>5;
-    fs_ball_z=16;fs_ball_vz=31;
+    dx=tx-fs_ball_x;dy=ty-fs_ball_y;
+    dx=dx<0?-((-dx)>>4):dx>>4;dy=dy<0?-((-dy)>>4):dy>>4;
+    sum=ab(dx)+ab(dy);if(!sum)sum=1;
+    speed=fs_is_shot?128:64;
+    fs_ball_vx=(fs_is_shot?((uint16_t)ab(dx)<<7):((uint16_t)ab(dx)<<6))/(uint16_t)sum;
+    if(dx<0)fs_ball_vx=-fs_ball_vx;
+    fs_ball_vy=(dx||dy)?speed-ab(fs_ball_vx):0;if(dy<0)fs_ball_vy=-fs_ball_vy;
+    // Speeds are powers of two: distance / speed is a cheap shift. As in
+    // Futnet, long deliveries get more air time and short exchanges stay low.
+    t=fs_is_shot?(sum+4)>>3:(sum+2)>>2;
+    t=clamp(t,4,96);
+    fs_target_x=tx;fs_target_y=ty;fs_flight_left=t;
+    fs_ball_z=0;fs_ball_vz=(3*(t+1))>>3;fs_ball_fall=0;
+    fs_kicked=1;
     if(dx)fs_flip[i]=dx<0;if(dy)fs_view[i]=dy<0;
     fs_power_trail=fs_trail_n=0;
     shadow_OAM[18].y=0;shadow_OAM[19].y=0;shadow_OAM[20].y=0;shadow_OAM[21].y=0;
@@ -172,9 +184,9 @@ static void ai(uint8_t i){
     uint8_t mate=i^1, own=fs_owner!=NOBODY&&team(fs_owner)==team(i);
     int16_t goal=team(i)?224*16:0,tx=fs_ball_x,ty=fs_ball_y;
     if(!fs_spectator&&i==1&&fs_owner==i&&((joy_pressed&J_B)||fs_return_call)){
-        pass(i,0,0);step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;
+        pass(i,0,0);return;
     }
-    if(fs_think[i]){fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
+    if(fs_think[i]||fs_kicked){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_think[i]=7;
     fs_role[i]=0;
     if(fs_owner==i){
@@ -215,14 +227,16 @@ static void ai(uint8_t i){
         }
     }
     fs_ai_tx[i]=tx;fs_ai_ty[i]=ty;
-    step_player(i,tx,ty);
+    // A one-frame foot plant on release also keeps launch division separate
+    // from this player's acceleration/tackle work on the Game Boy CPU.
+    if(!fs_kicked)step_player(i,tx,ty);
 }
 static void ball_update(void) {
     if(fs_owner!=NOBODY) {
         fs_power_trail=0;
         uint8_t i=fs_owner;int16_t offset=fs_dribble_x[i]&&fs_dribble_y[i]?5*16:7*16;
-        fs_ball_x=clamp(fs_pl_x[i]+fs_dribble_x[i]*offset,10*16,150*16);
-        fs_ball_y=clamp(fs_pl_y[i]+fs_dribble_y[i]*offset,0,224*16);
+        fs_ball_x=clamp(fs_pl_x[i]+(fs_moving[i]?fs_vx[i]*5:fs_dribble_x[i]*offset),10*16,150*16);
+        fs_ball_y=clamp(fs_pl_y[i]+(fs_moving[i]?fs_vy[i]*5:fs_dribble_y[i]*offset),0,224*16);
         fs_ball_z=16;fs_ball_vz=0;fs_flight_left=0;
         fs_ball_vx=fs_vx[i];fs_ball_vy=fs_vy[i];
         if(fs_held_ticks<255) fs_held_ticks++;
@@ -231,17 +245,22 @@ static void ball_update(void) {
     fs_ball_x+=fs_ball_vx; fs_ball_y+=fs_ball_vy;
     if(fs_flight_left)fs_flight_left--;
     if(fs_ball_z>0||fs_ball_vz){
-        fs_ball_z+=fs_ball_vz;fs_ball_vz-=2;
-        if(fs_ball_z<=0){fs_ball_z=0;fs_ball_vz=(-fs_ball_vz)>>1;if(fs_ball_vz<8)fs_ball_vz=0;}
+        if(++fs_ball_fall&3)fs_ball_vz--;
+        fs_ball_z+=fs_ball_vz;
+        if(fs_ball_z<=0){
+            fs_ball_z=0;fs_ball_vz=(-fs_ball_vz*3)>>2;
+            if(fs_ball_vz<5)fs_ball_vz=0;
+            fs_ball_vx-=fs_ball_vx/4;fs_ball_vy-=fs_ball_vy/4;
+        }
     }
-    if(fs_ball_x<10*16 || fs_ball_x>150*16) { fs_ball_x=clamp(fs_ball_x,10*16,150*16); fs_ball_vx=-fs_ball_vx; }
+    if(fs_ball_x<10*16 || fs_ball_x>150*16) { fs_ball_x=clamp(fs_ball_x,10*16,150*16); fs_ball_vx=-(fs_ball_vx-fs_ball_vx/4); }
     if(fs_ball_y<0 || fs_ball_y>224*16) {
         if(fs_ball_x>=56*16 && fs_ball_x<=104*16 && fs_ball_z<=14*16) {
             uint8_t s=fs_ball_y<0?0:1; score[s]++; fs_goal_timer=90;
             fs_ball_y=clamp(fs_ball_y,0,224*16); fs_ball_vx=fs_ball_vy=0;
             sfx_play(SFX_WHISTLE); fs_hud_pending=1; return;
         }
-        fs_ball_y=clamp(fs_ball_y,0,224*16); fs_ball_vy=-fs_ball_vy;
+        fs_ball_y=clamp(fs_ball_y,0,224*16); fs_ball_vy=-(fs_ball_vy-fs_ball_vy/4);
     }
     if(!fs_ball_z&&!(fs_sim_ticks&3)) { if(fs_ball_vx) fs_ball_vx+=fs_ball_vx>0?-1:1; if(fs_ball_vy) fs_ball_vy+=fs_ball_vy>0?-1:1; }
     if(fs_pickup_lock) fs_pickup_lock--;
@@ -355,6 +374,7 @@ void futsal_update(void) BANKED {
         draw(); return;
     }
     fs_sim_ticks++;
+    fs_kicked=0;
     if(fs_return_call)fs_return_call--;
     if(fs_owner!=NOBODY&&team(fs_owner))fs_return_call=0;
     for(uint8_t i=0;i<4;i++) {
@@ -370,7 +390,7 @@ void futsal_update(void) BANKED {
                 if((joy_pressed&J_B)&&fs_owner==NOBODY&&fs_receiver==1)fs_return_call=48;
                 else if((joy_pressed&J_B) && !fs_cooldown[0] && (fs_owner==NOBODY || team(fs_owner)!=0)) { fs_burst[0]=16; fs_cooldown[0]=60; }
             }
-            step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
+            if(!fs_kicked)step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
         }
     }
     ball_update(); if(!fs_hud_pending)draw();
