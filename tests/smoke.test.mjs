@@ -175,6 +175,27 @@ test('which strike it is depends on the ball\'s height: kick, volley, header, an
   }
 });
 
+test('you reach a body width either side, and head a ball up to 35 px', () => {
+  for (const [dx, z, move] of [[15, 0, MOVE_KICK], [-15, 10, MOVE_VOLLEY], [4, 34, MOVE_HEADER]]) {
+    const emu = quietRally();
+    ballAt(emu, 80 + dx, 184, z);
+    readied(emu, SHOT_POWER, 12);
+    emu.idle(1);
+    assert.equal(at(emu, 'pl_last_move', YOU), move, `${dx} px across, ${z} up`);
+  }
+});
+
+test('queued, you are run to where an angled ball crosses your line, and you strike it', () => {
+  const emu = quietRally();
+  placePlayer(emu, YOU, 40, 190);
+  incoming(emu, 20, 120, 48, 40);
+  set16(emu, 'ball_vx', 48);  // angled across: it crosses your line about 50 px to your right
+  emu.tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the strike');
+  assert.equal(at(emu, 'pl_shots', YOU), 1, 'struck, not missed');
+  assert.notEqual(at(emu, 'pl_last_move', YOU), MOVE_SLIDE, 'run there, no slide needed');
+});
+
 test('every strike arcs over the net', () => {
   for (const charge of [6, 16, 31]) {
     const emu = quietRally();

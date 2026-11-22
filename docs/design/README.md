@@ -107,10 +107,14 @@ slammed (the Captain Tsubasa feel).
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **No distance limits** (2026-11-22, from the playtest): you're run to the ball from
-  anywhere in your half; at the last moment, if a slide can get there (your reach of 12
-  plus its 30 px lunge), you slide for it, as soon as it would only just get there;
-  further, you just miss. A slide that gets there pops the ball up, and you're down a
-  short while; miss and you're down longer.
+  anywhere in your half, to where it crosses your line if it's low enough to play
+  there (worked out exactly before it bounces), else to just behind its bounce. You
+  reach a body width either side (16 px), a header 35 px up (a jump), a bicycle kick 39.
+  At the last moment, if a slide gets there (your reach plus a 36 px lunge, toward where
+  it'll cross your line, a ball up to 23 px high), you slide for it; further, you miss.
+  A slide that gets there pops the ball up, and you're down a short while; miss and
+  you're down longer. (Measured with build/scratch/misses.mjs: balls getting past within
+  30 px of a queued player went from 32 to 15 in seven matches.)
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it

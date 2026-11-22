@@ -65,12 +65,14 @@
 #define SPEED_YOU 22      // a frame, in SUB
 #define SPEED_CPU 20
 #define HOLD_MAX 90       // frames at a full meter before the player gives up the strike
-#define REACH_X 12        // court px either side a strike reaches
+#define REACH_X 16        // court px either side a strike reaches (a body width)
+#define REACH_Z 36        // px: a header reaches this high (a jump); a bicycle kick 40
+#define SLIDE_Z 24        // px: a slide gets a ball this high (a diving header)
 #define REACH_FWD 8       // in front
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
 #define SLIDE_SPEED 48
-#define SLIDE_LUNGE 10    // frames of sliding
-// The furthest a slide gets you: your reach plus the lunge (12 + 30 px). No other
+#define SLIDE_LUNGE 12    // frames of sliding
+// The furthest a slide gets you: your reach plus the lunge (16 + 36 px). No other
 // limit: you're run to the ball from anywhere; out of this at the last moment,
 // you just miss.
 #define SLIDE_REACH (REACH_X + ((SLIDE_SPEED * SLIDE_LUNGE) >> 4))
@@ -757,8 +759,8 @@ static uint8_t in_reach(void) {
     if (ax <= REACH_X && rel_fwd >= -REACH_BACK && rel_fwd <= REACH_FWD) {
         if (rel_z < 5) return MOVE_KICK;
         if (rel_z < 16) return MOVE_VOLLEY;
-        if (rel_z < 28) return MOVE_HEADER;
-    } else if (ax <= REACH_X - 2 && rel_fwd < -2 && rel_fwd >= -14 && rel_z >= 10 && rel_z < 32) {
+        if (rel_z < REACH_Z) return MOVE_HEADER;
+    } else if (ax <= REACH_X - 2 && rel_fwd < -2 && rel_fwd >= -14 && rel_z >= 10 && rel_z < REACH_Z + 4) {
         return MOVE_BICYCLE;  // just over your head: over it goes, backwards
     }
     return MOVE_NONE;
@@ -776,7 +778,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         pl_y[i] += pl_slide_vy[i];
         keep_in(i);
         relate(i);
-        if (abs16(rel_x) <= REACH_X && rel_fwd >= -REACH_BACK - 2 && rel_fwd <= REACH_FWD && rel_z < 16) {
+        if (abs16(rel_x) <= REACH_X && rel_fwd >= -REACH_BACK - 2 && rel_fwd <= REACH_FWD && rel_z < SLIDE_Z) {
             if (ball_power) {
                 knock_down(i);
                 return;
@@ -831,8 +833,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // anywhere in your half: queue it up and you get there. Going out, it
         // leaves it.
         int16_t tx = loose ? PX(ball_x) : meet_x[i];
-        int16_t ty = loose ? PX(ball_y) : meet_y[i];
-        ty += i == SIDE_YOU ? 6 : -6;  // stand just behind it: it's in front
+        int16_t ty = loose ? PX(ball_y) + (i == SIDE_YOU ? 6 : -6) : meet_y[i];  // loose: just behind it
         int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
         // (Only on a trace of this flight: an old one would send you the wrong way.)
         if (loose || (meet_flight[i] == ball_flight && !meet_out[i])) {
@@ -846,9 +847,12 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // About to go past, out of reach: slide for it, as soon as the slide only
         // just gets there in time (the ball's frames to reach you, rel_fwd / |vy|,
         // down to the slide's frames across, (ax - REACH_X + 2) / SLIDE_SPEED).
-        if (!loose && !meet_out[i] && ax > REACH_X && ax <= SLIDE_REACH && rel_fwd >= -REACH_BACK && rel_z < 16 &&
-            rel_fwd * SLIDE_SPEED <= (ax - REACH_X + 2) * abs16(ball_vy))
-            slide(i, rel_x < 0 ? -SLIDE_SPEED : SLIDE_SPEED, 0);
+        // Toward where it'll cross your line (its trace), not where it is now: an
+        // angled ball keeps going across while you lunge.
+        int16_t sx = meet_flight[i] == ball_flight ? meet_x[i] - PX(pl_x[i]) : rel_x, asx = abs16(sx);
+        if (!loose && !meet_out[i] && asx > REACH_X && asx <= SLIDE_REACH && rel_fwd >= -REACH_BACK && rel_z < SLIDE_Z &&
+            rel_fwd * SLIDE_SPEED <= (asx - REACH_X + 2) * abs16(ball_vy))
+            slide(i, sx < 0 ? -SLIDE_SPEED : SLIDE_SPEED, 0);
         return;
     }
     // Unready, and it reaches you: you control it; on fire, it knocks you down.
@@ -867,11 +871,34 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
 static void predict(uint8_t i) {
     int16_t x = ball_x, y = ball_y, z = ball_z, vz = ball_vz;
     int16_t vx4 = ball_vx << 3, vy4 = ball_vy << 3;
-    uint8_t down = ball_landings, out = 0;
+    int16_t line = pl_y[i];  // your depth: meet it here if you can
+    uint8_t down = ball_landings, out = 0, cross = 0;
     meet_flight[i] = ball_flight;
-    for (uint8_t k = 0; k < 15; k++) {
+    // Still in the air, coming: it flies straight until it lands, so where (and how
+    // high) it crosses your line is exact, t = (line - y) / vy frames on. Low enough
+    // to play there, that's where to meet it.
+    if ((ball_z || ball_vz) && (i == SIDE_YOU ? ball_vy > 0 && ball_y < line : ball_vy < 0 && ball_y > line)) {
+        int16_t t = (line - ball_y) / ball_vy;
+        int16_t zt = ball_z + ball_vz * t - ((3 * t * (t + 1)) >> 1);
+        if (t < 100 && zt > 0 && zt < TO_SUB(REACH_Z - 2)) {
+            x = ball_x + ball_vx * t;
+            y = line;
+            cross = 1;
+        }
+    }
+    for (uint8_t k = 0; k < 15 && !cross; k++) {
+        int16_t x0 = x, y0 = y, z0 = z;
         x += vx4;
         y += vy4;
+        // Crossing your line at a height you can play it (the step's middle):
+        // meet it there, on its path.
+        if ((i == SIDE_YOU ? y0 < line && y >= line : y0 > line && y <= line) &&
+            ((z0 + (z > 0 ? z : 0)) >> 1) < TO_SUB(REACH_Z - 2)) {
+            x = x0 + ((x - x0) >> 1);
+            y = line;
+            cross = 1;
+            break;
+        }
         if (z || vz) {
             z += (vz << 3) - 108;
             vz -= GRAVITY * 8;
@@ -898,6 +925,8 @@ static void predict(uint8_t i) {
     }
     meet_out[i] = out;
     meet_x[i] = clamp16(PX(x), COURT_X0 + 4, COURT_X1 - 4);
+    // Off a bounce, stand just behind where it'll be (it's in front of you then).
+    if (!cross) y += i == SIDE_YOU ? TO_SUB(6) : -TO_SUB(6);
     meet_y[i] = i == SIDE_CPU ? clamp16(PX(y), COURT_FAR + 4, HALFWAY - 6) : clamp16(PX(y), HALFWAY + 6, COURT_NEAR - 4);
 }
 
