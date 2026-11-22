@@ -146,6 +146,10 @@ extern int8_t ball_curve;   // a curve's sideways push a frame, in 1/16 SUB
 extern uint8_t ball_curve_t; // frames of it left
 extern uint8_t ball_pop;    // a pop-up: met in the air, a slam
 extern uint8_t ball_drop;   // a drop shot: it barely bounces
+extern uint8_t ball_trail;  // the trail behind it: 0 none, TRAIL_POWER (red), TRAIL_CURVE (blue)
+#define TRAIL_POWER 1
+#define TRAIL_CURVE 2
+extern uint8_t trail_len;   // its dots
 extern uint8_t ball_lob;    // a lob: it sits up where it lands (slowed, a high bounce)
 extern uint8_t last_touch;  // the side that touched it last
 

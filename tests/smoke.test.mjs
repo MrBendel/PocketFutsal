@@ -220,6 +220,27 @@ test('B is a curve: set off wide, it bends in to the side you hold', () => {
   assert.ok(px(emu.v('ball_x', 'i16')) > 100, `lands right: x ${px(emu.v('ball_x', 'i16'))}`);
 });
 
+test('a struck ball leaves a trail: red off A, blue off B, longer charged; it fades after the bounce', () => {
+  const oam = (e, n, b) => e.read8(e.symbols.addr('shadow_OAM') + 4 * n + b);
+  for (const [button, kind, pal] of [['A', 1, 3], ['B', 2, 4]]) {
+    const emu = quietRally();
+    ballAt(emu, 80, 150, 0, 0, 30);
+    emu.tap(button);
+    for (let k = 0; k < 8; k++) emu.tap(button);
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the strike');
+    assert.equal(emu.v('ball_trail'), kind, button);
+    assert.ok(emu.v('trail_len') >= 3, `charged: ${emu.v('trail_len')} dots`);
+    emu.idle(9);
+    assert.ok(oam(emu, 11, 0) > 0, 'the first dot is drawn');
+    assert.equal(oam(emu, 11, 3) & 7, pal, 'in its color');
+    emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
+    assert.equal(emu.v('ball_trail'), 0, 'over at the bounce');
+    emu.idle(10);
+    assert.equal(emu.v('trail_len'), 0, 'faded');
+    assert.equal(oam(emu, 11, 0), 0, 'hidden');
+  }
+});
+
 test('B then A is a lob, dropping just behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);
@@ -551,6 +572,24 @@ test('screen: a header', () => {
   ballAt(emu, 82, 184, 20);
   readied(emu, SHOT_POWER, 12);
   matchGolden(emu.idle(3), 'header');
+});
+
+test('screen: a power shot trail', () => {
+  const emu = quietRally();
+  ballAt(emu, 80, 150, 0, 0, 30);
+  emu.tap('A');
+  for (let k = 0; k < 8; k++) emu.tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the strike');
+  matchGolden(emu.idle(10), 'trail-power');
+});
+
+test('screen: a curve trail', () => {
+  const emu = quietRally();
+  ballAt(emu, 80, 150, 0, 0, 30);
+  emu.tap('B');
+  for (let k = 0; k < 8; k++) emu.tap('B');
+  emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
+  matchGolden(emu.idle(14), 'trail-curve');
 });
 
 test('screen: the far end, the CPU sliding', () => {

@@ -258,10 +258,20 @@ const shadow = ['........', '........', '........', '........', '..3333..', '.33
 // The aim marker (1 bright, 3 outline): where your queued strike will land.
 const aimMark = ['........', '..1111..', '.13..31.', '.1.33.1.', '.1.33.1.', '.13..31.', '..1111..', '........'];
 
-// Order matters: src/play.c names them (S_BALL, S_SHADOW, S_AIM), 2 tiles per 8x16 sprite.
+// A trail's dots (1 core, 2 middle, 3 edge), largest (nearest the ball) first.
+const trail0 = ['..2222..', '.211112.', '21111112', '21111112', '21111112', '21111112', '.211112.', '..2222..'];
+const trail1 = ['........', '..2222..', '.212212.', '.221122.', '.221122.', '.212212.', '..2222..', '........'];
+const trail2 = ['........', '........', '..3333..', '..3223..', '..3223..', '..3333..', '........', '........'];
+const trail3 = ['........', '........', '........', '...33...', '...33...', '........', '........', '........'];
+
+// Order matters: src/play.c names them (S_BALL, S_SHADOW, S_AIM, S_TRAIL), 2 tiles per 8x16 sprite.
 export const SPRITE_TILES = [
   ballA, blank,   // S_BALL
   ballB, blank,   // S_BALL + 2
   shadow, blank,  // S_SHADOW
   aimMark, blank, // S_AIM
+  trail0, blank,  // S_TRAIL
+  trail1, blank,
+  trail2, blank,
+  trail3, blank,
 ];

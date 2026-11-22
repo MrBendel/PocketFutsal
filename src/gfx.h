@@ -93,7 +93,8 @@ void win_frame(uint8_t x, uint8_t y, uint8_t w, uint8_t h) BANKED;
 #define SPR_PAL_YOU 0     // your player: blue
 #define SPR_PAL_FLASH 1   // white: a player charging flashes through it
 #define SPR_PAL_CPU 2     // the CPU's player: red
-                          // 3, 4: free
+#define SPR_PAL_TRAIL_POWER 3  // a power shot's trail: red
+#define SPR_PAL_TRAIL_CURVE 4  // a curve's: blue
 #define SPR_PAL_BALL 5
 #define SPR_PAL_POWER 6   // a power shot: the ball on fire
 #define SPR_PAL_UI 7      // the ball's shadow

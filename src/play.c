@@ -39,6 +39,7 @@
 #define S_BALL 0  // and S_BALL + 2, its other roll
 #define S_SHADOW 4
 #define S_AIM 6     // the aim marker
+#define S_TRAIL 8   // a trail's dots, largest first: S_TRAIL, +2, +4, +6
 #define F_STAND 0
 #define F_RUN_A 1
 #define F_RUN_B 2
@@ -60,6 +61,8 @@
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
 #define OAM_AIM 10    // where your queued strike will land
+#define OAM_TRAIL 11  // 4: the ball's trail
+#define TRAIL_MAX 4
 
 // --- tuning ---
 #define SPEED_YOU 22      // a frame, in SUB
@@ -159,6 +162,12 @@ int16_t ball_cacc;  // the curve's push, building up to whole SUBs of speed
 uint8_t ball_pop;
 uint8_t ball_drop;
 uint8_t ball_lob;
+uint8_t ball_trail;   // the trail behind it: 0 none, TRAIL_POWER red, TRAIL_CURVE blue
+uint8_t trail_len;    // dots in it (2..4, by charge); shrinks to nothing once it's over
+uint8_t trail_n;      // frames recorded since the strike (older positions aren't its)
+uint8_t trail_i;      // the ring's newest entry
+uint8_t trail_blue;   // the last trail was a curve's (its color as it fades)
+int16_t trail_x[8], trail_y[8];  // where the ball was drawn, a frame each (y on the court, not the screen)
 uint8_t last_touch;
 uint8_t sets[2];
 uint8_t match_sets = 1;
@@ -301,6 +310,7 @@ static void unready(uint8_t i) {
 
 static void ball_plain(void) {
     ball_power = ball_curve = ball_curve_t = ball_pop = ball_drop = ball_lob = 0;
+    ball_trail = trail_len = 0;
     ball_cacc = 0;
 }
 
@@ -385,6 +395,30 @@ static void draw_player(uint8_t i, uint8_t tile, uint8_t lie, int16_t sx, int16_
     place(n + 3, sx + 8, sy + 9);
 }
 
+// The ball's trail: where it was 2, 4, 6 and 8 frames ago, smaller and dimmer
+// further back. Over (a bounce, a touch), it shrinks a dot every other frame.
+static void draw_trail(int16_t sx, int16_t wy) {
+    trail_i = (trail_i + 1) & 7;
+    trail_x[trail_i] = sx;
+    trail_y[trail_i] = wy;
+    if (trail_n < 8) trail_n++;
+    if (!ball_trail && trail_len && !((uint8_t)frame_count & 1)) trail_len--;
+    if (goal_timer) trail_len = 0;
+    uint8_t pal = ball_trail == TRAIL_CURVE || (!ball_trail && trail_blue) ? SPR_PAL_TRAIL_CURVE : SPR_PAL_TRAIL_POWER;
+    if (ball_trail) trail_blue = ball_trail == TRAIL_CURVE;
+    for (uint8_t k = 0; k < TRAIL_MAX; k++) {
+        uint8_t age = (k + 1) << 1, n = OAM_TRAIL + k;
+        if (k >= trail_len || age >= trail_n) {
+            move_sprite(n, 0, 0);
+            continue;
+        }
+        uint8_t e = (trail_i - age) & 7;
+        set_sprite_tile(n, S_TRAIL + (k << 1));
+        set_sprite_prop(n, pal);
+        place(n, trail_x[e], trail_y[e] - cam_y);
+    }
+}
+
 static void draw(void) {
     // The camera: after the ball, a pixel or two a frame.
     int16_t by = PX(ball_y), bz = PX(ball_z);
@@ -436,6 +470,7 @@ static void draw(void) {
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
+    draw_trail(sx, sy + cam_y - bz);
     // Your strike queued: a marker where it's aimed to land.
     // (Every other frame, and not a strike's: it's another aim_point.)
     if (pl_shot[SIDE_YOU] && !goal_timer && (phase == PHASE_RALLY || server == SIDE_YOU)) {
@@ -541,6 +576,7 @@ static void launch(int16_t dx, int16_t dy, uint8_t speed) {
 // A touch by player i (in their half: they're the holder). A third is a fault.
 static void new_flight(void) {
     ball_flight++;
+    ball_trail = 0;
     flight_frame = (uint8_t)frame_count;
 }
 
@@ -683,6 +719,13 @@ static void strike(uint8_t i, uint8_t move) {
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
     struck(i, move, frames);
+    // A trail behind it: red a power shot (or anything on fire), blue a curve;
+    // longer the more charged. Not a scuff, a lob or a drop shot.
+    if (!scuff && (ball_power || kind == SHOT_POWER || kind == SHOT_CURVE)) {
+        ball_trail = kind == SHOT_CURVE ? TRAIL_CURVE : TRAIL_POWER;
+        trail_len = ball_power ? TRAIL_MAX : c >= CHARGE_MAX / 2 ? 3 : 2;
+        trail_n = 0;
+    }
 }
 
 // Only just got there: it pops up high and drops just behind the other player,

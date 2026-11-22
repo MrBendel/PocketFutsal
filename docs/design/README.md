@@ -132,6 +132,10 @@ slammed (the Captain Tsubasa feel).
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
+- **Shot trails** (Mario Tennis style): a struck ball streaks a trail of dots, taper
+  and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
+  from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
+  fades out at the bounce or the next touch.
 - **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT, and must go over.
 - **CPU**: traces the ball's flight every 8 frames (gravity and a bounce, not the curve,

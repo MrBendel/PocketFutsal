@@ -50,6 +50,9 @@ static const uint16_t flash[4] = {0, C(255, 255, 255), C(255, 255, 208), C(112, 
 // The ball: white, grey patches; on fire after a power shot.
 static const uint16_t ball[4] = {0, C(255, 255, 255), C(96, 96, 112), INK};
 static const uint16_t power[4] = {0, C(255, 240, 120), C(255, 112, 24), C(176, 24, 16)};
+// The trails behind a struck ball: hot to dim (1 the dot's core, 2 its middle, 3 its edge).
+static const uint16_t trail_power[4] = {0, C(255, 232, 160), C(248, 72, 40), C(176, 24, 24)};
+static const uint16_t trail_curve[4] = {0, C(208, 240, 255), C(72, 152, 248), C(32, 64, 184)};
 // The ball's shadow (3).
 static const uint16_t marks[4] = {0, C(255, 232, 64), C(32, 88, 104), C(32, 96, 112)};
 // The HUD row (the GB Studio font): a navy band, light letters; the meter in gold.
@@ -65,6 +68,8 @@ void palettes_play(void) BANKED {
     set_obj(SPR_PAL_BALL, ball);
     set_obj(SPR_PAL_POWER, power);
     set_obj(SPR_PAL_UI, marks);
+    set_obj(SPR_PAL_TRAIL_POWER, trail_power);
+    set_obj(SPR_PAL_TRAIL_CURVE, trail_curve);
 }
 
 // Menus: the title's colors for the compact and display fonts.
