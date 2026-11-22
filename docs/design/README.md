@@ -55,6 +55,24 @@ From the sheets in `inspiration/` (reference only, never committed or copied):
 | Players | 14-16 x 23 px standing; 29 x 21 diving | 16 x 24 standing (4 sprites, 8x16 mode); 24 x 16 diving (3) |
 | Views | the near player from behind, the far one from the front | the same: two sets of frames |
 
+### Pace, measured from the Mario Tennis ROM (2026-11-22)
+
+From the cartridge run headless in our own emulator (`inspiration/rom/`, gitignored;
+scripts in build/scratch/mt/): sprite positions plus scroll, a frame at a time, and a bot
+that rallies against its CPU. Only measurements were taken; nothing was copied.
+
+| | Mario Tennis | PocketFutsal |
+|---|---|---|
+| A rally shot, one player to the other | 60-80 frames (about 1.1 s); the shadow 1.1-1.6 px a frame down a court about 120 px long | 53 frames median, 74 at p90 (was 33: twice as fast) |
+| A serve | about 49 frames, 2.75 px a frame | |
+| Running | about 1.75 px a frame across, about half that up and down | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
+| Starting / stopping / turning | about 10 / 8 / 14 frames | 8 / 6 / 14 (`ACCEL` 3, `BRAKE` 4) |
+| A trail behind the ball | 5 afterimages | 4 dots, red or blue |
+
+So the whole ball plays at half speed: gravity 3/4 SUB a frame and every speed and lift
+halved, which keeps each arc's shape and height and doubles its time. Players accelerate,
+coast and turn (`approach()`), and the auto-run steers through the same momentum.
+
 The court is played in flat coordinates (`game.h`) and drawn in perspective: each depth
 has a screen row and a width scale (`proj_y`, `proj_s` in `play.c`, the same formula as
 `tools/tile-art.mjs`). Heights aren't scaled.
@@ -87,11 +105,12 @@ slammed (the Captain Tsubasa feel).
 - **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
   ball as long as I'm near it, as long as you queue it up"): A or B any time in a
   rally. It waits, and you move freely, until the ball comes your way; then it charges
-  (a step every other frame, each tap of the button again adds 3, up to 5 taps) and the
-  game runs you to where to meet it, half as fast again as running, anywhere in your
-  half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
+  (a step every 4 frames, each tap of the button again adds 3, up to 5 taps) and the
+  game runs you to where to meet it, at running speed with the same momentum, easing in
+  as you get there, anywhere in your half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
-  as far across as down the court (about 27 degrees).
+  as far across as down the court (about 27 degrees). You only play the ball over your
+  own half: no reaching over the net.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
   you are. Neutral goes straight on; LEFT / RIGHT angle it as far across as a strike
@@ -138,16 +157,18 @@ slammed (the Captain Tsubasa feel).
   fades out at the bounce or the next touch.
 - **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT, and must go over.
-- **CPU**: traces the ball's flight every 8 frames (gravity and a bounce, not the curve,
+- **CPU**: traces the ball's flight 12 frames a step (gravity and a bounce, not the curve,
   so curves fool it) to where it lands and meets it just after the bounce; it lets a
   ball that will land out go. It plants once it's in place with the ball within 96 px
-  (or within 40, in place or not), taps now and then, lobs you if you're up near the
+  (or within 40, in place or not), taps now and then (every 16 frames, 3 times in 4), lobs you if you're up near the
   net, drops it short if you're back on your line, curves one time in four, and aims
   away from you. Same slides, controls and pop-ups as you. A little slower than you.
 - **Balance so far** (build/scratch/sim2.mjs, a bot that re-reads the ball every 12
   frames) and build/scratch/queuebot.mjs (one that queues early and taps, as you would
   now): against the queueing one, close sets, the CPU edging them (5-11 to 10-12), 6,000-
-  9,000 frames (about 2 minutes). Not yet tested by hand.
+  9,000 frames (about 2 minutes). At half speed (2026-11-22): closer still (1-6, 4-5,
+  5-5, 3-4, 7-6 after 15,000 frames each), rallies about 13 crossings. Not yet tested
+  by hand.
 - **Frame budget**: the busiest frame is right at half a frame (the tests' line, kept as
   headroom); the next per-frame feature needs room made first (`node harness/profile.mjs busy`).
 
