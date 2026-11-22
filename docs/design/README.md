@@ -85,7 +85,9 @@ the game slides you to a ball out of reach; a ball only just reached pops up, to
 slammed (the Captain Tsubasa feel).
 
 - **Readying a strike** is only possible with the ball coming your way (or loose in
-  your half), and plants you until it goes. The meter fills as you wait (a step every
+  your half), and plants you until it goes: the d-pad no longer moves you, but the game
+  steps you (at a shuffle, 12 SUB a frame, within 40 px) toward where the ball will be
+  met, Mario Tennis style (2026-11-22, from the playtest). The meter fills as you wait (a step every
   other frame) and each tap of the button again adds 3, up to 8 taps. The strike goes
   by itself as the ball arrives; the ball's height picks kick, volley, header or
   bicycle kick. Plant too early in the wrong place and you'll be sliding for it.
@@ -96,13 +98,17 @@ slammed (the Captain Tsubasa feel).
 - **A full meter** (on A or B) sets the ball on fire. Meeting a ball on fire cleanly
   takes three quarters of a meter.
 - **Out of reach, planted**: you slide for it (24 px either side, more than your reach
-  of 10). Get there and it pops up, and you're down a short while; miss and you're down
+  of 10), as soon as the slide would only just get there in time. Get there and it pops up, and you're down a short while; miss and you're down
   longer.
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
 - **Unready**, your first touch controls it (v0.3); a ball on fire knocks you down.
+- **Bounces** (2026-11-22, from the playtest: some returns died where they landed): a
+  bounce keeps three quarters of its height and the court takes a quarter of its pace;
+  the first bounce in a half always gets up 9 px (a futnet ball bounces over half a
+  metre), a drop shot's 6 px, and a **lob sits up**: slowed to a quarter, a 16 px bounce.
 - **The arc** (2026-11-21, after the first playtest: the ball went dead in play): every
   strike arcs, to come down at a depth set by its charge (deeper the more charged), so
   the ball is in the air with its shadow under it, and it's lifted to clear the net

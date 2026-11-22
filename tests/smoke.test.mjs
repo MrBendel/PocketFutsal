@@ -120,7 +120,7 @@ test('the match opens 0-0 on your serve: along your line, then A tosses it up an
   assert.equal(emu.v('ball_serve'), 0);
 });
 
-test('A plants you to ready a strike, only with the ball coming your way, and it goes as the ball arrives', () => {
+test('A plants you to ready a strike, only with the ball coming your way: the d-pad no longer moves you, and it goes as the ball arrives', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A');
@@ -128,9 +128,9 @@ test('A plants you to ready a strike, only with the ball coming your way, and it
   ballAt(emu, 80, 120, 0, 0, 40);
   emu.tap('A');
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER);
-  const x = at(emu, 'pl_x', YOU, 'i16'), y = at(emu, 'pl_y', YOU, 'i16');
-  emu.hold('UP+LEFT', 6);
-  assert.deepEqual([at(emu, 'pl_x', YOU, 'i16'), at(emu, 'pl_y', YOU, 'i16')], [x, y], 'planted');
+  const x = at(emu, 'pl_x', YOU, 'i16');
+  emu.hold('LEFT', 6);
+  assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'planted: LEFT does nothing (the ball is straight at you)');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the strike');
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_NONE);
   assert.equal(at(emu, 'pl_last_move', YOU), MOVE_KICK);
@@ -206,6 +206,17 @@ test('B then A is a lob, dropping just behind the CPU', () => {
   assert.ok(y <= 40 && y >= 20, `lands at ${y}, just behind the CPU at 40`);
 });
 
+test('a lob sits up where it lands: slowed to a quarter, and a high bounce to turn and reach', () => {
+  const emu = quietRally();
+  incoming(emu, 80, 120, 40, 40);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.until((e) => e.v('ball_landings') === 1, 60, 'it landing');
+  assert.ok(emu.v('ball_vy', 'i16') <= 10, `slowed: vy ${emu.v('ball_vy', 'i16')}`);
+  let top = 0;
+  for (let k = 0; k < 14; k++) top = Math.max(top, px(emu.idle(1).v('ball_z', 'i16')));
+  assert.ok(top >= 12, `up ${top} px`);
+});
+
 test('A then B is a drop shot, just over the net and barely bouncing: unreached, your point', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, 30);
@@ -219,9 +230,20 @@ test('A then B is a drop shot, just over the net and barely bouncing: unreached,
   assert.equal(emu.v('point_reason'), POINT_BOUNCE);
 });
 
-test('planted out of reach, you slide for it: it pops up over the net, and you stay down a moment', () => {
+test('planted, the game steps you toward the ball', () => {
   const emu = quietRally();
-  ballAt(emu, 100, 120, 0, 0, 40);
+  ballAt(emu, 104, 120, 0, 0, 30);
+  emu.tap('A');
+  const x = at(emu, 'pl_x', YOU, 'i16');
+  emu.idle(16);
+  assert.ok(at(emu, 'pl_x', YOU, 'i16') > x + 4 * 16, 'over to the right, toward it');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the strike');
+  assert.notEqual(at(emu, 'pl_last_move', YOU), MOVE_SLIDE, 'reached without a slide');
+});
+
+test('planted too late to get there, you slide for it: it pops up over the net, and you stay down a moment', () => {
+  const emu = quietRally();
+  ballAt(emu, 104, 160, 0, 0, 64);
   emu.tap('A');
   emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 60, 'the slide');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 12, 'the touch');

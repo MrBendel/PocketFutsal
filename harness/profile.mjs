@@ -3,6 +3,7 @@
 // Carried over from RogueGB; its scenarios are PocketFutsal's.
 //   node harness/profile.mjs play     start a match and run about, shooting
 //   node harness/profile.mjs title    sit on the title screen
+//   node harness/profile.mjs busy     the frame budget test's match (tests/smoke.test.mjs)
 //   --top=N   functions listed per frame (7 by default)
 // Functions without an exported symbol (static C functions, asm local labels) are
 // counted under the nearest symbol before them.
@@ -27,6 +28,11 @@ const topN = Number((process.argv.find((a) => a.startsWith('--top=')) || '--top=
 step('', 30);
 let plan;
 if (scenario === 'title') plan = Array(300).fill('');
+else if (scenario === 'busy') {
+  step('START'); step('', 100);  // into play, and READY gone
+  const pads = ['A', 'RIGHT', 'RIGHT+A', 'UP', 'LEFT+B', 'DOWN', ''];
+  plan = Array.from({ length: 1500 }, (_, f) => pads[Math.floor(f / 25) % pads.length]);
+}
 else {
   step('START'); step('', 40);  // into play
   // Serve, then run about the court readying strikes now and then, so the CPU is busy.

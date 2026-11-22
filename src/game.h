@@ -131,8 +131,8 @@ extern uint8_t pl_taps[2];         // taps added to this charge
 extern uint8_t pl_aim[2];          // 0 left corner, 1 middle, 2 right: the last way held while planted
 extern int8_t pl_slide_vx[2], pl_slide_vy[2];  // a slide's step a frame
 extern int16_t cpu_tx, cpu_ty;     // where the CPU is heading (court px)
-extern int16_t cpu_meet_x, cpu_meet_y;  // where it means to meet the ball
-extern uint8_t cpu_leave;          // the ball's landing out: the CPU lets it go
+extern int16_t meet_x[2], meet_y[2];  // where each side means to meet the ball (court px)
+extern uint8_t meet_out[2];        // the ball's landing out: that side lets it go
 extern uint8_t cpu_aim;            // its next aim: 0 left corner, 1 middle, 2 right
 extern uint8_t cpu_idle;           // non-zero: the CPU's player stands still
 
@@ -143,7 +143,8 @@ extern uint8_t ball_power;  // a power shot, on fire until it slows or is met
 extern int8_t ball_curve;   // a curve's sideways push a frame, in 1/16 SUB
 extern uint8_t ball_curve_t; // frames of it left
 extern uint8_t ball_pop;    // a pop-up: met in the air, a slam
-extern uint8_t ball_drop;   // a drop shot: it dies where it lands
+extern uint8_t ball_drop;   // a drop shot: it barely bounces
+extern uint8_t ball_lob;    // a lob: it sits up where it lands (slowed, a high bounce)
 extern uint8_t last_touch;  // the side that touched it last
 
 #endif
