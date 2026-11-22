@@ -24,16 +24,15 @@ export function asciiTile(rows, name = 'tile') {
 }
 
 // ---------------------------------------------------------------------------
-// The court. Play happens in flat court coordinates (src/game.h): x 8..152 across,
-// depth y 0 (the far goal line, the CPU's) to 224 (the near one, yours). It's
-// drawn in perspective, like Mario Tennis: the far half squashed, the far end
-// narrower. These must match src/game.h and proj_init() in src/play.c.
+// The court: futnet singles (9 m x 12.8 m: each half a little wider than deep).
+// Play happens in flat court coordinates (src/game.h): x 8..152 across, depth y 0
+// (the far baseline, the CPU's) to 224 (the near one, yours), the net across
+// halfway. It's drawn in perspective, like Mario Tennis: the far half squashed, the
+// far end narrower. These must match src/game.h and proj_init() in src/play.c.
 const COURT_X0 = 8, COURT_X1 = 152, CX = 80;
 const FAR = 0, NEAR = 224, HALF = 112;
-const GOAL_X0 = 32, GOAL_X1 = 128;
-const CROSSBAR = 16;     // px high
-const NET_H = 6;         // px: the low net across halfway (src/game.h)
-const COURT_SY = 32;     // the far goal line's map row, in px
+const NET_H = 10;        // px: the net's height (src/game.h)
+const COURT_SY = 32;     // the far baseline's map row, in px
 const PROJ_K0 = 92, PROJ_K1 = 164;  // rows per depth unit, /256, at the far and near lines
 const PROJ_S0 = 111;     // the width scale at the far line, /128 (128 at the near one)
 
@@ -50,8 +49,8 @@ const W = PITCH_W * 8, H = PITCH_H * 8;
 // Background palettes (src/gfx.h PLAY_PAL_*): the court (everything but the
 // boards), the boards along the top and bottom.
 const PAL_FIELD = 0, PAL_BOARD = 1;
-// Court palette colors: 0 the court, 1 its darker bands (and the nets), 2 the
-// floor round it, 3 lines, posts and the board edges.
+// Court palette colors: 0 the court, 1 its darker bands, 2 the floor round it
+// (and the net's mesh), 3 lines, the net's tape and posts.
 const C_COURT = 0, C_BAND = 1, C_FLOOR = 2, C_LINE = 3;
 
 const BOARD_TOP = 8;      // map rows above this are the far boards
@@ -81,55 +80,26 @@ function drawCourt() {
       plot(x + 1, y + 1, C_LINE);
     }
   };
+  // The lines: the sidelines, the baselines, and the centre line under the net.
+  // A ball landing on a line is in.
   for (let t = 0; t <= 1; t += 1 / 2048) {
     const fy = FAR + t * (NEAR - FAR), fx = COURT_X0 + t * (COURT_X1 - COURT_X0);
-    line(COURT_X0, fy);  // the touchlines
+    line(COURT_X0, fy);
     line(COURT_X1 - 1, fy);
-    line(fx, FAR);       // the goal lines and the halfway line
+    line(fx, FAR);
     line(fx, NEAR - 1);
     line(fx, HALF);
-    const a = t * Math.PI * 2;
-    line(CX + 24 * Math.cos(a), HALF + 24 * Math.sin(a));  // the centre circle
-    if (Math.sin(a) > 0) line(CX + 40 * Math.cos(a), FAR + 40 * Math.sin(a));  // the penalty areas
-    else line(CX + 40 * Math.cos(a), NEAR - 1 + 40 * Math.sin(a));
   }
-  // The board edges along the touchlines, 5 units out: joined up row to row.
-  for (const bx of [COURT_X0 - 5, COURT_X1 + 4]) {
-    let last = projX(bx, FAR);
-    for (let fy = 0; fy <= NEAR; fy += 1 / 8) {
-      const x = projX(bx, fy), y = projY(fy);
-      for (let u = Math.min(x, last); u <= Math.max(x, last); u++) plot(u, y, C_LINE);
-      last = x;
-    }
-  }
-  // The low net across halfway (futnet): NET_H px high, a dark mesh under a white
-  // tape, a post at each end.
-  const hy = projY(HALF), hx0 = projX(COURT_X0 - 5, HALF), hx1 = projX(COURT_X1 + 4, HALF);
+  // The net across halfway: NET_H px high, a dark mesh under a white tape, a post
+  // at each end a little outside the sidelines.
+  const hy = projY(HALF), hx0 = projX(COURT_X0 - 6, HALF), hx1 = projX(COURT_X1 + 5, HALF);
   for (let y = hy - NET_H; y < hy; y++) {
     for (let x = hx0; x <= hx1; x++) {
-      if (y === hy - NET_H) plot(x, y, C_LINE);
+      if (y <= hy - NET_H + 1) plot(x, y, C_LINE);
       else if ((x + y) % 2 === 0) plot(x, y, C_FLOOR);
     }
   }
-  for (let y = hy - NET_H - 2; y <= hy; y++) plot(hx0, y, C_LINE), plot(hx1, y, C_LINE);
-  // The far goal: posts and crossbar standing up off the line, the net behind them.
-  const fl = projY(FAR), fx0 = projX(GOAL_X0, FAR), fx1 = projX(GOAL_X1, FAR);
-  for (let y = fl - CROSSBAR - 4; y < fl; y++) {
-    for (let x = fx0 + 1; x < fx1; x++) if ((x + y) % 3 === 0 || y === fl - CROSSBAR - 4) plot(x, y, C_BAND);
-  }
-  for (let y = fl - CROSSBAR; y <= fl; y++) plot(fx0, y, C_LINE), plot(fx1, y, C_LINE);
-  for (let x = fx0; x <= fx1; x++) plot(x, fl - CROSSBAR, C_LINE);
-  // The near goal, seen from above and behind: its net toward us (below the
-  // line), framed by the posts and the bar at the back. (Its crossbar is still
-  // CROSSBAR high in play; drawn over the court it read as a line.)
-  const nl = projY(NEAR) - 1, nx0 = projX(GOAL_X0, NEAR), nx1 = projX(GOAL_X1, NEAR);
-  for (let y = nl + 2; y < nl + 12; y++) {
-    for (let x = nx0 + 2; x < nx1; x++) if ((x + y) % 3 === 0) plot(x, y, C_BAND);
-  }
-  for (let y = nl; y <= nl + 12; y++) {
-    plot(nx0, y, C_LINE), plot(nx0 + 1, y, C_LINE), plot(nx1, y, C_LINE), plot(nx1 + 1, y, C_LINE);
-  }
-  for (let x = nx0; x <= nx1 + 1; x++) plot(x, nl + 11, C_LINE), plot(x, nl + 12, C_LINE);
+  for (let y = hy - NET_H - 2; y <= hy + 1; y++) plot(hx0, y, C_LINE), plot(hx1, y, C_LINE);
   // The boards, top and bottom (their own palette): 1 face, 2 dark top and shadow,
   // 3 a white stripe on the court side, rivets.
   for (let y = 0; y < H; y++) {

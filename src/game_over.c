@@ -20,7 +20,8 @@ void game_over_enter(void) BANKED {
     VBK_REG = 0;
     uint8_t t = SCENE_TILES;
     t += draw(FONT_DISPLAY, TEXT_CENTER, 4, winner == SIDE_YOU ? "YOU WIN!" : "CPU WINS", t, TITLE_PAL_GOLD);
-    // "YOU 7 - 3 CPU": one or two digits each (first to seven, by two).
+    // "YOU 11 - 7 CPU": the last set's points, one or two digits each; for the
+    // best of three, "SETS 2 - 1" under it.
     char line[16];
     uint8_t n = 0;
     line[n++] = 'Y', line[n++] = 'O', line[n++] = 'U', line[n++] = ' ';
@@ -33,6 +34,12 @@ void game_over_enter(void) BANKED {
     line[n++] = ' ', line[n++] = 'C', line[n++] = 'P', line[n++] = 'U';
     line[n] = 0;
     t += text_draw(FONT_COMPACT, TEXT_CENTER, 8, line, t, TITLE_PAL_TEXT);
+    if (match_sets > 1) {
+        char sl[] = "SETS 0 - 0";
+        sl[5] = '0' + sets[SIDE_YOU];
+        sl[9] = '0' + sets[SIDE_CPU];
+        t += text_draw(FONT_COMPACT, TEXT_CENTER, 10, sl, t, TITLE_PAL_TEXT);
+    }
     draw(FONT_COMPACT, TEXT_CENTER, 14, "PRESS START", t, TITLE_PAL_TEXT);
 }
 

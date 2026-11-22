@@ -127,11 +127,11 @@ export const YOU = 0, CPU = 1, NOBODY = 0xFF;
 export const SHOT_NONE = 0, SHOT_POWER = 1, SHOT_CURVE = 2, SHOT_LOB = 3, SHOT_DROP = 4;
 export const CHARGE_MAX = 32, TAP_CHARGE = 3, TAP_MAX = 8;
 export const MOVE_NONE = 0, MOVE_KICK = 1, MOVE_VOLLEY = 2, MOVE_HEADER = 3, MOVE_BICYCLE = 4, MOVE_SLIDE = 5,
-  MOVE_DOWN = 6, MOVE_BLOCK = 7;
+  MOVE_DOWN = 6, MOVE_CONTROL = 7;
 export const PHASE_SERVE = 0, PHASE_TOSS = 1, PHASE_RALLY = 2;
-export const POINT_GOAL = 0, POINT_NET = 1, POINT_BOUNCE = 2;
+export const POINT_NET = 1, POINT_OUT = 2, POINT_BOUNCE = 3, POINT_TOUCHES = 4, POINT_FAULT = 5;
 // The court (flat coordinates, px).
-export const COURT_FAR = 0, COURT_NEAR = 224, HALFWAY = 112, CENTER_X = 80;
+export const COURT_FAR = 0, COURT_NEAR = 224, HALFWAY = 112, CENTER_X = 80, NET_H = 10;
 /** Sixteenths of a pixel -> pixels. */
 export const px = (sub) => Math.floor(sub / 16);
 

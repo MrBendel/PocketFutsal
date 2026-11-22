@@ -1,12 +1,12 @@
-// The match (play.c): you and the CPU, each in your own half of a futsal court,
-// Mario Tennis style. Watchable globals, for the tests and the playtest page.
+// The match (play.c): futnet singles (football-tennis) against the CPU, Mario
+// Tennis style: you and the CPU each in your own half, a net between. Watchable globals, for the tests and the playtest page.
 #ifndef GAME_H
 #define GAME_H
 
 #include <stdint.h>
 
 // Positions are in sixteenths of a unit (SUB) on the flat court: x across, y in
-// depth from the far goal line (the CPU's) to the near one (yours). One unit is
+// depth from the far baseline (the CPU's) to the near one (yours). One unit is
 // a pixel at the near end; the court is drawn in perspective (proj_y, proj_s in
 // play.c), squashed toward the far end. Speeds are in sixteenths a frame. A
 // player's position is the point under its feet; the ball's is the point under it
@@ -15,39 +15,48 @@
 #define PX(v) ((v) >> 4)
 #define TO_SUB(px) ((int16_t)(px) << 4)
 
-// The court (tools/tile-art.mjs draws it to match).
-#define COURT_X0 8     // the touchlines (boards beyond)
+// The court (tools/tile-art.mjs draws it to match): futnet singles, 9 m x 12.8 m,
+// so each half is a little wider than it's deep. A ball on a line is in.
+#define COURT_X0 8     // the sidelines
 #define COURT_X1 152
 #define CENTER_X 80
-#define COURT_FAR 0    // the CPU's goal line
+#define COURT_FAR 0    // the CPU's baseline
 #define COURT_NEAR 224 // yours
-#define HALFWAY 112
-#define GOAL_X0 32     // the goal mouths, between the posts: two thirds of the line
-#define GOAL_X1 128
-#define CROSSBAR 16    // px: a ball higher than this hits the boards above the goal
-#define NET_H 6        // px: the low net across halfway (futnet); lower than this, it's in the net
+#define HALFWAY 112    // the net
+#define NET_H 10       // px: the net's height (1.10 m is about 14 at this scale; lower
+                       // to play well on a small screen). Lower than this, it's in the net.
+#define OUT_X0 -24     // the floor round the court: a ball stops at these edges
+#define OUT_X1 184
+#define OUT_Y0 -16
+#define OUT_Y1 236
 
 // The perspective (tools/tile-art.mjs projY, projS).
-#define COURT_SY 32    // the far goal line's map row, px
+#define COURT_SY 32    // the far baseline's map row, px
 #define PROJ_K0 92     // rows per unit of depth, /256, at the far and near lines
 #define PROJ_K1 164
 #define PROJ_S0 111    // the width scale at the far line, /128 (128 at the near)
 #define MAP_H 168      // the background: 160 x 168, scrolled up and down
 #define CAM_MAX 32     // its scroll: MAP_H - the 136 rows above the HUD
 
-// Sides. You (SIDE_YOU) play the near half, toward the far goal.
+// Sides. You (SIDE_YOU) play the near half.
 #define SIDE_YOU 0
 #define SIDE_CPU 1
 #define NOBODY 0xFF
 
-#define WIN_POINTS 7  // first to seven, by two
+// Scoring (futnet): a set is first to 11 by two, or to 15 (so 15-14 at most); the
+// match is one set, or the best of three (match_sets, chosen on the title).
+#define SET_POINTS 11
+#define SET_CAP 15
 
-// How a point was won (point_reason). Tennis rules over a low net, plus goals: a
-// strike must clear the net and land in the other half; a second bounce (or a ball
-// that dies) is the striker's point; into a goal is a point straight away.
-#define POINT_GOAL 0
-#define POINT_NET 1     // landed on the striker's own side first (often off the net)
-#define POINT_BOUNCE 2  // bounced twice, or died, in the other half
+// The rules of the rally (futnet singles), and how a point was won (point_reason):
+// - two touches a side (both yours, one after the other if you like), one bounce;
+// - the ball must go over the net and land in, on a line or inside it;
+// - a ball off the net is dead: it can't be played again.
+#define POINT_NET 1      // in the net
+#define POINT_OUT 2      // struck out of the court
+#define POINT_BOUNCE 3   // bounced twice (or died) in a half: the other side's point
+#define POINT_TOUCHES 4  // a third touch
+#define POINT_FAULT 5    // a serve that didn't go over
 
 // Strikes, readied before the ball arrives: A a power shot, straight where the
 // d-pad points; B a curve, bending in to the side the d-pad holds. B then A is a
@@ -73,9 +82,10 @@
 #define MOVE_BICYCLE 4  // overhead and just behind
 #define MOVE_SLIDE 5    // planted out of reach: a slide for it, then on the floor
 #define MOVE_DOWN 6     // knocked down by a power shot
-#define MOVE_BLOCK 7    // hit by the ball unready: it pops up off you
-// A ball only just reached (a slide, a block, or a ball on fire met with less than
-// half a meter) pops up into the other half: met in the air, it's a slam, on fire.
+#define MOVE_CONTROL 7  // reached unready: a first touch, up in front of you, to play again
+// A ball only just reached (a slide, or a ball on fire met with less than three
+// quarters of a meter) pops up over the net. A pop-up (or your own control) met in
+// the air with half a meter is a slam, on fire.
 
 // The rally's phase.
 #define PHASE_SERVE 0  // the server has the ball at their feet
@@ -96,7 +106,13 @@ extern uint8_t phase;         // PHASE_*
 extern uint8_t serve_timer;   // counts down before the server may toss (READY)
 extern uint8_t goal_timer;    // a point's celebration counts down, then the serve
 extern uint8_t point_reason;  // POINT_*: how the last point was won
-extern uint8_t ball_landings; // times the ball has landed since it was last touched
+extern uint8_t sets[2];       // sets won, by side
+extern uint8_t match_sets;    // sets it takes to win the match: 1, or 2 (best of three)
+extern uint8_t holder;        // the side whose half the ball is in: its touches and bounces
+extern uint8_t touches;       // the holder's touches so far
+extern uint8_t ball_landings; // bounces in the holder's half
+extern uint8_t ball_netted;   // it hit the net: dead
+extern uint8_t ball_serve;    // a serve, not yet over the net
 extern uint8_t paused;
 extern uint8_t cam_y;         // the background's scroll, 0 .. CAM_MAX
 
@@ -115,6 +131,8 @@ extern uint8_t pl_taps[2];         // taps added to this charge
 extern uint8_t pl_aim[2];          // 0 left corner, 1 middle, 2 right: the last way held while planted
 extern int8_t pl_slide_vx[2], pl_slide_vy[2];  // a slide's step a frame
 extern int16_t cpu_tx, cpu_ty;     // where the CPU is heading (court px)
+extern int16_t cpu_meet_x, cpu_meet_y;  // where it means to meet the ball
+extern uint8_t cpu_leave;          // the ball's landing out: the CPU lets it go
 extern uint8_t cpu_aim;            // its next aim: 0 left corner, 1 middle, 2 right
 extern uint8_t cpu_idle;           // non-zero: the CPU's player stands still
 
@@ -127,6 +145,5 @@ extern uint8_t ball_curve_t; // frames of it left
 extern uint8_t ball_pop;    // a pop-up: met in the air, a slam
 extern uint8_t ball_drop;   // a drop shot: it dies where it lands
 extern uint8_t last_touch;  // the side that touched it last
-extern uint8_t bounces;     // board bounces (the tests watch them)
 
 #endif

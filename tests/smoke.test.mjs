@@ -1,20 +1,21 @@
-// The game shell (title -> play -> game over -> title) and the match. Keep at
-// least "boots" and one golden screen per major screen.
+// The game shell (title -> play -> game over -> title) and the match: futnet
+// singles. Keep at least "boots" and one golden screen per major screen.
 import { test } from 'node:test';
 import {
   assert, matchGolden, settle, bootToTitle, startGame, served, FRAME_LIMIT,
   TITLE, PLAY, GAME_OVER, YOU, CPU, SHOT_NONE, SHOT_POWER, SHOT_CURVE, SHOT_LOB, SHOT_DROP,
-  CHARGE_MAX, TAP_CHARGE, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_BLOCK,
-  PHASE_SERVE, PHASE_TOSS, PHASE_RALLY, HALFWAY, POINT_GOAL, POINT_NET, POINT_BOUNCE,
+  CHARGE_MAX, TAP_CHARGE, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
+  PHASE_SERVE, PHASE_TOSS, PHASE_RALLY, HALFWAY, POINT_NET, POINT_OUT, POINT_BOUNCE, POINT_TOUCHES,
   px, at, set16, placeBall, placePlayer,
 } from './helpers.mjs';
 
-/** Mid-rally, the CPU (which struck last) standing still off to one side, you at (80, 190). */
+/** Mid-rally, the ball in your half and the CPU (which struck last) standing still off to one side, you at (80, 190). */
 function quietRally() {
   const emu = served(startGame());
   emu.write8(emu.symbols.addr('cpu_idle'), 1);
   emu.write8(emu.symbols.addr('phase'), PHASE_RALLY);
   emu.write8(emu.symbols.addr('last_touch'), CPU);
+  emu.write8(emu.symbols.addr('holder'), YOU);
   placePlayer(emu, CPU, 20, 20);
   placePlayer(emu, YOU, 80, 190);
   placeBall(emu, 40, 140);
@@ -26,6 +27,7 @@ function incoming(emu, x, y, vy, vz) {
   ballAt(emu, x, y, 0, 0, vy);
   set16(emu, 'ball_vz', vz);
   emu.write8(emu.symbols.addr('last_touch'), CPU);
+  emu.write8(emu.symbols.addr('holder'), y < HALFWAY ? CPU : YOU);
   emu.write8(emu.symbols.addr('ball_landings'), 0);
 }
 
@@ -37,13 +39,35 @@ function ballAt(emu, x, y, z = 0, vx = 0, vy = 0) {
   set16(emu, 'ball_vy', vy);
 }
 
-/** Run until a goal (or `n` frames pass): the scorer, or null. */
-function goalWithin(emu, n = 200) {
+/** Your strike, already readied and charged: shot and charge set directly. */
+function readied(emu, shot, charge) {
+  emu.write8(emu.symbols.addr('pl_shot') + YOU, shot);
+  emu.write8(emu.symbols.addr('pl_charge') + YOU, charge);
+}
+
+/** Run until a point (or `n` frames pass): who won it, or null. */
+function pointWithin(emu, n = 200) {
   for (let i = 0; i < n; i++) {
     emu.idle(1);
     if (emu.v('goal_timer')) return emu.v('last_scorer');
   }
   return null;
+}
+
+/** Score a point for `side` straight away: the ball dropped dead in the other half. */
+function pointTo(emu, side) {
+  emu.write8(emu.symbols.addr('phase'), PHASE_RALLY);
+  emu.write8(emu.symbols.addr('cpu_idle'), 1);
+  placePlayer(emu, CPU, 20, 20);
+  placePlayer(emu, YOU, 20, 200);
+  emu.write8(emu.symbols.addr('last_touch'), side);
+  emu.write8(emu.symbols.addr('holder'), side ^ 1);
+  emu.write8(emu.symbols.addr('ball_landings'), 1);
+  emu.write8(emu.symbols.addr('ball_netted'), 0);
+  emu.write8(emu.symbols.addr('ball_serve'), 0);
+  ballAt(emu, 100, side === YOU ? 60 : 170, 2);
+  assert.equal(pointWithin(emu, 30), side);
+  emu.until((e) => !e.v('goal_timer'), 200, 'the celebration');
 }
 
 test('boots to the title screen and runs one loop per frame', () => {
@@ -55,8 +79,14 @@ test('boots to the title screen and runs one loop per frame', () => {
   assert.ok(fc >= 59 && fc <= 61, `frame_count advanced ${fc} in 60 frames`);
 });
 
-test('the title waits for START', () => {
-  const emu = bootToTitle().hold('RIGHT+UP+B+SELECT', 60).idle(5);
+test('the title waits for START; SELECT switches between one set and the best of three', () => {
+  const emu = bootToTitle();
+  assert.equal(emu.v('match_sets'), 1);
+  emu.tap('SELECT');
+  assert.equal(emu.v('match_sets'), 2);
+  emu.tap('SELECT');
+  assert.equal(emu.v('match_sets'), 1);
+  emu.hold('UP+B', 60).idle(5);
   assert.equal(emu.v('game_state'), TITLE);
 });
 
@@ -83,8 +113,11 @@ test('the match opens 0-0 on your serve: along your line, then A tosses it up an
   assert.equal(emu.v('phase'), PHASE_TOSS);
   emu.until((e) => e.v('phase') === PHASE_RALLY, 60, 'the strike');
   assert.equal(at(emu, 'pl_last_move', YOU), MOVE_KICK);
+  assert.equal(emu.v('ball_serve'), 1);
   assert.ok(emu.v('ball_vy', 'i16') < 0, 'away up the court');
   assert.equal(emu.v('ball_power'), 0, 'never a power serve');
+  emu.until((e) => e.v('holder') === CPU, 60, 'over the net');
+  assert.equal(emu.v('ball_serve'), 0);
 });
 
 test('A plants you to ready a strike, only with the ball coming your way, and it goes as the ball arrives', () => {
@@ -128,9 +161,21 @@ test('which strike it is depends on the ball\'s height: kick, volley, header, an
   for (const [z, behind, move] of cases) {
     const emu = quietRally();
     ballAt(emu, 82, 190 + behind, z);
-    emu.hold('A', 1).idle(1);
+    readied(emu, SHOT_POWER, 12);
+    emu.idle(1);
     assert.equal(at(emu, 'pl_last_move', YOU), move, `z ${z}, ${behind} px behind`);
     assert.ok(emu.v('ball_vy', 'i16') < 0, `move ${move} sends it up the court`);
+  }
+});
+
+test('every strike arcs over the net', () => {
+  for (const charge of [6, 16, 31]) {
+    const emu = quietRally();
+    ballAt(emu, 80, 186);
+    readied(emu, SHOT_POWER, charge);
+    emu.idle(1);
+    emu.until((e) => e.v('holder') === CPU || e.v('ball_netted') || e.v('goal_timer'), 60, 'the net');
+    assert.equal(emu.v('holder'), CPU, `charge ${charge} goes over`);
   }
 });
 
@@ -142,9 +187,9 @@ test('B is a curve: set off wide, it bends in to the side you hold', () => {
   emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
   assert.ok(emu.v('ball_curve', 'i8') > 0, 'bending right');
   const vx0 = emu.v('ball_vx', 'i16');
-  emu.until((e) => px(e.v('ball_y', 'i16')) < 20 || e.v('goal_timer'), 120, 'the far end');
+  emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
   assert.ok(emu.v('ball_vx', 'i16') > vx0, 'more to the right as it goes');
-  assert.ok(px(emu.v('ball_x', 'i16')) > 95, `ends up right: x ${px(emu.v('ball_x', 'i16'))}`);
+  assert.ok(px(emu.v('ball_x', 'i16')) > 100, `lands right: x ${px(emu.v('ball_x', 'i16'))}`);
 });
 
 test('B then A is a lob, dropping just behind the CPU', () => {
@@ -170,11 +215,11 @@ test('A then B is a drop shot, just over the net and barely bouncing: unreached,
   emu.until((e) => e.v('ball_landings') > 0, 60, 'it landing');
   const y = px(emu.v('ball_y', 'i16'));
   assert.ok(y >= HALFWAY - 30 && y < HALFWAY, `lands at ${y}, just over`);
-  assert.equal(goalWithin(emu, 30), YOU);
+  assert.equal(pointWithin(emu, 30), YOU);
   assert.equal(emu.v('point_reason'), POINT_BOUNCE);
 });
 
-test('planted out of reach, you slide for it: it pops up, and you stay down a moment', () => {
+test('planted out of reach, you slide for it: it pops up over the net, and you stay down a moment', () => {
   const emu = quietRally();
   ballAt(emu, 100, 120, 0, 0, 40);
   emu.tap('A');
@@ -188,13 +233,30 @@ test('planted out of reach, you slide for it: it pops up, and you stay down a mo
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'on the floor');
 });
 
-test('a pop-up met in the air is a slam, on fire', () => {
+test('unready, your first touch controls it, up in front of you; your second can slam it', () => {
   const emu = quietRally();
-  ballAt(emu, 82, 184, 12);
-  emu.write8(emu.symbols.addr('ball_pop'), 1);
-  emu.hold('A', 1).idle(1);
-  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_VOLLEY);
-  assert.equal(emu.v('ball_power'), 1);
+  ballAt(emu, 80, 170, 0, 0, 48);
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 30, 'the control');
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_CONTROL);
+  assert.equal(emu.v('touches'), 1);
+  assert.equal(emu.v('ball_pop'), 1);
+  assert.ok(emu.v('ball_vz', 'i16') > 0, 'up');
+  emu.until((e) => at(e, 'pl_move_timer', YOU) === 0, 30, 'the control pose');
+  emu.tap('A');
+  for (let k = 0; k < 4; k++) emu.tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 1, 40, 'the second touch');
+  assert.equal(emu.v('touches'), 2);
+  assert.equal(emu.v('ball_power'), 1, 'a slam, on fire');
+  assert.ok(emu.v('ball_vy', 'i16') < 0);
+});
+
+test('a third touch is a fault', () => {
+  const emu = quietRally();
+  emu.write8(emu.symbols.addr('touches'), 2);
+  ballAt(emu, 82, 184);
+  readied(emu, SHOT_POWER, 12);
+  assert.equal(pointWithin(emu, 5), CPU);
+  assert.equal(emu.v('point_reason'), POINT_TOUCHES);
 });
 
 test('a ball on fire: met with under three quarters of a meter it pops up; with more, a clean strike', () => {
@@ -214,24 +276,17 @@ test('a ball on fire: met with under three quarters of a meter it pops up; with 
   assert.ok(emu.v('ball_vy', 'i16') < 0);
 });
 
-test('a ball on fire knocks down a player who meets it unready, and goes on in', () => {
+test('a ball on fire knocks down a player who meets it unready, and goes on', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 80, 30);
-  ballAt(emu, 80, 100, 0, 0, -96);
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  emu.write8(emu.symbols.addr('holder'), CPU);
+  ballAt(emu, 80, 100, 8, 0, -96);
+  set16(emu, 'ball_vz', 10);
   emu.write8(emu.symbols.addr('ball_power'), 1);
   emu.until((e) => at(e, 'pl_move', CPU) === MOVE_DOWN, 40, 'the knock-down');
-  assert.equal(goalWithin(emu), YOU);
+  assert.equal(pointWithin(emu, 120), YOU);
 });
-
-test('unready, the ball pops up off you', () => {
-  const emu = quietRally();
-  ballAt(emu, 80, 170, 0, 0, 48);
-  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 30, 'the block');
-  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_BLOCK);
-  assert.equal(emu.v('ball_pop'), 1);
-  assert.ok(emu.v('ball_vy', 'i16') < 0);
-});
-
 
 test('LEFT or RIGHT while planted sets your aim, and it sticks', () => {
   const emu = quietRally();
@@ -252,51 +307,55 @@ test('charging, you flash: your palette, white, and fire from half a meter', () 
   assert.deepEqual([...pals].sort(), [0, 1, 6], 'you, flash, fire');
 });
 
-test('the net: low across halfway, the ball is stopped and drops back', () => {
+test('into the net: it drops back, dead, the other side\'s point', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 130, 0, 0, -48);
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  ballAt(emu, 80, 130, 4, 0, -48);
   emu.until((e) => e.v('ball_vy', 'i16') > 0, 20, 'the net');
   assert.ok(px(emu.v('ball_y', 'i16')) >= HALFWAY);
-});
-
-test('barely charged, a strike is scuffed into the net: the CPU\'s point', () => {
-  const emu = quietRally();
-  ballAt(emu, 82, 184);
-  emu.hold('A', 1);
-  assert.equal(goalWithin(emu, 60), CPU);
+  assert.equal(emu.v('ball_netted'), 1);
+  assert.equal(pointWithin(emu, 30), CPU);
   assert.equal(emu.v('point_reason'), POINT_NET);
 });
 
-test('a second bounce in their half is the striker\'s point', () => {
+test('barely charged, a strike is scuffed: it never gets over, and it\'s the CPU\'s point', () => {
+  const emu = quietRally();
+  ballAt(emu, 82, 184);
+  readied(emu, SHOT_POWER, 0);
+  assert.equal(pointWithin(emu, 80), CPU);
+});
+
+test('a second bounce in a half is the other side\'s point', () => {
   const emu = quietRally();
   emu.write8(emu.symbols.addr('last_touch'), YOU);
-  ballAt(emu, 100, 60, 12, 0, -10);
-  assert.equal(goalWithin(emu, 60), YOU);
+  emu.write8(emu.symbols.addr('holder'), CPU);
+  ballAt(emu, 100, 60, 12);
+  emu.until((e) => e.v('ball_landings') === 1, 30, 'the first bounce');
+  assert.equal(emu.v('goal_timer'), 0, 'one bounce is fine');
+  assert.equal(pointWithin(emu, 60), YOU);
   assert.equal(emu.v('point_reason'), POINT_BOUNCE);
-  assert.ok(emu.v('ball_landings') >= 1);
 });
 
-test('the ball comes off the boards: the sides, the goal line beside the goal, and above the crossbar', () => {
+test('out on the full is the striker\'s fault; in, then out, is the striker\'s point', () => {
   let emu = quietRally();
-  ballAt(emu, 30, 150, 0, -48, 0);
-  emu.until((e) => e.v('ball_vx', 'i16') > 0, 30, 'off the side');
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  emu.write8(emu.symbols.addr('holder'), CPU);
+  ballAt(emu, 80, 20, 12, 0, -64);  // over the far baseline before it lands
+  assert.equal(pointWithin(emu, 40), CPU);
+  assert.equal(emu.v('point_reason'), POINT_OUT);
   emu = quietRally();
-  ballAt(emu, 16, 20, 0, 0, -48);
-  emu.until((e) => e.v('ball_vy', 'i16') > 0, 30, 'off the end, beside the goal');
-  emu = quietRally();
-  ballAt(emu, 80, 20, 24, 0, -48);
-  set16(emu, 'ball_vz', 30);
-  emu.until((e) => e.v('ball_vy', 'i16') > 0, 30, 'off the boards above the goal');
-  assert.equal(emu.v('goal_timer'), 0);
-  assert.ok(emu.v('bounces') >= 1);
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  emu.write8(emu.symbols.addr('holder'), CPU);
+  emu.write8(emu.symbols.addr('ball_landings'), 1);
+  ballAt(emu, 140, 60, 12, 40, 0);  // bounced in already, now off the side
+  assert.equal(pointWithin(emu, 40), YOU);
+  assert.equal(emu.v('point_reason'), POINT_BOUNCE);
 });
 
-test('a goal is a point; the side that conceded serves next', () => {
+test('a point: the side that lost it serves next', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 30, 0, 0, -48);
-  assert.equal(goalWithin(emu), YOU);
+  pointTo(emu, YOU);
   assert.equal(at(emu, 'score', YOU), 1);
-  emu.until((e) => !e.v('goal_timer'), 200, 'the celebration');
   assert.equal(emu.v('phase'), PHASE_SERVE);
   assert.equal(emu.v('server'), CPU);
   emu.write8(emu.symbols.addr('cpu_idle'), 0);
@@ -304,35 +363,40 @@ test('a goal is a point; the side that conceded serves next', () => {
   assert.ok(emu.v('ball_vy', 'i16') > 0, 'down the court at you');
 });
 
-test('into your own goal counts for the CPU', () => {
+test('a set is first to 11 by two, 15 at most; one set is the match; START at full time goes back to the title', () => {
   const emu = quietRally();
-  ballAt(emu, 50, 200, 0, 0, 60);
-  assert.equal(goalWithin(emu), CPU);
-  assert.equal(at(emu, 'score', CPU), 1);
-});
-
-test('first to seven, by two; START at full time goes back to the title', () => {
-  const emu = quietRally();
-  emu.write8(emu.symbols.addr('score') + YOU, 6);
-  emu.write8(emu.symbols.addr('score') + CPU, 6);
-  ballAt(emu, 80, 30, 0, 0, -48);
-  assert.equal(goalWithin(emu), YOU);
-  emu.until((e) => !e.v('goal_timer'), 200, 'the celebration');
-  assert.equal(emu.v('game_state'), PLAY, '7-6 is not enough');
-  emu.write8(emu.symbols.addr('phase'), PHASE_RALLY);
-  placePlayer(emu, CPU, 20, 20);  // out of its serving spot
-  ballAt(emu, 80, 30, 0, 0, -48);
-  assert.equal(goalWithin(emu), YOU);
-  settle(emu, GAME_OVER, 'full time');
-  assert.equal(emu.v('winner'), YOU);
+  emu.write8(emu.symbols.addr('score') + YOU, 10);
+  emu.write8(emu.symbols.addr('score') + CPU, 10);
+  pointTo(emu, YOU);
+  assert.equal(emu.v('game_state'), PLAY, '11-10 is not enough');
+  emu.write8(emu.symbols.addr('score') + YOU, 14);
+  emu.write8(emu.symbols.addr('score') + CPU, 14);
+  pointTo(emu, CPU);
+  settle(emu, GAME_OVER, 'full time: 15-14 is');
+  assert.equal(emu.v('winner'), CPU);
   emu.idle(40).tap('START');
   settle(emu, TITLE, 'the title');
 });
 
-test('the CPU plays: it returns your serve and can score', () => {
+test('the best of three: a set won starts the next from 0-0', () => {
+  const emu = settle(bootToTitle().tap('SELECT'), TITLE);
+  startGame(emu);
+  assert.equal(emu.v('match_sets'), 2);
+  emu.write8(emu.symbols.addr('score') + YOU, 10);
+  pointTo(emu, YOU);
+  assert.equal(emu.v('game_state'), PLAY);
+  assert.deepEqual([at(emu, 'sets', YOU), at(emu, 'sets', CPU)], [1, 0]);
+  assert.deepEqual([at(emu, 'score', YOU), at(emu, 'score', CPU)], [0, 0]);
+  emu.write8(emu.symbols.addr('score') + YOU, 10);
+  pointTo(emu, YOU);
+  settle(emu, GAME_OVER, 'full time');
+  assert.equal(emu.v('winner'), YOU);
+});
+
+test('the CPU plays: it returns your serve and can win a point', () => {
   const emu = served(startGame()).tap('A');
   emu.until((e) => at(e, 'pl_shots', CPU) > 0, 300, 'a CPU return');
-  emu.until((e) => at(e, 'score', CPU) > 0, 3000, 'a CPU goal');
+  emu.until((e) => at(e, 'score', CPU) > 0, 3000, 'a CPU point');
 });
 
 test('START pauses and resumes', () => {
@@ -369,7 +433,7 @@ test('screen: your serve', () => {
 
 test('screen: planted, charged full', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 40, 0, 0, 30);
+  incoming(emu, 80, 40, 30, 60);
   emu.tap('A');
   for (let k = 0; k < 8; k++) emu.tap('A');
   matchGolden(emu.idle(4), 'charged');
@@ -378,7 +442,7 @@ test('screen: planted, charged full', () => {
 test('screen: a header', () => {
   const emu = quietRally();
   ballAt(emu, 82, 184, 20);
-  emu.hold('A', 1);
+  readied(emu, SHOT_POWER, 12);
   matchGolden(emu.idle(3), 'header');
 });
 
@@ -391,11 +455,13 @@ test('screen: the far end, the CPU sliding', () => {
   matchGolden(emu.idle(20), 'slide');
 });
 
-test('screen: goal', () => {
+test('screen: a point', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 30, 0, 0, -48);
-  goalWithin(emu);
-  matchGolden(emu.idle(20), 'goal');
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  emu.write8(emu.symbols.addr('holder'), CPU);
+  ballAt(emu, 100, 60, 12);
+  pointWithin(emu, 60);
+  matchGolden(emu.idle(20), 'point');
 });
 
 test('screen: paused', () => {
@@ -404,8 +470,8 @@ test('screen: paused', () => {
 
 test('screen: full time', () => {
   const emu = startGame();
-  emu.write8(emu.symbols.addr('score') + CPU, 7);
-  emu.write8(emu.symbols.addr('score') + YOU, 5);
+  emu.write8(emu.symbols.addr('score') + CPU, 11);
+  emu.write8(emu.symbols.addr('score') + YOU, 7);
   emu.write8(emu.symbols.addr('winner'), CPU);
   emu.write8(emu.symbols.addr('next_state'), GAME_OVER);
   matchGolden(settle(emu, GAME_OVER, 'full time').idle(20), 'full-time');

@@ -1,10 +1,38 @@
 # PocketFutsal design
 
-An arcade futsal game for the Game Boy Color, played like Mario Tennis: 1-on-1, top
-down, each player keeping to their own half and defending the goal behind them. The
-ball is always loose, every touch is a strike, and the skill is in reading where the
-ball goes and charging the right strike early. It's less about scoring goals than
-getting the ball past the other player. Proposals, not decisions: change freely.
+An arcade **futnet** game (football-tennis) for the Game Boy Color, played like Mario
+Tennis: singles, top down, a net between the halves. The ball is always loose, every
+touch is a strike, and the skill is in reading where the ball goes and charging the
+right strike early. Proposals, not decisions: change freely.
+
+## v0.3 (2026-11-21): futnet
+
+Decided 2026-11-21: the game follows the rules of futnet singles (UNIF, the governing
+body; nohejbal in Czech, where it began in the 1920s). The goals and boards go; the
+court has lines, and a ball landing out is a fault. Sources:
+[UNIF, Futnet at a Glance](https://www.futnetworld.com/futnet.html),
+[Football tennis (Wikipedia)](https://en.wikipedia.org/wiki/Football_tennis). The full
+UNIF laws (serve, line calls, who serves) weren't read yet: where they're silent, our
+calls are marked *(ours)*.
+
+| Futnet singles | PocketFutsal |
+|---|---|
+| Court 9 m x 12.8 m: each half a little wider than deep | 144 x 224 flat units (a half 144 x 112) |
+| Net 1.10 m (about 0.6 of a player's height: 14 px at our scale) | 10 px, lower to play well on a small screen |
+| One player, **two touches** (one after the other is fine in singles), **one bounce** | The same: `touches`, `ball_landings` per `holder` |
+| Any part of the body but the hands and arms | Feet, volleys, headers, bicycle kicks |
+| Faults: in the net, out of the court, touching the net, a third touch | Net, out, third touch (players can't reach the net) |
+| A ball off the net can't be played again | `ball_netted`: dead, the other side's point when it lands |
+| Sets to 11 by two, at most 15 (15-14); best of three sets | One set by default; SELECT on the title for the best of three |
+| Serve: not in the sources | *(ours)* toss and strike from your back line; it must go over; the side that lost the point serves |
+| A ball on a line: not in the sources | *(ours)* in, as in tennis |
+
+The two touches give the game its set-up-and-attack move: reached unready, your first
+touch **controls** the ball up in front of you (not over the net); ready a strike as
+it comes down, and with half a meter your second touch is a **slam**, on fire.
+
+The HUD says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
+that didn't go over), and SET TO ... at the end of a set.
 
 ## v0.2 (2026-11-21): the tennis-style rebuild
 
@@ -74,30 +102,26 @@ slammed (the Captain Tsubasa feel).
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
-- **Unready**, the ball pops up off you (a ball on fire knocks you down).
-- **The net and the bounce** (decided 2026-11-21, after the first playtest: the ball
-  went dead in play): tennis rules over a low net (futnet, football-tennis, is a real
-  sport). A 6 px net across halfway. Every strike arcs, to come down at a depth set by
-  its charge (deeper the more charged), so the ball is in the air with its shadow under
-  it. Landing first on the striker's own side (scuffed, or off the net) is the other
-  side's point; a second bounce, or a ball that dies, is the striker's. A strike with
-  almost no meter (under 4: readied at the last moment) is scuffed into the net.
-- **The court**: each goal is two thirds of its back line, and into it is a point
-  straight away; boards round the rest, and above the crossbar.
+- **Unready**, your first touch controls it (v0.3); a ball on fire knocks you down.
+- **The arc** (2026-11-21, after the first playtest: the ball went dead in play): every
+  strike arcs, to come down at a depth set by its charge (deeper the more charged), so
+  the ball is in the air with its shadow under it, and it's lifted to clear the net
+  (fast flat strikes land deeper, or long). A strike with almost no meter (under 4:
+  readied at the last moment) is scuffed: it comes down short, on your own side.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
-- **Serve**: the side that conceded serves (you first). A or B tosses it up; it's
-  struck on the way down, aimed with LEFT / RIGHT.
-- **Scoring**: a goal is a point. First to 7, by 2.
-- **CPU**: works out where the ball will cross its line (every 8 frames, in a straight
-  line, so curves fool it), goes there, and plants once it's in place with the ball
-  within 72 px (or at the last moment). It taps now and then, lobs you if you're up near
-  halfway, drops it short if you're back on your line, curves one time in four, and aims
-  away from you. Same slides and pop-ups as you. A little slower than you.
+- **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's
+  struck on the way down, aimed with LEFT / RIGHT, and must go over.
+- **CPU**: traces the ball's flight every 8 frames (gravity and a bounce, not the curve,
+  so curves fool it) to where it lands and meets it just after the bounce; it lets a
+  ball that will land out go. It plants once it's in place with the ball within 96 px
+  (or within 40, in place or not), taps now and then, lobs you if you're up near the
+  net, drops it short if you're back on your line, curves one time in four, and aims
+  away from you. Same slides, controls and pop-ups as you. A little slower than you.
 - **Balance so far** (build/scratch/sim2.mjs, a bot that re-reads the ball every 12
-  frames): with the net, points take 400-600 frames, most won on a second bounce; the
-  CPU beats the bot (which is slow to get back for deep balls).
+  frames): sets to 11 take 4,000-6,000 frames (about 1.5 minutes), most points won on a
+  second bounce; the CPU and the bot each win some. Not yet tested by hand.
 
 ## v0.1 (2026-11-21): first playable (replaced)
 
@@ -112,4 +136,7 @@ goals. The keepers and the sideways view went in v0.2.
 - **Special meter**: well-timed strikes fill a special bar.
 - **2-on-2 / Super Dodge Ball mode**: passing and positioning, once the strikes feel good.
 - **Match timer**, a tournament ladder against harder CPUs, **link cable** versus.
-- Real art: more frames (serve, run sideways, get up), a crowd, goal nets that bulge.
+- **Doubles and triples** (futnet has both: three touches a side, not two in a row by
+  one player).
+- Real art: more frames (serve, run sideways, get up, a control touch), a crowd.
+- **The name**: PocketFutsal is now a futnet game.

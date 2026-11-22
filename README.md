@@ -1,14 +1,15 @@
 # PocketFutsal
 
-A Game Boy Color arcade futsal game in the spirit of Mario Tennis: 1-on-1 against the
-CPU on a court seen in perspective, each of you in your own half defending the goal
-behind you, strikes you charge by pressing early. Built in C
+A Game Boy Color arcade **futnet** game (football-tennis) in the spirit of Mario
+Tennis: singles against the CPU on a court seen in perspective, a net between you,
+strikes you charge by pressing early. Built in C
 with [GBDK-2020](https://gbdk.org/) 4.5.0 on the engine from
 [RogueGB](https://github.com/MrBendel/RogueGB) (by way of Danger Noodle): its build,
 VRAM queue, text, fades, sound engine, headless emulator harness, tests and playtest page.
 
-**Status: v0.2, the tennis-style rebuild.** One court, one CPU opponent, first to
-seven by two. Proportions measured from Mario Tennis (GBC): see the design doc.
+**Status: v0.3, futnet rules.** One court, one CPU opponent, one set to 11 (or the
+best of three). Proportions measured from Mario Tennis (GBC), rules from futnet: see
+the design doc.
 The design is in [docs/design/README.md](docs/design/README.md).
 
 ## Quick start
@@ -28,10 +29,11 @@ extracted on first build.
 
 ## How to play
 
-You're blue, at the bottom, defending the near goal; the CPU is red, at the top. You
-each keep to your own half, over a low net, like tennis (or futnet). The ball is always
-loose: you strike it rather than carry it. A strike has to clear the net and land in
-their half; a second bounce there is your point, and so is a goal.
+You're blue, at the bottom; the CPU is red, at the top; a net between. Futnet singles:
+two touches a side and one bounce, anything but your hands. Get the ball over the net
+and in (a line is in); a second bounce on their side is your point. Into the net, out,
+or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); SELECT on
+the title switches between one set and the best of three.
 
 | Button | What it does |
 |---|---|
@@ -40,18 +42,20 @@ their half; a second bounce there is your point, and so is a goal.
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
 | A or B again while ready | Tap for more power |
-| LEFT / RIGHT while ready | Aim at that corner of the goal (it sticks) |
+| LEFT / RIGHT while ready | Aim toward that sideline (it sticks) |
 | START | Pause |
 
 Press A or B once the ball is coming your way: you plant, and the strike charges as you
 wait (the meter in the HUD; tap again for more), then goes by itself as the ball
 arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
 the waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
-Planted out of reach, you **slide** for it: it pops up, and you're on the floor a
-moment. A pop-up met in the air is a **slam**, on fire, and so is a full-meter strike;
+Not ready when it reaches you, your first touch **controls** it, up in front of you:
+ready a strike as it comes down, and with half a meter your second touch is a **slam**.
+Planted out of reach, you **slide** for it: it pops up over the net, and you're on the
+floor a moment. A pop-up met in the air is a slam too, on fire, as is a full-meter strike;
 meeting a ball on fire takes three quarters of a meter, or it pops up off you (or knocks
-you down, if you slide to it or aren't ready). The side that conceded serves: the ball is
-struck on the way down.
+you down, if you slide to it or aren't ready). The side that lost the point serves: the ball is
+struck on the way down, and must go over.
 
 ## Code structure
 
@@ -60,7 +64,7 @@ struck on the way down.
 | `src/main.c` | Boot and the main loop. One scene update per frame; scene changes fade out, `enter()` the new scene, fade in |
 | `src/state.h` | Scene IDs (`STATE_TITLE`, `STATE_PLAY`, `STATE_GAME_OVER`), `state_change()`, `wait_frame()` |
 | `src/game.h` | The match's watchable state, the court's measurements and its perspective |
-| `src/play.c` | The match: the perspective, players, strikes, the CPU, the ball's physics, goals, the HUD |
+| `src/play.c` | The match: the perspective, players, strikes, the CPU, the ball's physics, the futnet rules and scoring, the HUD |
 | `src/title.c` | Title screen. START seeds the match from the frame it lands on |
 | `src/game_over.c` | Full time: who won and the score; START returns to the title |
 | `src/input.c` | Reads the joypad once per frame: `joy` (held), `joy_pressed`, `joy_released` |
@@ -117,7 +121,7 @@ Set `cpu_idle` to 1 (the playtest page's watches can) to make the CPU stand stil
 - `artwork/fonts/font-sheet.png`: the three proportional fonts (from RogueGB).
 - `artwork/Fonts for GB Studio/`: the 8×8 tile font and the dialog frame.
 - `tools/tile-art.mjs`: placeholder art. The court is drawn a pixel at a time in code,
-  in perspective (bands, lines, goals, boards), and cut into unique tiles. The player
+  in perspective (bands, lines, the net, boards), and cut into unique tiles. The player
   is a generic 16×24 ASCII sprite, Mario Tennis's size, in two views (from behind for
   you, from the front for the CPU) with ten poses each, plus a dive; they load into
   VRAM bank 1. The ball and its shadow are 8×8.
