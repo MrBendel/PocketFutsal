@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import {
   assert, matchGolden, settle, bootToTitle, startGame, served, FRAME_LIMIT,
   TITLE, PLAY, GAME_OVER, YOU, CPU, SHOT_NONE, SHOT_POWER, SHOT_CURVE, SHOT_LOB, SHOT_DROP,
-  CHARGE_MAX, TAP_CHARGE, TAP_MAX, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
+  CHARGE_MAX, TAP_CHARGE, TAP_MAX, YOU_TAP, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
   PHASE_SERVE, PHASE_TOSS, PHASE_RALLY, HALFWAY, POINT_NET, POINT_OUT, POINT_BOUNCE, POINT_TOUCHES,
   px, at, set16, placeBall, placePlayer,
 } from './helpers.mjs';
@@ -120,20 +120,20 @@ test('the match opens 0-0 on your serve: the d-pad aims it, A tosses it up and s
   assert.equal(emu.v('ball_serve'), 0);
 });
 
-test('A queues a strike any time: it waits until the ball comes (the d-pad only aims), then charges, you are run to it, and it goes', () => {
+test('A queues a strike any time: it waits until the ball comes (the d-pad only aims), you are run to it, and it goes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A');
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER, 'queued, with it going away');
   const x0 = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('RIGHT', 6);
-  assert.equal(at(emu, 'pl_charge', YOU), 0, 'no charge yet');
+  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'the press’s charge, no more');
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x0, 'the d-pad aims, it doesn’t walk you');
   assert.equal(at(emu, 'pl_aim', YOU), 2, 'aimed right');
   placePlayer(emu, YOU, 80, 190);
   ballAt(emu, 80, 120, 0, 0, 40);
   emu.idle(4);
-  assert.ok(at(emu, 'pl_charge', YOU) > 0, 'charging now it is coming');
+  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'it doesn’t fill by itself, coming either');
   const x = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('LEFT', 6);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'planted: LEFT does nothing (the ball is straight at you)');
@@ -143,19 +143,19 @@ test('A queues a strike any time: it waits until the ball comes (the d-pad only 
   assert.ok(emu.v('ball_vy', 'i16') < 0);
 });
 
-test('the meter fills as you wait, faster as you tap; full, the strike is on fire, aimed with RIGHT', () => {
+test('your meter fills only as you press (not waiting, not holding); full, the strike is on fire, aimed with RIGHT', () => {
   const emu = quietRally();
   incoming(emu, 80, 40, 20, 40);
   emu.tap('A');
-  const c0 = at(emu, 'pl_charge', YOU);
+  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'the first press');
   emu.idle(12);
-  const waited = at(emu, 'pl_charge', YOU) - c0;
-  assert.ok(waited >= 2 && waited <= 4, `waiting: +${waited} in 12 frames`);
-  emu.tap('A').tap('A');
-  assert.ok(at(emu, 'pl_charge', YOU) >= c0 + waited + 2 * TAP_CHARGE, 'taps add to it');
+  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'waiting adds nothing');
+  emu.hold('A', 12);
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'holding adds nothing after its press');
+  emu.idle(1).tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), 4 * YOU_TAP, 'each press adds');
   for (let k = 0; k < 8; k++) emu.tap('A');
-  assert.equal(at(emu, 'pl_taps', YOU), TAP_MAX, 'taps stop counting at TAP_MAX');
-  emu.until((e) => at(e, 'pl_charge', YOU) === CHARGE_MAX, 40, 'a full meter');
+  assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX, 'pressed full: no cap on presses');
   emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 160, 'the strike');
   assert.equal(emu.v('ball_power'), 1);
   assert.ok(emu.v('ball_vx', 'i16') > 0, 'to the right');
@@ -283,7 +283,7 @@ test('a lob (B then A) or a drop shot (A then B) is armed for a moment: struck l
   }
 });
 
-test('B then A is a lob, dropping just behind the CPU', () => {
+test('B then A is a lob, dropping deep behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);
   ballAt(emu, 80, 150, 0, 0, 30);
@@ -294,7 +294,72 @@ test('B then A is a lob, dropping just behind the CPU', () => {
   emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 80, 'it landing');
   assert.ok(top >= 24, `up ${top} px`);
   const y = px(emu.v('ball_y', 'i16'));
-  assert.ok(y <= 40 && y >= 20, `lands at ${y}, just behind the CPU at 40`);
+  assert.ok(y <= 24 && y >= 8, `lands at ${y}, well behind the CPU at 40`);
+});
+
+test('a lob coming down to you: a flashing marker where to meet it; queued, you are run there and slam it out of the air', () => {
+  const emu = quietRally();
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  incoming(emu, 60, 50, 26, 28);
+  set16(emu, 'ball_vx', 4);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.tap('A');
+  for (let k = 0; k < 3; k++) emu.tap('A');  // half a meter by then: a slam
+  emu.idle(4);
+  assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
+  assert.ok(marker(emu) > 0, 'the marker shows');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the slam');
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_HEADER, 'met in the air');
+  assert.equal(emu.v('ball_power'), 1, 'a slam, on fire');
+  assert.equal(marker(emu), 0, 'the marker gone');
+  const low = quietRally();
+  incoming(low, 60, 50, 26, 28);
+  set16(low, 'ball_vx', 4);
+  low.write8(low.symbols.addr('ball_lob'), 1);
+  low.tap('A');
+  low.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the header');
+  assert.equal(at(low, 'pl_last_move', YOU), MOVE_HEADER, 'less than half a meter: still out of the air');
+  assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
+});
+
+test('a drop shot coming to you shows where to meet it, after its bounce too', () => {
+  const emu = quietRally();
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  placePlayer(emu, YOU, 80, 200);
+  incoming(emu, 80, 60, 24, 22);
+  emu.write8(emu.symbols.addr('ball_drop'), 1);
+  emu.idle(4);
+  assert.ok(marker(emu) > 0, 'shown in flight');
+  emu.until((e) => e.v('ball_landings') === 1, 120, 'the bounce');
+  emu.idle(4);
+  assert.ok(marker(emu) > 0, 'still shown off the bounce');
+});
+
+test('bursts: an impact star off a slam, dust off a slide, sparks off the net', () => {
+  const oam = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 20);
+  const VFX = { SLAM: 0, FIRE: 1, DUST: 2, SPARK: 3 };
+  let emu = quietRally();
+  incoming(emu, 60, 50, 26, 28);
+  set16(emu, 'ball_vx', 4);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.tap('A');
+  for (let k = 0; k < 3; k++) emu.tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 120, 'the slam');
+  assert.equal(emu.v('vfx_kind'), VFX.SLAM);
+  emu.idle(3);
+  assert.ok(oam(emu) > 0 || emu.read8(emu.symbols.addr('shadow_OAM') + 4 * 21) > 0, 'drawn');
+  emu.idle(20);
+  assert.equal(emu.v('vfx_kind'), 255, 'over');
+  emu = quietRally();
+  ballAt(emu, 112, 150, 0, 0, 48);
+  emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
+  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 40, 'the slide');
+  assert.equal(emu.v('vfx_kind'), VFX.DUST);
+  emu = quietRally();
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  ballAt(emu, 80, 130, 4, 0, -48);
+  emu.until((e) => e.v('ball_netted'), 20, 'the net');
+  assert.equal(emu.v('vfx_kind'), VFX.SPARK);
 });
 
 test('a lob sits up where it lands: slowed to a quarter, and a high bounce to turn and reach', () => {
@@ -372,7 +437,7 @@ test('a third touch is a fault', () => {
   assert.equal(emu.v('point_reason'), POINT_TOUCHES);
 });
 
-test('a ball on fire: met with under three quarters of a meter it pops up; with more, a clean strike', () => {
+test('a ball on fire: met with under three eighths of a meter it pops up; with more, a clean strike', () => {
   let emu = quietRally();
   ballAt(emu, 80, 140, 0, 0, 96);
   emu.write8(emu.symbols.addr('ball_power'), 1);
@@ -424,9 +489,10 @@ test('UP plays it deep, DOWN short; LEFT and RIGHT near the sidelines', () => {
   assert.ok(land(['LEFT'])[0] < 40 && land(['RIGHT'])[0] > 120, 'near the sidelines');
 });
 
-test('aim is a direction from where you are: from the side, neutral goes straight and LEFT / RIGHT angle away', () => {
-  const land = (x, keys) => {
+test('aim is a direction from where you are: neutral goes half across, away from the CPU; LEFT / RIGHT angle all the way', () => {
+  const land = (x, keys, cpuX = 20) => {
     const emu = quietRally();
+    placePlayer(emu, CPU, cpuX, 20);
     placePlayer(emu, YOU, x, 190);
     ballAt(emu, x + 2, 184);
     readied(emu, SHOT_POWER, 16);
@@ -434,8 +500,9 @@ test('aim is a direction from where you are: from the side, neutral goes straigh
     emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
     return px(emu.v('ball_x', 'i16'));
   };
-  const straight = land(40, []);
-  assert.ok(Math.abs(straight - 42) <= 6, `straight on from x 40: lands at ${straight}`);
+  const away = land(80, []), awayL = land(80, [], 140), right = land(80, ['RIGHT']);
+  assert.ok(away > 92 && away < right, `neutral from x 80, the CPU at 20: right, at ${away} (RIGHT ${right})`);
+  assert.ok(awayL < 68, `the CPU at 140: left, at ${awayL}`);
   assert.ok(land(40, ['RIGHT']) > 80, 'RIGHT from the left side: across the court');
   assert.ok(land(120, ['LEFT']) < 80, 'LEFT from the right side: across the court');
 });
@@ -478,7 +545,18 @@ test('barely charged, a strike is scuffed: it never gets over, and it\'s the CPU
   const emu = quietRally();
   ballAt(emu, 82, 184);
   readied(emu, SHOT_POWER, 0);
-  assert.equal(pointWithin(emu, 80), CPU);
+  assert.equal(pointWithin(emu, 160), CPU);
+  assert.equal(emu.v('shot_seen'), 10, 'MIS on the HUD');
+});
+
+test('SELECT calls off your queued strike', () => {
+  const emu = quietRally();
+  ballAt(emu, 80, 150, 0, 0, -40);
+  emu.tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP);
+  emu.tap('SELECT');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_NONE, 'called off');
+  assert.equal(at(emu, 'pl_charge', YOU), 0, 'the meter emptied');
 });
 
 test('the first bounce in your half always gets up where you can play it, even off a low ball or a drop shot', () => {

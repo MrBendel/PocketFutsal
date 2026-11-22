@@ -194,3 +194,42 @@ void banked_bkg_data(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank
     set_bkg_data(first, n, data);
     SWITCH_ROM(saved);
 }
+
+// Shared by futnet and futsal; keeping this in bank 0 avoids growing the
+// already full match bank. OAM slots are allocated behind each mode's players.
+void gfx_player_shadow_init(uint8_t first) {
+    set_sprite_tile(first, 16); set_sprite_prop(first, SPR_PAL_UI);
+    set_sprite_tile(first + 1, 18); set_sprite_prop(first + 1, SPR_PAL_UI);
+}
+void gfx_player_shadow(uint8_t first, int16_t x, int16_t y) {
+    // Both modes constrain feet to the projected court (hardware y 12..156).
+    // The existing HUD sprite split clips the lower edge.
+    uint8_t ground_y = (uint8_t)(y + 12);
+    move_sprite(first, (uint8_t)x, ground_y);
+    move_sprite(first + 1, (uint8_t)(x + 8), ground_y);
+}
+
+// Write each actor's contiguous shadow-OAM block through one pointer. This
+// avoids repeated sprite-index multiplication and per-column function calls.
+void gfx_actor(uint8_t first, uint8_t tile, uint8_t wide, int16_t x, int16_t y, uint8_t pal, uint8_t flip) {
+    volatile OAM_item_t *o = &shadow_OAM[first];
+    pal |= S_BANK;
+    if (flip) pal |= S_FLIPX;
+    o[0].prop = pal; o[1].prop = pal; o[2].prop = pal;
+    if (wide) {
+        o[0].tile = tile + (flip ? 4 : 0); o[1].tile = tile + 2;
+        o[2].tile = tile + (flip ? 0 : 4);
+        uint8_t visible = y >= -1 && y <= 159;
+        o[0].y = o[1].y = o[2].y = visible ? (uint8_t)(y + 1) : 0;
+        o[0].x = (uint8_t)(x - 4); o[1].x = (uint8_t)(x + 4); o[2].x = (uint8_t)(x + 12);
+        o[3].y = 0;
+    } else {
+        uint8_t l = flip ? tile + 4 : tile, r = flip ? tile : tile + 4;
+        o[0].tile = l; o[1].tile = l + 2; o[2].tile = r; o[3].tile = r + 2;
+        o[3].prop = pal;
+        o[0].x = o[1].x = (uint8_t)x;
+        o[2].x = o[3].x = (uint8_t)(x + 8);
+        o[0].y = o[2].y = y >= 7 && y <= 167 ? (uint8_t)(y - 7) : 0;
+        o[1].y = o[3].y = y >= -9 && y <= 151 ? (uint8_t)(y + 9) : 0;
+    }
+}
