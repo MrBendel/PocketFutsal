@@ -14,5 +14,8 @@
   "minigame-results": "4b3a4c05",
   "mg-machine-start": "6b4eeaa9",
   "mg-machine-firing": "adb03031",
-  "mg-machine-return": "e34850e4"
+  "mg-machine-return": "e34850e4",
+  "wall-live": "88393b62",
+  "wall-hit": "762ac7fd",
+  "wall-charge": "c37461d8"
 }
