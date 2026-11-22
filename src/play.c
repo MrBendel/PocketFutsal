@@ -66,9 +66,12 @@
 #define REACH_X 12        // court px either side a strike reaches
 #define REACH_FWD 8       // in front
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
-#define SLIDE_REACH 24    // px either side a slide goes for
 #define SLIDE_SPEED 48
 #define SLIDE_LUNGE 10    // frames of sliding
+// The furthest a slide gets you: your reach plus the lunge (12 + 30 px). No other
+// limit: you're run to the ball from anywhere; out of this at the last moment,
+// you just miss.
+#define SLIDE_REACH (REACH_X + ((SLIDE_SPEED * SLIDE_LUNGE) >> 4))
 #define SLIDE_FRAMES 64   // a missed slide: on the floor until this runs out
 #define SLIDE_REST 28     // a slide that got there: up sooner
 #define POWER_SPEED 96    // a ball on fire

@@ -98,9 +98,11 @@ slammed (the Captain Tsubasa feel).
   dying just past halfway. (Mario Tennis has these the other way round.)
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
-- **Out of reach, planted**: you slide for it (24 px either side, more than your reach
-  of 10), as soon as the slide would only just get there in time. Get there and it pops up, and you're down a short while; miss and you're down
-  longer.
+- **No distance limits** (2026-11-22, from the playtest): you're run to the ball from
+  anywhere in your half; at the last moment, if a slide can get there (your reach of 12
+  plus its 30 px lunge), you slide for it, as soon as it would only just get there;
+  further, you just miss. A slide that gets there pops the ball up, and you're down a
+  short while; miss and you're down longer.
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it
