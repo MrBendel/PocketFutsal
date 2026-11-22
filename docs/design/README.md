@@ -84,19 +84,20 @@ topspin and slice turned into football; readying plants you; mashing adds power;
 the game slides you to a ball out of reach; a ball only just reached pops up, to be
 slammed (the Captain Tsubasa feel).
 
-- **Readying a strike** is only possible with the ball coming your way (or loose in
-  your half), and plants you until it goes: the d-pad no longer moves you, but the game
-  steps you (at a shuffle, 12 SUB a frame, within 40 px) toward where the ball will be
-  met, Mario Tennis style (2026-11-22, from the playtest). The meter fills as you wait (a step every
-  other frame) and each tap of the button again adds 3, up to 8 taps. The strike goes
-  by itself as the ball arrives; the ball's height picks kick, volley, header or
-  bicycle kick. Plant too early in the wrong place and you'll be sliding for it.
+- **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
+  ball as long as I'm near it, as long as you queue it up"): A or B any time in a
+  rally. It waits, and you move freely, until the ball comes your way; then it charges
+  (a step every other frame, each tap of the button again adds 3, up to 5 taps) and the
+  game runs you to where to meet it, half as fast again as running, anywhere in your
+  half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
+  the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
+  as far across as down the court (about 27 degrees).
 - **A: power**, straight where the d-pad points (LEFT / RIGHT: that corner of the goal).
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
 - **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
   dying just past halfway. (Mario Tennis has these the other way round.)
-- **A full meter** (on A or B) sets the ball on fire. Meeting a ball on fire cleanly
-  takes three quarters of a meter.
+- **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
+  fire cleanly takes 20 of the meter's 32.
 - **Out of reach, planted**: you slide for it (24 px either side, more than your reach
   of 10), as soon as the slide would only just get there in time. Get there and it pops up, and you're down a short while; miss and you're down
   longer.
@@ -126,8 +127,9 @@ slammed (the Captain Tsubasa feel).
   net, drops it short if you're back on your line, curves one time in four, and aims
   away from you. Same slides, controls and pop-ups as you. A little slower than you.
 - **Balance so far** (build/scratch/sim2.mjs, a bot that re-reads the ball every 12
-  frames): sets to 11 take 4,000-6,000 frames (about 1.5 minutes), most points won on a
-  second bounce; the CPU and the bot each win some. Not yet tested by hand.
+  frames) and build/scratch/queuebot.mjs (one that queues early and taps, as you would
+  now): against the queueing one, close sets, the CPU edging them (5-11 to 10-12), 6,000-
+  9,000 frames (about 2 minutes). Not yet tested by hand.
 
 ## v0.1 (2026-11-21): first playable (replaced)
 

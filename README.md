@@ -45,9 +45,9 @@ the title switches between one set and the best of three.
 | LEFT / RIGHT while ready | Aim toward that sideline (it sticks) |
 | START | Pause |
 
-Press A or B once the ball is coming your way: you plant, and the strike charges as you
-wait (the meter in the HUD; tap again for more), then goes by itself as the ball
-arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
+Press A or B to queue a strike, any time in a rally: once the ball comes your way, it
+charges (the meter in the HUD; tap again for more, up to 5 taps) and the game runs you
+to it, then it goes by itself as the ball arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
 the waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
 Not ready when it reaches you, your first touch **controls** it, up in front of you:
 ready a strike as it comes down, and with half a meter your second touch is a **slam**.

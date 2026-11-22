@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import {
   assert, matchGolden, settle, bootToTitle, startGame, served, FRAME_LIMIT,
   TITLE, PLAY, GAME_OVER, YOU, CPU, SHOT_NONE, SHOT_POWER, SHOT_CURVE, SHOT_LOB, SHOT_DROP,
-  CHARGE_MAX, TAP_CHARGE, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
+  CHARGE_MAX, TAP_CHARGE, TAP_MAX, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
   PHASE_SERVE, PHASE_TOSS, PHASE_RALLY, HALFWAY, POINT_NET, POINT_OUT, POINT_BOUNCE, POINT_TOUCHES,
   px, at, set16, placeBall, placePlayer,
 } from './helpers.mjs';
@@ -120,14 +120,19 @@ test('the match opens 0-0 on your serve: along your line, then A tosses it up an
   assert.equal(emu.v('ball_serve'), 0);
 });
 
-test('A plants you to ready a strike, only with the ball coming your way: the d-pad no longer moves you, and it goes as the ball arrives', () => {
+test('A queues a strike any time: it waits (you move freely) until the ball comes, then charges, you are run to it, and it goes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_NONE, 'not with it going away');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER, 'queued, with it going away');
+  const x0 = at(emu, 'pl_x', YOU, 'i16');
+  emu.hold('RIGHT', 6);
+  assert.equal(at(emu, 'pl_charge', YOU), 0, 'no charge yet');
+  assert.ok(at(emu, 'pl_x', YOU, 'i16') > x0, 'the d-pad still moves you');
+  placePlayer(emu, YOU, 80, 190);
   ballAt(emu, 80, 120, 0, 0, 40);
-  emu.tap('A');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER);
+  emu.idle(4);
+  assert.ok(at(emu, 'pl_charge', YOU) > 0, 'charging now it is coming');
   const x = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('LEFT', 6);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'planted: LEFT does nothing (the ball is straight at you)');
@@ -148,7 +153,8 @@ test('the meter fills as you wait, faster as you tap; full, the strike is on fir
   emu.tap('A').tap('A');
   assert.ok(at(emu, 'pl_charge', YOU) >= c0 + waited + 2 * TAP_CHARGE, 'taps add to it');
   for (let k = 0; k < 8; k++) emu.tap('A');
-  assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX);
+  assert.equal(at(emu, 'pl_taps', YOU), TAP_MAX, 'taps stop counting at TAP_MAX');
+  emu.until((e) => at(e, 'pl_charge', YOU) === CHARGE_MAX, 20, 'a full meter');
   emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
   assert.equal(emu.v('ball_power'), 1);
   assert.ok(emu.v('ball_vx', 'i16') > 0, 'to the right');
@@ -243,9 +249,9 @@ test('planted, the game steps you toward the ball', () => {
 
 test('planted too late to get there, you slide for it: it pops up over the net, and you stay down a moment', () => {
   const emu = quietRally();
-  ballAt(emu, 104, 160, 0, 0, 64);
-  emu.tap('A');
-  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 60, 'the slide');
+  ballAt(emu, 104, 178, 0, 0, 80);
+  emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
+  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 10, 'the slide');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 12, 'the touch');
   assert.equal(at(emu, 'pl_last_move', YOU), MOVE_SLIDE);
   assert.equal(emu.v('ball_pop'), 1);

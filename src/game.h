@@ -72,7 +72,7 @@
 // B sets the ball on fire. Meeting a ball on fire needs half a meter.
 #define CHARGE_MAX 32
 #define TAP_CHARGE 3
-#define TAP_MAX 8
+#define TAP_MAX 5
 
 // What a strike turned out to be, by the ball's height (pl_move, the pose).
 #define MOVE_NONE 0
