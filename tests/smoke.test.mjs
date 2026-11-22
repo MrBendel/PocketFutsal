@@ -258,6 +258,31 @@ test('the HUD names your shot where it says YOU: queued, then what went', () => 
   assert.equal(label(emu), SHOT_NONE, 'then YOU again');
 });
 
+test('a lob (B then A) or a drop shot (A then B) is armed for a moment: struck later it is the curve or the power shot', () => {
+  let emu = quietRally();
+  ballAt(emu, 80, 150, 0, 0, -40);  // going away: nothing to strike yet
+  emu.tap('B').idle(30).tap('A');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB, 'armed');
+  emu.idle(30);
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_CURVE, 'lapsed: a curve again');
+  emu.tap('B');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_CURVE, 'B taps it up');
+  emu = quietRally();
+  ballAt(emu, 80, 150, 0, 0, -40);
+  emu.tap('A').tap('B');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_DROP, 'armed');
+  emu.tap('A');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER, 'A again disarms it');
+  for (const [wait, want] of [[4, 1], [30, 0]]) {
+    emu = quietRally();
+    ballAt(emu, 80, 60, 0, 0, -10);  // far off in the CPU's half: nothing to strike yet
+    emu.tap('B').idle(20).tap('A').idle(wait);
+    ballAt(emu, 82, 184);  // in reach: struck now
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 10, 'the strike');
+    assert.equal(emu.v('ball_lob'), want, want ? 'A just before it: a lob' : 'A too early: a curve');
+  }
+});
+
 test('B then A is a lob, dropping just behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);

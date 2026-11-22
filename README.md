@@ -60,7 +60,7 @@ the title switches between one set and the best of three.
 | D-pad | Run (eight ways) in your half. Queued, or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
-| B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
+| B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
 | A or B again while ready | Tap for more power |
 | LEFT / RIGHT while ready | Angle it that way; neutral is straight on (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short |

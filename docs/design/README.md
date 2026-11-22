@@ -122,7 +122,10 @@ slammed (the Captain Tsubasa feel).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
 - **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.)
+  dying just past halfway. (Mario Tennis has these the other way round.) The second
+  button arms it for 24 frames (about 0.4 s), so press it just before the ball arrives;
+  struck later it's the curve or the power shot again (2026-11-22, from the playtest:
+  "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **No distance limits** (2026-11-22, from the playtest): you're run to the ball from

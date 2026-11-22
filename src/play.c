@@ -96,6 +96,7 @@
 #define BOUNCE_MIN 15     // a first bounce gets up at least this: about 9 px, 40 frames
 #define LOB_BOUNCE 20     // a lob sits up where it lands: about 16 px, 54 frames, slowed to a quarter
 #define DROP_HOP 12       // a drop shot's: about 6 px, 32 frames
+#define ARC_MAX 100       // frames: the longest an arc is in the air (about 60 px up)
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
 #define POWER_FADE 20     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 8            // a ball slower than this (|vx| + |vy|) is loose
@@ -144,6 +145,8 @@ uint8_t pl_move_timer[2];
 uint8_t pl_shots[2];
 uint8_t pl_last_move[2];
 uint8_t pl_taps[2];
+uint8_t pl_combo[2];  // a lob or a drop shot armed: frames it stays armed
+#define COMBO_FRAMES 24  // about 0.4 s: press the other button just before the ball arrives
 uint8_t pl_flash[2];  // charging: 0 own colors, 1 white, 2 fire
 uint8_t pl_aim[2];
 uint8_t pl_depth[2];  // 0 short, 1 as charged, 2 deep: UP / DOWN while queued (it sticks)
@@ -361,6 +364,7 @@ static void shot_label_update(void) {
 // --- setting up ---
 static void unready(uint8_t i) {
     pl_shot[i] = SHOT_NONE;
+    pl_combo[i] = 0;
     pl_charge[i] = pl_hold[i] = pl_taps[i] = 0;
     pl_aim[i] = 1;
     pl_depth[i] = 1;
@@ -597,14 +601,22 @@ static void ready(uint8_t i, uint8_t b) {
         }
         return;
     }
-    if (s == SHOT_POWER && b) {
-        pl_shot[i] = SHOT_DROP;
-        return;
-    }
-    if (s == SHOT_CURVE && !b) {
+    // The other button arms a lob (B then A) or a drop shot (A then B), or keeps it
+    // armed, for COMBO_FRAMES: it has to be just before the strike (player_update
+    // lets it lapse back). The first button again taps the charge up, and disarms it.
+    if ((s == SHOT_CURVE || s == SHOT_LOB) && !b) {
         pl_shot[i] = SHOT_LOB;
+        pl_combo[i] = COMBO_FRAMES;
         return;
     }
+    if ((s == SHOT_POWER || s == SHOT_DROP) && b) {
+        pl_shot[i] = SHOT_DROP;
+        pl_combo[i] = COMBO_FRAMES;
+        return;
+    }
+    if (s == SHOT_LOB) pl_shot[i] = SHOT_CURVE;
+    else if (s == SHOT_DROP) pl_shot[i] = SHOT_POWER;
+    pl_combo[i] = 0;
     if (pl_taps[i] >= TAP_MAX || pl_charge[i] == CHARGE_MAX) return;
     pl_taps[i]++;
     pl_charge[i] += TAP_CHARGE;
@@ -667,6 +679,7 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
 // If it's to go over (clear), it must be NET_H + 3 px up as it gets to the net,
 // t_n frames on, so a fast flat strike is lifted, and lands deeper (or long).
 static int16_t arc_t;  // arc()'s time in the air, frames
+uint8_t arc_clear;     // the arc just struck is to clear the net: net_clear() next frame
 // A curve's push for its time in the air t (by t / 4): 384 * CURVE_OFS / t^2, 1 to 60.
 static const uint8_t curve_push[] = {
     17, 17, 17, 17, 17, 17, 17, 17, 15, 12, 10, 8, 7, 6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2,
@@ -675,11 +688,26 @@ static const uint8_t curve_push[] = {
 static void arc(int16_t land, uint8_t clear) {
     int16_t vy = abs16(ball_vy);
     if (!vy) vy = 1;
-    int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 160);
+    int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 400);
+    // Too slow to get there in ARC_MAX frames (a slow header from deep): it goes
+    // faster instead of ballooning up out of sight: a quarter faster at a time (no
+    // division), each about 4/5 of the time.
+    while (t > ARC_MAX) {
+        ball_vx += ball_vx >> 2;
+        ball_vy += ball_vy >> 2;
+        t -= (t >> 2) - (t >> 4);
+    }
     arc_t = t;
     ball_vz = (3 * (t + 1)) >> 3;
     if (ball_z) ball_vz -= ball_z / t;  // (a division only off the floor)
-    if (!clear) return;
+    arc_clear = clear;  // the net: checked next frame (net_clear), off the strike's busy one
+}
+
+// An arc meant to go over: NET_H + 3 px up as it gets to the net, t_n frames on, or
+// lifted to be (a fast flat strike lands deeper, or long). The frame after the strike.
+static void net_clear(void) {
+    int16_t vy = abs16(ball_vy);
+    if (!vy || (ball_vy < 0 ? PX(ball_y) <= HALFWAY : PX(ball_y) >= HALFWAY)) return;
     int16_t tn = clamp16((abs16(HALFWAY - PX(ball_y)) << 4) / vy, 1, 160);
     int16_t drop = ((tn * (tn + 1)) >> 3) * 3;  // gravity's pull by then
     // High enough already (multiplying, not dividing): leave it.
@@ -892,6 +920,12 @@ static uint8_t in_reach(void) {
 // A player's frame: move (dx, dy: -1, 0 or 1) unless planted, charge, then strike,
 // slide, or take it unready.
 static void player_update(uint8_t i, int8_t dx, int8_t dy) {
+    // A lob or a drop shot not struck in time: the curve or the power shot again
+    // (the CPU keeps its armed: it presses the combo as the ball arrives).
+    if (pl_combo[i] && i == SIDE_YOU && !--pl_combo[i]) {
+        if (pl_shot[i] == SHOT_LOB) pl_shot[i] = SHOT_CURVE;
+        else if (pl_shot[i] == SHOT_DROP) pl_shot[i] = SHOT_POWER;
+    }
     if (pl_move_timer[i]) {
         pl_vx[i] = pl_vy[i] = 0;  // mid-move: stopped (it starts again from still)
         pl_move_timer[i]--;
@@ -1191,6 +1225,10 @@ static void landed(void) {
 }
 
 static void ball_update(void) {
+    if (arc_clear && (uint8_t)frame_count != flight_frame) {
+        arc_clear = 0;
+        net_clear();
+    }
     if (phase == PHASE_SERVE) {
         // At the server's feet, in front of them and to the side.
         ball_x = pl_x[server] + TO_SUB(8);
