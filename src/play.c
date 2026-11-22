@@ -66,8 +66,8 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
 #define OAM_AIM 10    // where your queued strike will land
-#define OAM_PLAYER_SHADOW 15
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing)
+#define OAM_PLAYER_SHADOW 15  // two columns per player, below the body
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
