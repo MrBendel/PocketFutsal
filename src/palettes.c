@@ -41,10 +41,10 @@ static const uint16_t field[4] = {COURT, COURT_DARK, FLOOR, LINE};
 // The boards: blue face, navy top and shadow, a white stripe.
 static const uint16_t boards[4] = {FLOOR, C(64, 112, 200), C(24, 40, 96), LINE};
 // Sprites (color 0 is see-through): 1 skin, 2 jersey, 3 outline.
-#define SKIN C(248, 200, 152)
-#define INK C(24, 20, 32)
-static const uint16_t you[4] = {0, SKIN, C(56, 112, 248), INK};
-static const uint16_t cpu[4] = {0, SKIN, C(232, 48, 48), INK};
+#define SKIN C(248, 200, 136)
+#define INK C(24, 32, 48)
+static const uint16_t you[4] = {0, SKIN, C(40, 120, 232), INK};
+static const uint16_t cpu[4] = {0, SKIN, C(232, 64, 72), INK};
 // Charging: the player flashes through this (and the fire colors).
 static const uint16_t flash[4] = {0, C(255, 255, 255), C(255, 255, 208), C(112, 112, 160)};
 // The ball: white, grey patches; on fire after a power shot.
@@ -70,6 +70,26 @@ void palettes_play(void) BANKED {
     set_obj(SPR_PAL_UI, marks);
     set_obj(SPR_PAL_TRAIL_POWER, trail_power);
     set_obj(SPR_PAL_TRAIL_CURVE, trail_curve);
+}
+
+// Four characters share palette indices with their fixed player slots in futsal.
+// Ball and UI keep palettes 5 and 7; futnet uses its original setup.
+void palettes_futsal(void) BANKED {
+    palettes_play();
+    static const uint16_t club_field[4] = {C(48, 144, 184), C(40, 132, 172), C(88, 160, 64), C(248, 240, 208)};
+    static const uint16_t club_fence[4] = {C(88, 160, 64), C(40, 88, 56), C(24, 48, 56), C(208, 224, 184)};
+    static const uint16_t club_bench[4] = {C(88, 160, 64), C(208, 152, 72), C(96, 64, 40), C(248, 240, 208)};
+    static const uint16_t club_grass[4] = {C(136, 192, 72), C(40, 104, 56), C(88, 160, 64), C(248, 240, 208)};
+    set_bg(0, club_field); set_bg(1, club_fence);
+    set_bg(2, club_bench); set_bg(3, club_grass);
+    static const uint16_t slam_trail[4] = {0, C(255, 248, 184), C(255, 160, 32), C(224, 64, 24)};
+    set_obj(4, slam_trail);
+    for (uint8_t i = 0; i < 4; i++) {
+        pal_base_obj[(i << 2)] = 0;
+        pal_base_obj[(i << 2) + 1] = i == 2 ? C(184, 120, 72) : C(248, 200, 136);
+        pal_base_obj[(i << 2) + 2] = i < 2 ? C(40, 120, 232) : C(232, 64, 72);
+        pal_base_obj[(i << 2) + 3] = C(24, 32, 48);
+    }
 }
 
 // Menus: the title's colors for the compact and display fonts.

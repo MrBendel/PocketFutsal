@@ -29,6 +29,7 @@
 #include "input.h"
 #include "gfx.h"
 #include "game.h"
+#include "player_anim.h"
 #include "pitch.h"
 #include "hud.h"
 #include "sprites.h"
@@ -55,12 +56,14 @@
 // Background tiles: the court from SCENE_TILES, then the meter's three.
 #define T_METER (SCENE_TILES + PITCH_TILE_COUNT)  // empty, half, full
 
-// Hardware sprites. Lower numbers draw on top: the ball over everyone, the
-// shadow under everyone.
-#define OAM_BALL 0
+// Hardware sprites. Lower numbers draw on top. Interleave the ball and
+// player blocks by court depth; shadows remain underneath.
+#define OAM_BALL ball_oam
+uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
 #define OAM_AIM 10    // where your queued strike will land
+#define OAM_PLAYER_SHADOW 15
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
@@ -428,29 +431,8 @@ static void place(uint8_t n, int16_t x, int16_t y) {
 // half of another), or 24 x 16 lying (three 8x16 columns). (sx, sy): the screen
 // point under its feet, or under the middle of it lying.
 static void draw_player(uint8_t i, uint8_t tile, uint8_t lie, int16_t sx, int16_t sy, uint8_t pal, uint8_t flip) {
-    uint8_t n = OAM_PLAYER + (i << 2);
-    pal |= S_BANK;
-    if (flip) pal |= S_FLIPX;
-    if (lie) {
-        // Columns at sx-12, -4, +4; flipped, their order reverses.
-        for (uint8_t c = 0; c < 3; c++) {
-            set_sprite_tile(n + c, tile + ((flip ? 2 - c : c) << 1));
-            set_sprite_prop(n + c, pal);
-            place(n + c, sx - 4 + (c << 3), sy + 1);
-        }
-        move_sprite(n + 3, 0, 0);
-        return;
-    }
-    uint8_t l = flip ? tile + 4 : tile, r = flip ? tile : tile + 4;
-    set_sprite_tile(n, l);
-    set_sprite_tile(n + 1, l + 2);
-    set_sprite_tile(n + 2, r);
-    set_sprite_tile(n + 3, r + 2);
-    for (uint8_t k = 0; k < 4; k++) set_sprite_prop(n + k, pal);
-    place(n, sx, sy - 7);
-    place(n + 1, sx, sy + 9);
-    place(n + 2, sx + 8, sy - 7);
-    place(n + 3, sx + 8, sy + 9);
+    uint8_t n = i ? (ball_oam == 8 ? 4 : 5) : (ball_oam ? 0 : 1);
+    gfx_actor(n, tile, lie, sx, sy, pal, flip);
 }
 
 // The ball's trail: where it was 4, 8, 12 and 16 frames ago, smaller and dimmer
@@ -489,20 +471,22 @@ static void draw(void) {
     else if (cam_y > t) cam_y--;
     scroll_y = cam_y;
 
+    ball_oam = ball_y >= pl_y[SIDE_YOU] ? 0 : ball_y >= pl_y[SIDE_CPU] ? 4 : 8;
     for (uint8_t i = 0; i < 2; i++) {
-        uint8_t f = F_STAND, lie = 0, flip = pl_face[i];
+        uint8_t f = F_STAND, lie = 0, flip = pl_face[i], special = 0;
         int8_t lift = 0;
         uint8_t m = pl_move_timer[i] ? pl_move[i] : MOVE_NONE;
         if (goal_timer) f = last_scorer == i ? F_WIN : F_LOSE;
         else if (m == MOVE_KICK) f = F_KICK;
         else if (m == MOVE_VOLLEY || m == MOVE_CONTROL) f = F_VOLLEY;
-        else if (m == MOVE_HEADER) f = F_HEADER, lift = 4;
-        else if (m == MOVE_BICYCLE) f = F_BICYCLE, lift = 8;
-        else if (m == MOVE_SLIDE) lie = 1, flip = !flip;  // feet first
-        else if (m == MOVE_DOWN) lie = 1;
+        else if (m >= MOVE_HEADER && m <= MOVE_DOWN) special = 1;
         else if (pl_shot[i] || (phase == PHASE_TOSS && server == i)) f = F_READY;
         else if (pl_vx[i] || pl_vy[i]) f = (frame_count & 8) ? F_RUN_A : F_RUN_B;
         uint8_t tile = lie ? T_LYING : (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
+        if (special) {
+            tile = player_move_pose(m, pl_move_timer[i], i == SIDE_CPU, &lie, &lift);
+            if (m == MOVE_SLIDE && lie) flip = !flip;
+        }
         uint8_t pal = i == SIDE_YOU ? SPR_PAL_YOU : SPR_PAL_CPU;
         if (pl_shot[i]) {
             // Charging: flashing through white and fire, a step every 8 frames, 4
@@ -518,6 +502,9 @@ static void draw(void) {
         int16_t sx = proj_x(PX(pl_x[i]), py);
         int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - lift;
         draw_player(i, tile, lie, sx, sy, pal, flip);
+        // Ground position never inherits the body's jump lift.
+        gfx_player_shadow(OAM_PLAYER_SHADOW + (i << 1), sx,
+            (int16_t)proj_y[PROJ_I(py)] - cam_y);
     }
     // The ball, up at its height, and its shadow on the court.
     int16_t sx = proj_x(PX(ball_x), by) + 4;
@@ -1272,6 +1259,8 @@ static void ball_update(void) {
 // --- the scene ---
 void play_enter(void) BANKED {
     palettes_play();
+    gfx_player_shadow_init(OAM_PLAYER_SHADOW);
+    gfx_player_shadow_init(OAM_PLAYER_SHADOW + 2);
     banked_bkg_data(SCENE_TILES, PITCH_TILE_COUNT, pitch_tiles, BANK(pitch));
     banked_bkg_data((uint8_t)T_METER, HUD_TILE_COUNT, hud_tiles, BANK(hud));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));

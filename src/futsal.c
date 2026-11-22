@@ -10,7 +10,14 @@
 #include "sfx.h"
 #include "futsal_pitch.h"
 #include "sprites.h"
-#include "players.h"
+#include "futsal_spiky.h"
+#include "futsal_cap.h"
+#include "futsal_crop.h"
+#include "futsal_bandana.h"
+#include "action_spiky.h"
+#include "action_cap.h"
+#include "action_crop.h"
+#include "action_bandana.h"
 
 
 
@@ -18,7 +25,12 @@ uint8_t fs_spectator = 1, fs_paused, fs_owner, fs_goal_timer, fs_cam_y;
 int16_t fs_pl_x[4], fs_pl_y[4], fs_ball_x, fs_ball_y, fs_ball_vx, fs_ball_vy;
 uint16_t fs_sim_ticks, fs_pass_count, fs_shot_count, fs_tackle_count;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
+uint8_t fs_tackling[4];
+uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
 uint8_t fs_role[4]; // 0 chase, 1 carry, 2 support, 3 cover
+uint8_t fs_ball_oam;
+uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
+int16_t fs_trail_x[16], fs_trail_y[16];
 uint8_t fs_projection_y[225], fs_projection_s[225];
 
 static int16_t ab(int16_t n) { return n < 0 ? -n : n; }
@@ -43,10 +55,14 @@ static void kickoff(uint8_t side) {
     fs_pl_x[1]=108*16; fs_pl_y[1]=178*16;
     fs_pl_x[2]=108*16; fs_pl_y[2]=82*16;
     fs_pl_x[3]=52*16; fs_pl_y[3]=46*16;
+    fs_power_trail=fs_trail_n=fs_trail_i=0;
     fs_owner=side*2; fs_pl_x[fs_owner]=80*16; fs_pl_y[fs_owner]=112*16;
     fs_ball_x=fs_pl_x[fs_owner]; fs_ball_y=fs_pl_y[fs_owner]; fs_ball_vx=fs_ball_vy=0;
     fs_held_ticks=0; fs_pickup_lock=0; fs_last_kicker=NOBODY;
-    for(uint8_t i=0;i<4;i++) fs_cooldown[i]=fs_action[i]=fs_burst[i]=0;
+    for(uint8_t i=0;i<4;i++) {
+        fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
+        fs_view[i]=team(i)?0:1;
+    }
 }
 // Normalize only on a kick, using the larger axis (no per-frame division).
 static void kick(uint8_t i, int16_t tx, int16_t ty, uint8_t speed) {
@@ -55,7 +71,10 @@ static void kick(uint8_t i, int16_t tx, int16_t ty, uint8_t speed) {
     if(!m) return;
     // Targets in court pixels keep intermediates within signed 16-bit range.
     dx >>= 4; dy >>= 4; m >>= 4; if(!m) m=1;
+    if(dx) fs_flip[i]=dx<0;
+    if(dy) fs_view[i]=dy<0;
     fs_ball_vx=dx*speed/m; fs_ball_vy=dy*speed/m;
+    fs_power_trail=fs_trail_n=0;
     fs_owner=NOBODY; fs_last_kicker=i; fs_pickup_lock=10; fs_held_ticks=0; fs_action[i]=10;
     sfx_play(SFX_TOUCH);
 }
@@ -66,10 +85,10 @@ static void pass(uint8_t i) {
 static void shoot(uint8_t i, int8_t aim) {
     int16_t x=80+aim*16;
     if(!aim) x=(rand()&1)?60:100;
-    kick(i,x*16,team(i)?224*16:0,76); fs_shot_count++;
+    kick(i,x*16,team(i)?224*16:0,76); fs_power_trail=48; fs_shot_count++;
 }
 static void tackle(uint8_t i) {
-    fs_action[i]=18; fs_cooldown[i]=60; fs_burst[i]=10;
+    fs_tackling[i]=18; fs_action[i]=18; fs_cooldown[i]=60; fs_burst[i]=10;
     if(fs_owner!=NOBODY && team(fs_owner)!=team(i) && distance(i,fs_ball_x,fs_ball_y)<24*16) {
         fs_owner=i; fs_held_ticks=0; fs_tackle_count++; sfx_play(SFX_TOUCH);
     }
@@ -79,6 +98,9 @@ static void step_player(uint8_t i, int16_t tx, int16_t ty) {
     if(fs_owner==i) speed=18;
     if(fs_action[i]>10 && !fs_burst[i]) speed=8;
     int16_t dx=tx-fs_pl_x[i],dy=ty-fs_pl_y[i];
+    fs_moving[i]=ab(dx)>8 || ab(dy)>8;
+    if(ab(dx)>8) fs_flip[i]=dx<0;
+    if(ab(dy)>8) fs_view[i]=dy<0;
     if(ab(dx)>8 && ab(dy)>8) speed-=speed>>2;
     fs_pl_x[i]=clamp(fs_pl_x[i]+clamp(dx,-speed,speed),14*16,146*16);
     fs_pl_y[i]=clamp(fs_pl_y[i]+clamp(dy,-speed,speed),8*16,216*16);
@@ -109,6 +131,7 @@ static void ai(uint8_t i) {
 }
 static void ball_update(void) {
     if(fs_owner!=NOBODY) {
+        fs_power_trail=0;
         fs_ball_x=fs_pl_x[fs_owner]; fs_ball_y=clamp(fs_pl_y[fs_owner]+(team(fs_owner)?6*16:-6*16),0,224*16);
         if(fs_held_ticks<255) fs_held_ticks++;
         return;
@@ -139,25 +162,67 @@ static void draw(void) {
     // Assign nearer players lower OAM indexes so overlapping bodies sort by depth.
     uint8_t order[4]={0,1,2,3};
     for(uint8_t i=0;i<4;i++) for(uint8_t j=i+1;j<4;j++) if(fs_pl_y[order[j]]>fs_pl_y[order[i]]) { uint8_t t=order[i]; order[i]=order[j]; order[j]=t; }
+    fs_ball_oam=0;
+    for(uint8_t i=0;i<4;i++) if(fs_pl_y[i]>fs_ball_y) fs_ball_oam+=4;
     for(uint8_t slot=0;slot<4;slot++) {
-        uint8_t i=order[slot],n=1+slot*4;
+        uint8_t i=order[slot],n=slot*4+(slot*4>=fs_ball_oam);
         int16_t y=fs_pl_y[i]>>4,x=sx(fs_pl_x[i]>>4,y), sy=fs_projection_y[y]-fs_cam_y;
-        uint8_t tile=(team(i)?80:0)+(fs_action[i]?32:((fs_sim_ticks>>3)&1)?8:16);
-        uint8_t pal=S_BANK|(team(i)?SPR_PAL_CPU:SPR_PAL_YOU);
-        for(uint8_t k=0;k<4;k++) { set_sprite_tile(n+k,tile+k*2); set_sprite_prop(n+k,pal); }
+        gfx_player_shadow(22+(i<<1),x,sy);
+        if(fs_tackling[i]>4 && fs_tackling[i]<=14) {
+            uint8_t base=20+i*24, flip=!fs_flip[i];
+            for(uint8_t c=0;c<3;c++) {
+                set_sprite_tile(n+c,base+((flip?2-c:c)<<1));
+                set_sprite_prop(n+c,i|(flip?S_FLIPX:0));
+                place(n+c,x-4+(c<<3),sy+1);
+            }
+            move_sprite(n+3,0,0);
+            continue;
+        }
+        fs_pose[i]=fs_action[i]?3:(fs_moving[i]?(((fs_sim_ticks>>3)&1)?1:2):0);
+        uint8_t tile=(i<<6)+(fs_view[i]<<5)+(fs_pose[i]<<3);
+        uint8_t pal=S_BANK|i|(fs_flip[i]?S_FLIPX:0);
+        if(fs_tackling[i]) { tile=20+i*24+8+(fs_view[i]<<3); pal &= ~S_BANK; }
+        for(uint8_t k=0;k<4;k++) {
+            uint8_t column=fs_flip[i]?(k^2):k;
+            set_sprite_tile(n+k,tile+column*2); set_sprite_prop(n+k,pal);
+        }
         place(n,x,sy-7); place(n+1,x,sy+9); place(n+2,x+8,sy-7); place(n+3,x+8,sy+9);
     }
-    set_sprite_tile(0,(fs_sim_ticks&8)?2:0); set_sprite_prop(0,SPR_PAL_BALL);
-    place(0,sx(bx,by)+4,fs_projection_y[by]-fs_cam_y+12);
+    set_sprite_tile(fs_ball_oam,(fs_sim_ticks&8)?2:0); set_sprite_prop(fs_ball_oam,fs_power_trail?SPR_PAL_POWER:SPR_PAL_BALL);
+    place(fs_ball_oam,sx(bx,by)+4,fs_projection_y[by]-fs_cam_y+12);
+    // A short history in map coordinates keeps the trail stable while scrolling.
+    fs_trail_i=(fs_trail_i+1)&15;
+    fs_trail_x[fs_trail_i]=sx(bx,by)+4;
+    fs_trail_y[fs_trail_i]=fs_projection_y[by]+12;
+    if(fs_power_trail && !fs_goal_timer) {
+        if(fs_trail_n<16) fs_trail_n++;
+        fs_power_trail--;
+    } else fs_trail_n=0;
+    for(uint8_t k=0;k<4;k++) {
+        uint8_t age=(k+1)<<1, entry=(fs_trail_i-age)&15;
+        set_sprite_tile(18+k,8+(k<<1)); set_sprite_prop(18+k,4);
+        if(fs_trail_n>age) place(18+k,fs_trail_x[entry],fs_trail_y[entry]-fs_cam_y);
+        else move_sprite(18+k,0,0);
+    }
+    set_sprite_tile(30,4); set_sprite_prop(30,SPR_PAL_UI);
+    place(30,sx(bx,by)+4,fs_projection_y[by]-fs_cam_y+13);
     set_sprite_tile(17,6); set_sprite_prop(17,SPR_PAL_UI);
     place(17,sx(fs_pl_x[0]>>4,fs_pl_y[0]>>4)+4,fs_projection_y[fs_pl_y[0]>>4]-fs_cam_y-18);
 }
 void futsal_enter(void) BANKED {
     uint8_t buf[FUTSAL_PITCH_MAP_W*FUTSAL_PITCH_MAP_H];
-    palettes_play();
+    palettes_futsal();
+    for(uint8_t i=0;i<4;i++) gfx_player_shadow_init(22+(i<<1));
     banked_bkg_data(SCENE_TILES,FUTSAL_PITCH_TILE_COUNT,futsal_pitch_tiles,BANK(futsal_pitch));
     banked_sprite_data(0,SPRITES_TILE_COUNT,sprites_tiles,BANK(sprites));
-    banked_sprite_data_vbk1(0,PLAYERS_TILE_COUNT,players_tiles,BANK(players));
+    banked_sprite_data(20,ACTION_SPIKY_TILE_COUNT,action_spiky_tiles,BANK(action_spiky));
+    banked_sprite_data(44,ACTION_CAP_TILE_COUNT,action_cap_tiles,BANK(action_cap));
+    banked_sprite_data(68,ACTION_CROP_TILE_COUNT,action_crop_tiles,BANK(action_crop));
+    banked_sprite_data(92,ACTION_BANDANA_TILE_COUNT,action_bandana_tiles,BANK(action_bandana));
+    banked_sprite_data_vbk1(0,FUTSAL_SPIKY_TILE_COUNT,futsal_spiky_tiles,BANK(futsal_spiky));
+    banked_sprite_data_vbk1(64,FUTSAL_CAP_TILE_COUNT,futsal_cap_tiles,BANK(futsal_cap));
+    banked_sprite_data_vbk1(128,FUTSAL_CROP_TILE_COUNT,futsal_crop_tiles,BANK(futsal_crop));
+    banked_sprite_data_vbk1(192,FUTSAL_BANDANA_TILE_COUNT,futsal_bandana_tiles,BANK(futsal_bandana));
     banked_memcpy(buf,futsal_pitch_map,sizeof(buf),BANK(futsal_pitch)); set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf);
     banked_memcpy(buf,futsal_pitch_attr,sizeof(buf),BANK(futsal_pitch)); VBK_REG=1; set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf); VBK_REG=0;
     for(int16_t y=0;y<=224;y++) {
@@ -183,6 +248,8 @@ void futsal_update(void) BANKED {
     }
     fs_sim_ticks++;
     for(uint8_t i=0;i<4;i++) {
+        fs_moving[i]=0;
+        if(fs_tackling[i]) fs_tackling[i]--;
         if(fs_cooldown[i]) fs_cooldown[i]--; if(fs_action[i]) fs_action[i]--; if(fs_burst[i]) fs_burst[i]--;
         if(i || fs_spectator) ai(i);
         else {
