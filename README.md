@@ -42,7 +42,8 @@ the title switches between one set and the best of three.
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
 | A or B again while ready | Tap for more power |
-| LEFT / RIGHT while ready | Aim toward that sideline (it sticks) |
+| LEFT / RIGHT while ready | Aim toward that sideline (it sticks; a marker shows where it'll land) |
+| UP / DOWN while ready | Play it deep / short |
 | START | Pause |
 
 Press A or B to queue a strike, any time in a rally: once the ball comes your way, it

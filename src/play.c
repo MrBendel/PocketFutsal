@@ -38,6 +38,7 @@
 // 8x16 pair each. VRAM bank 1: the players, 8 tiles a frame.
 #define S_BALL 0  // and S_BALL + 2, its other roll
 #define S_SHADOW 4
+#define S_AIM 6     // the aim marker
 #define F_STAND 0
 #define F_RUN_A 1
 #define F_RUN_B 2
@@ -58,6 +59,7 @@
 #define OAM_BALL 0
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
+#define OAM_AIM 10    // where your queued strike will land
 
 // --- tuning ---
 #define SPEED_YOU 22      // a frame, in SUB
@@ -132,6 +134,9 @@ uint8_t pl_last_move[2];
 uint8_t pl_taps[2];
 uint8_t pl_flash[2];  // charging: 0 own colors, 1 white, 2 fire
 uint8_t pl_aim[2];
+uint8_t pl_depth[2];  // 0 short, 1 as charged, 2 deep: UP / DOWN while queued (it sticks)
+uint8_t cpu_depth;
+int16_t aim_tx, aim_land;  // aim_point()'s answer: where it's aimed to land (court px)
 int8_t pl_slide_vx[2], pl_slide_vy[2];
 int16_t cpu_tx, cpu_ty;
 int16_t meet_x[2], meet_y[2];  // where each side means to meet the ball (court px)
@@ -289,6 +294,7 @@ static void unready(uint8_t i) {
     pl_shot[i] = SHOT_NONE;
     pl_charge[i] = pl_hold[i] = pl_taps[i] = 0;
     pl_aim[i] = 1;
+    pl_depth[i] = 1;
 }
 
 static void ball_plain(void) {
@@ -334,6 +340,8 @@ static void load_pitch(void) {
     set_bkg_tiles(0, 0, PITCH_MAP_W, PITCH_MAP_H, buf);
     VBK_REG = 0;
 }
+
+static void aim_point(uint8_t i);  // where a strike is aimed: with the strikes, below
 
 // --- drawing ---
 // Hardware coordinates are 8 and 16 px off the screen's; anything off the
@@ -426,6 +434,16 @@ static void draw(void) {
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
+    // Your strike queued: a marker where it's aimed to land (no wider than a strike
+    // can go from where you are: half as far across as down the court).
+    if (pl_shot[SIDE_YOU] && !goal_timer && (phase == PHASE_RALLY || server == SIDE_YOU)) {
+        aim_point(SIDE_YOU);
+        int16_t px0 = PX(pl_x[SIDE_YOU]), wide = (PX(pl_y[SIDE_YOU]) - aim_land) >> 1;
+        int16_t ax = clamp16(aim_tx, px0 - wide, px0 + wide);
+        set_sprite_tile(OAM_AIM, S_AIM);
+        set_sprite_prop(OAM_AIM, SPR_PAL_UI);
+        place(OAM_AIM, proj_x(ax, aim_land) + 4, (int16_t)proj_y[PROJ_I(aim_land)] - cam_y + 12);
+    } else move_sprite(OAM_AIM, 0, 0);
 }
 
 // --- where the ball is ---
@@ -474,7 +492,10 @@ static void ready(uint8_t i, uint8_t b) {
     if (!s) {
         unready(i);
         pl_shot[i] = b ? SHOT_CURVE : SHOT_POWER;
-        if (i == SIDE_YOU) pl_aim[i] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
+        if (i == SIDE_YOU) {
+            pl_aim[i] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
+            pl_depth[i] = joy & J_UP ? 2 : joy & J_DOWN ? 0 : 1;
+        }
         return;
     }
     if (s == SHOT_POWER && b) {
@@ -558,25 +579,44 @@ static void arc(int16_t land, uint8_t clear) {
     ball_vz = (TO_SUB(NET_H + 3) + drop - ball_z) / tn;
 }
 
+// Where player i's strike is aimed to land (aim_tx, aim_land): across, near a
+// sideline the way held (or last held while queued), else the middle; in depth,
+// deeper the more charged, UP deeper and DOWN shorter. A lob lands just behind the
+// other player, a drop shot just over the net. The CPU picks its own as it readies.
+static void aim_point(uint8_t i) {
+    uint8_t aim = pl_aim[i], depth = pl_depth[i], c = pl_charge[i];
+    if (i == SIDE_YOU) {
+        if (joy & J_LEFT) aim = 0;
+        else if (joy & J_RIGHT) aim = 2;
+        if (joy & J_UP) depth = 2;
+        else if (joy & J_DOWN) depth = 0;
+    } else {
+        aim = cpu_aim;
+        depth = cpu_depth;
+    }
+    aim_tx = aim == 0 ? COURT_X0 + 12 : aim == 2 ? COURT_X1 - 12 : CENTER_X;
+    int16_t d = 24 + c + (c >> 1);  // past the net: 24 .. 72
+    if (depth == 2) d += 24;
+    else if (!depth) d = d > 40 ? d - 24 : 16;
+    if (pl_shot[i] == SHOT_LOB) aim_land = PX(pl_y[i ^ 1]) + (i == SIDE_YOU ? -12 : 12);
+    else if (pl_shot[i] == SHOT_DROP) aim_land = other_y(i, 18);
+    else aim_land = other_y(i, d);
+}
+
 // A clean strike: the readied shot, shaped by the ball's height (move).
 static void strike(uint8_t i, uint8_t move) {
     uint8_t was_pop = ball_pop;
     int16_t bx = PX(ball_x), by = PX(ball_y);
-    // Down the middle, or toward a sideline: the way you're holding, or last held
-    // while planted (the CPU picks its side as it readies).
-    uint8_t aim = pl_aim[i];
-    if (i == SIDE_YOU) {
-        if (joy & J_LEFT) aim = 0;
-        else if (joy & J_RIGHT) aim = 2;
-    } else aim = cpu_aim;
-    int16_t tx = aim == 0 ? COURT_X0 + 24 : aim == 2 ? COURT_X1 - 24 : CENTER_X;
+    aim_point(i);
+    uint8_t aim = i == SIDE_YOU ? (aim_tx < CENTER_X ? 0 : aim_tx > CENTER_X ? 2 : 1) : cpu_aim;
+    int16_t tx = aim_tx;
     uint8_t c = pl_charge[i], kind = pl_shot[i], speed, frames = KICK_FRAMES;
     if (phase != PHASE_RALLY && c == CHARGE_MAX) c--;  // no serves on fire
     uint8_t fire = c == CHARGE_MAX;
-    // Where it comes down: deeper the more it's charged. Barely charged at all,
-    // it's scuffed: it comes down on your own side, short of the net.
+    // Where it comes down (aim_point). Barely charged at all, it's scuffed: it
+    // comes down on your own side, short of the net.
     uint8_t scuff = c < SCUFF && phase == PHASE_RALLY;
-    int16_t land = scuff ? other_y(i, -10) : other_y(i, 24 + c + (c >> 1));
+    int16_t land = scuff ? other_y(i, -10) : aim_land;
     ball_plain();
     if (was_pop && move != MOVE_KICK && c >= CHARGE_MAX / 2) {
         // A pop-up (or your own control) met in the air, half charged: a slam, on
@@ -604,13 +644,11 @@ static void strike(uint8_t i, uint8_t move) {
         // frame (about 20 frames), up to 64, lifted to come down there.
         int16_t dist;
         if (kind == SHOT_LOB) {
-            land = PX(pl_y[i ^ 1]) + (i == SIDE_YOU ? -12 : 12);
             dist = abs16(land - by);
             speed = (uint8_t)clamp16((dist * 7) >> 4, 16, 72);
             ball_vz = move == MOVE_VOLLEY ? CHIP_LIFT - 8 : CHIP_LIFT;
             ball_lob = 1;
         } else {
-            land = other_y(i, 18);
             dist = abs16(land - by);
             speed = (uint8_t)clamp16((dist * 4) / 5, 12, 64);
             ball_drop = 1;
@@ -880,6 +918,8 @@ static void want_predict(uint8_t i) {
 // back on your line, else a curve one time in four, else power.
 static void cpu_ready(void) {
     uint8_t r = rand();
+    cpu_depth = (r >> 4) & 3;
+    if (cpu_depth == 3) cpu_depth = 1;
     int16_t yy = PX(pl_y[SIDE_YOU]);
     if (yy < 160 && (r & 3) == 0) ready(SIDE_CPU, 1), ready(SIDE_CPU, 0);
     else if (yy > 196 && (r & 3) == 1) ready(SIDE_CPU, 0), ready(SIDE_CPU, 1);
@@ -1143,6 +1183,7 @@ void play_update(void) BANKED {
                 unready(SIDE_YOU);
                 pl_shot[SIDE_YOU] = b ? SHOT_CURVE : SHOT_POWER;
                 pl_aim[SIDE_YOU] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
+                pl_depth[SIDE_YOU] = joy & J_UP ? 2 : joy & J_DOWN ? 0 : 1;
                 phase = PHASE_TOSS;
                 ball_vz = TOSS_LIFT;
                 sfx_play(SFX_TOUCH);
@@ -1151,10 +1192,13 @@ void play_update(void) BANKED {
             ready(SIDE_YOU, b);  // queue it any time: it charges once the ball's coming
         }
     }
-    // Planted (or serving), LEFT or RIGHT sets your aim, and it sticks.
+    // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and
+    // they stick.
     if (pl_shot[SIDE_YOU]) {
         if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
         else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
+        if (joy & J_UP) pl_depth[SIDE_YOU] = 2;
+        else if (joy & J_DOWN) pl_depth[SIDE_YOU] = 0;
     }
     int8_t dx = joy & J_RIGHT ? 1 : joy & J_LEFT ? -1 : 0;
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;

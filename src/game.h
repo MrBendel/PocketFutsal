@@ -128,7 +128,9 @@ extern uint8_t pl_move_timer[2];   // its pose shows while this counts down; no 
 extern uint8_t pl_shots[2];        // strikes this match
 extern uint8_t pl_last_move[2];    // the last strike's MOVE_*, for the tests
 extern uint8_t pl_taps[2];         // taps added to this charge
-extern uint8_t pl_aim[2];          // 0 left corner, 1 middle, 2 right: the last way held while planted
+extern uint8_t pl_aim[2];          // 0 left, 1 middle, 2 right: the last way held while queued
+extern uint8_t pl_depth[2];        // 0 short, 1 as charged, 2 deep: UP / DOWN while queued
+extern int16_t aim_tx, aim_land;   // where a strike's aimed to land (court px)
 extern int8_t pl_slide_vx[2], pl_slide_vy[2];  // a slide's step a frame
 extern int16_t cpu_tx, cpu_ty;     // where the CPU is heading (court px)
 extern int16_t meet_x[2], meet_y[2];  // where each side means to meet the ball (court px)

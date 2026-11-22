@@ -325,6 +325,33 @@ test('LEFT or RIGHT while planted sets your aim, and it sticks', () => {
   assert.ok(emu.v('ball_vx', 'i16') < 0, 'to the left, nothing held as it went');
 });
 
+test('UP plays it deep, DOWN short; LEFT and RIGHT near the sidelines', () => {
+  const land = (keys) => {
+    const emu = quietRally();
+    ballAt(emu, 82, 184);
+    readied(emu, SHOT_POWER, 16);
+    emu.hold(keys, 1);
+    emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
+    return [px(emu.v('ball_x', 'i16')), px(emu.v('ball_y', 'i16'))];
+  };
+  const [, deep] = land(['UP']), [, mid] = land([]), [, short] = land(['DOWN']);
+  assert.ok(deep < mid - 12 && mid < short, `deep ${deep}, as charged ${mid}, short ${short}`);
+  assert.ok(land(['LEFT'])[0] < 40 && land(['RIGHT'])[0] > 120, 'near the sidelines');
+});
+
+test('queued, a marker shows where your strike will land; it follows your aim', () => {
+  const emu = quietRally();
+  const marker = () => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * 10), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * 10 + 1)];
+  ballAt(emu, 80, 150, 0, 0, -40);
+  emu.idle(1);
+  assert.equal(marker()[0], 0, 'hidden, nothing queued');
+  emu.tap('A');
+  const [y, x] = marker();
+  assert.ok(y > 0, 'shown');
+  emu.hold('LEFT', 1).idle(1);
+  assert.ok(marker()[1] < x - 16, 'over to the left');
+});
+
 test('charging, you flash: your palette, white, and fire from half a meter', () => {
   const emu = quietRally();
   incoming(emu, 80, 40, 40, 80);

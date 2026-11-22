@@ -92,7 +92,11 @@ slammed (the Captain Tsubasa feel).
   half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees).
-- **A: power**, straight where the d-pad points (LEFT / RIGHT: that corner of the goal).
+- **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
+  ball"): LEFT / RIGHT aims near that sideline, UP plays it deep, DOWN short; held as it
+  goes, or last held while queued (they stick). While your strike's queued, a yellow
+  marker on the CPU's side shows where it will land (lobs and drop shots too).
+- **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
 - **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
   dying just past halfway. (Mario Tennis has these the other way round.)
@@ -132,6 +136,8 @@ slammed (the Captain Tsubasa feel).
   frames) and build/scratch/queuebot.mjs (one that queues early and taps, as you would
   now): against the queueing one, close sets, the CPU edging them (5-11 to 10-12), 6,000-
   9,000 frames (about 2 minutes). Not yet tested by hand.
+- **Frame budget**: the busiest frame is right at half a frame (the tests' line, kept as
+  headroom); the next per-frame feature needs room made first (`node harness/profile.mjs busy`).
 
 ## v0.1 (2026-11-21): first playable (replaced)
 

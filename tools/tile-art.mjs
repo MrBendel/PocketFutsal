@@ -255,9 +255,13 @@ const ballA = ['..3333..', '.311213.', '31122113', '31211113', '31111213', '3112
 const ballB = ['..3333..', '.312113.', '31111213', '32111123', '31211113', '31112213', '.311113.', '..3333..'];
 const shadow = ['........', '........', '........', '........', '..3333..', '.333333.', '..3333..', '........'];
 
-// Order matters: src/play.c names them (S_BALL, S_SHADOW), 2 tiles per 8x16 sprite.
+// The aim marker (1 bright, 3 outline): where your queued strike will land.
+const aimMark = ['........', '..1111..', '.13..31.', '.1.33.1.', '.1.33.1.', '.13..31.', '..1111..', '........'];
+
+// Order matters: src/play.c names them (S_BALL, S_SHADOW, S_AIM), 2 tiles per 8x16 sprite.
 export const SPRITE_TILES = [
   ballA, blank,   // S_BALL
   ballB, blank,   // S_BALL + 2
   shadow, blank,  // S_SHADOW
+  aimMark, blank, // S_AIM
 ];
