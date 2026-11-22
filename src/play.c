@@ -72,10 +72,18 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define TRAIL_MAX 4
 
 // --- tuning ---
+// Running, as Mario Tennis's velocities show (build/scratch/mt/vel.mjs): to full speed
+// in about 7 frames, a straight ramp; let go, a coast of about 20 frames, easing down
+// evenly; turning round, a skid at the coasting rate for about 9 frames, then the full
+// push the other way. Each player's speed, push and grip are their own (pl_top,
+// pl_accel, pl_grip), to upgrade. The game running you to the ball, and the CPU, brake
+// firmly instead (BRAKE): they stop where they mean to.
 #define SPEED_YOU 22      // a frame, in SUB
 #define SPEED_CPU 20
 #define ACCEL 3           // SUB a frame each frame: about 8 frames to full speed
-#define BRAKE 4           // slowing (letting go, or turning): about 6 frames to a stop
+#define GRIP 1            // letting go: a coast of 22 frames from full speed (about 15 px)
+#define BRAKE 4           // firm: about 6 frames to a stop
+#define SKID_FRAMES 9     // turning round: this long at the grip, then the full push
 #define HOLD_MAX 90       // frames at a full meter before the CPU gives up the strike
 #define YOU_TAP 4         // your meter: each press adds this (it fills only by pressing, and stays)
 #define REACH_X 16        // court px either side a strike reaches (a body width)
@@ -143,6 +151,9 @@ uint8_t cam_y;
 
 int16_t pl_x[2], pl_y[2];
 int8_t pl_vx[2], pl_vy[2];
+int8_t pl_top[2];                 // running speed (SUB a frame)
+uint8_t pl_accel[2], pl_grip[2];  // speeding up; slowing (the coast, and a turn's skid)
+uint8_t pl_skid[2];               // frames turning round so far
 uint8_t pl_auto[2];          // the game's running player i to the ball this frame:
 int8_t pl_wx[2], pl_wy[2];   // at this velocity (applied next frame, through the momentum)
 uint8_t pl_face[2];
@@ -229,13 +240,25 @@ static int16_t abs16(int16_t v) {
     return v < 0 ? -v : v;
 }
 
-// Velocity v toward t: ACCEL a frame speeding up, BRAKE slowing down.
+// The player running this frame (player_update), for approach().
+static uint8_t mv_i, mv_firm, mv_turn;
+// Player mv_i's velocity v toward t: speeding up at pl_accel; slowing at pl_grip (a
+// long coast), and turning round too for the first SKID_FRAMES (a skid), then at
+// pl_accel; firm (mv_firm), slowing or turning at BRAKE.
 static int8_t approach(int8_t v, int8_t t) {
+    if (v == t) return v;
+    uint8_t turn = (v > 0 && t < 0) || (v < 0 && t > 0);
+    uint8_t d = pl_accel[mv_i];
+    mv_turn |= turn;
+    if (turn || (v > 0 && t < v) || (v < 0 && t > v)) {
+        if (mv_firm) d = BRAKE;
+        else if (!turn || pl_skid[mv_i] < SKID_FRAMES) d = pl_grip[mv_i];
+    }
     if (v < t) {
-        v += v < 0 ? BRAKE : ACCEL;
+        v += d;
         if (v > t) v = t;
-    } else if (v > t) {
-        v -= v > 0 ? BRAKE : ACCEL;
+    } else {
+        v -= d;
         if (v < t) v = t;
     }
     return v;
@@ -335,6 +358,7 @@ static void serve_setup(uint8_t side) {
     phase = PHASE_SERVE;
     for (uint8_t i = 0; i < 2; i++) {
         pl_vx[i] = pl_vy[i] = 0;
+        pl_skid[i] = 0;
         unready(i);
         pl_move[i] = pl_move_timer[i] = 0;
     }
@@ -934,17 +958,22 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     // Queued, the d-pad only aims: it doesn't walk you off toward a sideline.
     if ((pl_shot[i] && phase == PHASE_RALLY) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
-    // Momentum: toward the speed held (or the auto-run's), ACCEL a frame, BRAKE
-    // slowing; so a start, a stop and a turn each take a few frames.
-    int8_t speed = i == SIDE_YOU ? SPEED_YOU : SPEED_CPU;
+    // Momentum: toward the speed held (or the auto-run's), through approach().
+    int8_t speed = pl_top[i];
     int8_t tx = dx > 0 ? speed : dx < 0 ? -speed : 0;
     int8_t ty = dy > 0 ? speed : dy < 0 ? -speed : 0;
+    mv_firm = i;  // the CPU (SIDE_CPU, 1)
     if (pl_auto[i]) {
         tx = pl_wx[i];
         ty = pl_wy[i];
         pl_auto[i] = 0;
+        mv_firm = 1;
     }
+    mv_i = i;
+    mv_turn = 0;
     int8_t vx = approach(pl_vx[i], tx), vy = approach(pl_vy[i], ty);
+    if (!mv_turn) pl_skid[i] = 0;
+    else if (pl_skid[i] < 255) pl_skid[i]++;
     pl_vx[i] = vx;
     pl_vy[i] = vy;
     pl_x[i] += vx;
@@ -989,7 +1018,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
         // (Only on a trace of this flight: an old one would send you the wrong way.)
         if (loose || (meet_flight[i] == ball_flight && !meet_out[i])) {
-            int8_t sp = i == SIDE_YOU ? SPEED_YOU : SPEED_CPU;
+            int8_t sp = pl_top[i];
             pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // a quarter of the way (SUB) a frame, near
             pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
             pl_auto[i] = 1;
@@ -1329,6 +1358,11 @@ void play_enter(void) BANKED {
     load_pitch();
     proj_init();
     initrand(game_seed);
+    for (uint8_t i = 0; i < 2; i++) {
+        pl_top[i] = i ? SPEED_CPU : SPEED_YOU;
+        pl_accel[i] = ACCEL;
+        pl_grip[i] = GRIP;
+    }
     score[0] = score[1] = 0;
     sets[0] = sets[1] = 0;
     set_won = 0;
@@ -1421,7 +1455,11 @@ void play_update(void) BANKED {
     // The flight traces, last thing: after anything struck this frame (then none,
     // it's busy already), one side a frame.
     want_predict((uint8_t)frame_count & 1);
-    meter_update();
-    shot_label_update();
+    // The meter and your shot's label: not on a strike's frame (it's busy, and both
+    // change then): the next.
+    if (flight_frame != (uint8_t)frame_count) {
+        meter_update();
+        shot_label_update();
+    }
     draw();
 }

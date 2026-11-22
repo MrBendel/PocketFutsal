@@ -647,6 +647,24 @@ test('the CPU plays: it returns your serve and can win a point', () => {
   emu.until((e) => at(e, 'score', CPU) > 0, 3000, 'a CPU point');
 });
 
+test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
+  const emu = quietRally();
+  ballAt(emu, 80, 60, 0, 0, -20);  // away in the CPU's half
+  const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
+  emu.hold('RIGHT', 4);
+  assert.ok(vx() > 6 && vx() < 22, `speeding up: ${vx()}`);
+  emu.hold('RIGHT', 6);
+  assert.equal(vx(), 22, 'full speed');
+  emu.idle(10);
+  assert.ok(vx() >= 10, `let go, still coasting: ${vx()}`);
+  emu.idle(14);
+  assert.equal(vx(), 0, 'stopped');
+  emu.hold('RIGHT', 10).hold('LEFT', 6);
+  assert.ok(vx() > 10, `turning: skidding ${vx()}`);
+  emu.hold('LEFT', 12);
+  assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
+});
+
 test('START pauses and resumes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -30);

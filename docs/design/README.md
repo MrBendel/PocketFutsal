@@ -65,13 +65,22 @@ that rallies against its CPU. Only measurements were taken; nothing was copied.
 |---|---|---|
 | A rally shot, one player to the other | 60-80 frames (about 1.1 s); the shadow 1.1-1.6 px a frame down a court about 120 px long | 53 frames median, 74 at p90 (was 33: twice as fast) |
 | A serve | about 49 frames, 2.75 px a frame | |
-| Running | about 1.75 px a frame across, about half that up and down | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
-| Starting / stopping / turning | about 10 / 8 / 14 frames | 8 / 6 / 14 (`ACCEL` 3, `BRAKE` 4) |
+| Running | the same speed every way (it looks half as fast up and down: the perspective) | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
+| Starting | a straight ramp, full speed in 7 frames | 8 frames (`ACCEL` 3) |
+| Letting go | a coast of 20 frames, easing down evenly | 22 frames, about 15 px (`GRIP` 1) |
+| Turning round | a skid at the coasting rate for 8-10 frames, then the full push: about 20 frames | 9 frames' skid (`SKID_FRAMES`), then `ACCEL`: about 21 |
 | A trail behind the ball | 5 afterimages | 4 dots, red or blue |
 
 So the whole ball plays at half speed: gravity 3/4 SUB a frame and every speed and lift
 halved, which keeps each arc's shape and height and doubles its time. Players accelerate,
-coast and turn (`approach()`), and the auto-run steers through the same momentum.
+coast and turn (`approach()`). The running rows come from the velocity itself, read
+from its RAM a frame at a time (build/scratch/mt/vel.mjs, 2026-11-22: from the playtest,
+"a real nice loose easing ... a real momentum to moving around the field"); the first
+pass, from sprite positions, had the coast at 8 frames. Each player's speed, push and
+grip (`pl_top`, `pl_accel`, `pl_grip`) are their own, for upgrades later (Mario
+Tennis's RPG mode raises them). The auto-run (the game running you to the ball) and the
+CPU brake firmly instead (`BRAKE` 4), so they stop where they mean to; it's your own
+running that glides.
 
 The court is played in flat coordinates (`game.h`) and drawn in perspective: each depth
 has a screen row and a width scale (`proj_y`, `proj_s` in `play.c`, the same formula as
