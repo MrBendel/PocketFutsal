@@ -8,13 +8,13 @@
 // The ball is always loose: you strike it rather than carry it. With the ball
 // coming your way (or loose in your half), A readies a power shot, straight where
 // the d-pad points, and B a curve, bending in to the side the d-pad holds; B then
-// A is a lob, A then B a drop shot. Readying plants you: the meter fills as you
-// wait, each tap of the button again adds more, and the strike goes by itself as
+// A is a lob, A then B a drop shot. Readying plants you: each press fills the meter (only presses,
+// and it stays; SELECT calls it off), and the strike goes by itself as
 // the ball arrives. Which strike depends on the ball's height: a kick on the
 // ground, a volley at the waist, a header, or a bicycle kick for one that's just
 // gone over your head. Planted out of reach, you slide for it, and lie there a
 // while. A ball only just reached (a slide, a ball on fire met with less than
-// three quarters of a meter) pops up over the net, where met in the air with half a
+// three eighths of a meter) pops up over the net, where met in the air with half a
 // meter it's a slam, on fire. A full meter sets the ball on fire too. Unready, your
 // first touch controls it, up in front of you, to play with your second; on fire,
 // it knocks you down and goes on.
@@ -66,17 +66,26 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
 #define OAM_AIM 10    // where your queued strike will land
-#define OAM_PLAYER_SHADOW 15
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing)
+#define OAM_PLAYER_SHADOW 15  // two columns per player, below the body
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
 // --- tuning ---
+// Running, as Mario Tennis's velocities show (build/scratch/mt/vel.mjs): to full speed
+// in about 7 frames, a straight ramp; let go, a coast of about 20 frames, easing down
+// evenly; turning round, a skid at the coasting rate for about 9 frames, then the full
+// push the other way. Each player's speed, push and grip are their own (pl_top,
+// pl_accel, pl_grip), to upgrade. The game running you to the ball, and the CPU, brake
+// firmly instead (BRAKE): they stop where they mean to.
 #define SPEED_YOU 22      // a frame, in SUB
 #define SPEED_CPU 20
 #define ACCEL 3           // SUB a frame each frame: about 8 frames to full speed
-#define BRAKE 4           // slowing (letting go, or turning): about 6 frames to a stop
-#define HOLD_MAX 90       // frames at a full meter before the player gives up the strike
+#define GRIP 1            // letting go: a coast of 22 frames from full speed (about 15 px)
+#define BRAKE 4           // firm: about 6 frames to a stop
+#define SKID_FRAMES 9     // turning round: this long at the grip, then the full push
+#define HOLD_MAX 90       // frames at a full meter before the CPU gives up the strike
+#define YOU_TAP 4         // your meter: each press adds this (it fills only by pressing, and stays)
 #define REACH_X 16        // court px either side a strike reaches (a body width)
 #define REACH_Z 36        // px: a header reaches this high (a jump); a bicycle kick 40
 #define SLIDE_Z 24        // px: a slide gets a ball this high (a diving header)
@@ -97,18 +106,19 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define DRIVE_SPEED 28    // A: + half the charge
 #define CURVE_SPEED 25    // B: + half the charge
 #define CURVE_OFS 44      // px a curve bends by the time it gets there
-#define HEADER_SPEED 16   // + a quarter of the charge
+#define HEADER_SPEED 24   // + a quarter of the charge: flat, not a loop up
 #define CHIP_LIFT 28      // a lob: about 32 px up, 74 frames in the air
 #define POP_LIFT 32       // a pop-up: about 43 px up, 84 frames
 #define BOUNCE_MIN 15     // a first bounce gets up at least this: about 9 px, 40 frames
 #define LOB_BOUNCE 20     // a lob sits up where it lands: about 16 px, 54 frames, slowed to a quarter
 #define DROP_HOP 16       // a drop shot's: about 11 px, 43 frames
 #define SLAM_Z 26         // px: a lob or a pop-up is met this high coming down (a header)
-#define ARC_MAX 100       // frames: the longest an arc is in the air (about 60 px up)
+#define ARC_MAX 100       // frames: the longest a drop shot is in the air (about 60 px up)
+#define ARC_FLAT 60       // frames: the longest anything else arcs (about 22 px up): a weak kick doesn't loop
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
 #define POWER_FADE 20     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 8            // a ball slower than this (|vx| + |vy|) is loose
-#define FIRE_MEET 20      // the charge it takes to meet a ball on fire cleanly
+#define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (a press and a moment)
 #define SCUFF 4           // a strike with less charge than this is scuffed into the net
 #define KICK_FRAMES 14    // a strike's pose; no touches meanwhile
 #define BICYCLE_FRAMES 24
@@ -141,6 +151,9 @@ uint8_t cam_y;
 
 int16_t pl_x[2], pl_y[2];
 int8_t pl_vx[2], pl_vy[2];
+int8_t pl_top[2];                 // running speed (SUB a frame)
+uint8_t pl_accel[2], pl_grip[2];  // speeding up; slowing (the coast, and a turn's skid)
+uint8_t pl_skid[2];               // frames turning round so far
 uint8_t pl_auto[2];          // the game's running player i to the ball this frame:
 int8_t pl_wx[2], pl_wy[2];   // at this velocity (applied next frame, through the momentum)
 uint8_t pl_face[2];
@@ -207,8 +220,9 @@ uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 #define SEEN_SLAM 7
 #define SEEN_HEADER 8
 #define SEEN_BICYCLE 9
+#define SEEN_SCUFF 10     // a strike with next to no charge: mishit, short of the net
 #define SEEN_FRAMES 60
-static const char seen_names[] = "YOUPWRCRVLOBDRPPOPCTLSLMHDRBIK";
+static const char seen_names[] = "YOUPWRCRVLOBDRPPOPCTLSLMHDRBIKMIS";
 uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
 uint8_t shot_seen_t;  // frames left showing it
 uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
@@ -226,13 +240,25 @@ static int16_t abs16(int16_t v) {
     return v < 0 ? -v : v;
 }
 
-// Velocity v toward t: ACCEL a frame speeding up, BRAKE slowing down.
+// The player running this frame (player_update), for approach().
+static uint8_t mv_i, mv_firm, mv_turn;
+// Player mv_i's velocity v toward t: speeding up at pl_accel; slowing at pl_grip (a
+// long coast), and turning round too for the first SKID_FRAMES (a skid), then at
+// pl_accel; firm (mv_firm), slowing or turning at BRAKE.
 static int8_t approach(int8_t v, int8_t t) {
+    if (v == t) return v;
+    uint8_t turn = (v > 0 && t < 0) || (v < 0 && t > 0);
+    uint8_t d = pl_accel[mv_i];
+    mv_turn |= turn;
+    if (turn || (v > 0 && t < v) || (v < 0 && t > v)) {
+        if (mv_firm) d = BRAKE;
+        else if (!turn || pl_skid[mv_i] < SKID_FRAMES) d = pl_grip[mv_i];
+    }
     if (v < t) {
-        v += v < 0 ? BRAKE : ACCEL;
+        v += d;
         if (v > t) v = t;
-    } else if (v > t) {
-        v -= v > 0 ? BRAKE : ACCEL;
+    } else {
+        v -= d;
         if (v < t) v = t;
     }
     return v;
@@ -332,6 +358,7 @@ static void serve_setup(uint8_t side) {
     phase = PHASE_SERVE;
     for (uint8_t i = 0; i < 2; i++) {
         pl_vx[i] = pl_vy[i] = 0;
+        pl_skid[i] = 0;
         unready(i);
         pl_move[i] = pl_move_timer[i] = 0;
     }
@@ -544,6 +571,7 @@ static void ready(uint8_t i, uint8_t b) {
         unready(i);
         pl_shot[i] = b ? SHOT_CURVE : SHOT_POWER;
         if (i == SIDE_YOU) {
+            pl_charge[i] = YOU_TAP;
             pl_aim[i] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
             pl_depth[i] = joy & J_UP ? 2 : joy & J_DOWN ? 0 : 1;
         }
@@ -565,9 +593,10 @@ static void ready(uint8_t i, uint8_t b) {
     if (s == SHOT_LOB) pl_shot[i] = SHOT_CURVE;
     else if (s == SHOT_DROP) pl_shot[i] = SHOT_POWER;
     pl_combo[i] = 0;
-    if (pl_taps[i] >= TAP_MAX || pl_charge[i] == CHARGE_MAX) return;
+    // You: each press, as many as you like. The CPU: a few taps on top of its wait.
+    if (pl_charge[i] == CHARGE_MAX || (i != SIDE_YOU && pl_taps[i] >= TAP_MAX)) return;
     pl_taps[i]++;
-    pl_charge[i] += TAP_CHARGE;
+    pl_charge[i] += i == SIDE_YOU ? YOU_TAP : TAP_CHARGE;
     if (pl_charge[i] >= CHARGE_MAX) {
         pl_charge[i] = CHARGE_MAX;
         if (i == SIDE_YOU) sfx_play(SFX_CHARGE);
@@ -647,10 +676,11 @@ static void arc(int16_t land, uint8_t clear) {
     int16_t vy = abs16(ball_vy);
     if (!vy) vy = 1;
     int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 400);
-    // Too slow to get there in ARC_MAX frames (a slow header from deep): it goes
+    // Too slow to get there in ARC_FLAT frames (ARC_MAX a drop shot): it goes
     // faster instead of ballooning up out of sight: a quarter faster at a time (no
     // division), each about 4/5 of the time.
-    while (t > ARC_MAX) {
+    uint8_t most = ball_drop ? ARC_MAX : ARC_FLAT;
+    while (t > most) {
         ball_vx += ball_vx >> 2;
         ball_vy += ball_vy >> 2;
         t -= (t >> 2) - (t >> 4);
@@ -674,8 +704,8 @@ static void net_clear(void) {
 }
 
 // Where player i's strike is aimed to land (aim_tx, aim_land): across, angled the
-// way held (or last held while queued), else straight ahead; in depth,
-// deeper the more charged, UP deeper and DOWN shorter. A lob lands just behind the
+// way held (or last held while queued), else half as far across, away from the other
+// player; in depth, deeper the more charged, UP deeper and DOWN shorter. A lob lands just behind the
 // other player, a drop shot just over the net. The CPU picks its own as it readies.
 static void aim_point(uint8_t i) {
     uint8_t aim = pl_aim[i], depth = pl_depth[i], c = pl_charge[i];
@@ -691,6 +721,13 @@ static void aim_point(uint8_t i) {
     int16_t d = 24 + c + (c >> 1);  // past the net: 24 .. 72
     if (depth == 2) d += 24;
     else if (!depth) d = d > 40 ? d - 24 : 16;
+    else if (i == SIDE_YOU) {
+        // Neither UP nor DOWN: away from the CPU in depth too: short of it back at
+        // its baseline, past it up near the net (charged deep is where it stands).
+        int16_t back = HALFWAY - PX(pl_y[SIDE_CPU]);  // px past the net it stands
+        if (back > 60) { if (d > 40) d = 40; }
+        else if (d < back + 24) d = back + 24;
+    }
     if (pl_shot[i] == SHOT_LOB) {
         // Over their head, and deep: 24 px behind them, at least 60 past the net, so
         // a lob at a player up at the net sends them back for it (a bicycle kick).
@@ -698,10 +735,15 @@ static void aim_point(uint8_t i) {
         aim_land = clamp16(aim_land, COURT_FAR + 8, COURT_NEAR - 8);
     }
     else if (pl_shot[i] == SHOT_DROP) aim_land = other_y(i, 18);
-    else aim_land = other_y(i, d);
-    // A direction from where you are: straight ahead, or as far across as a strike
-    // goes (half as far as down the court) to the left or right; kept in the court.
+    else aim_land = clamp16(other_y(i, d), COURT_FAR + 8, COURT_NEAR - 8);
+    // A direction from where you are: as far across as a strike goes (half as far as
+    // down the court) to the left or right; neither held, half that, away from the
+    // other player (straight ahead is where they stand); kept in the court.
     int16_t x0 = PX(pl_x[i]), wide = abs16(aim_land - PX(pl_y[i])) >> 1;
+    if (aim == 1 && i == SIDE_YOU) {
+        wide >>= 1;
+        aim = PX(pl_x[SIDE_CPU]) < x0 ? 2 : 0;
+    }
     aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + 6, COURT_X1 - 6);
 }
 
@@ -737,7 +779,6 @@ static void strike(uint8_t i, uint8_t move) {
             ball_power = 1;
         } else speed = move == MOVE_HEADER ? HEADER_SPEED + (c >> 2) : DRIVE_SPEED + 8 + (c >> 2);
         frames = move == MOVE_HEADER ? KICK_FRAMES + 4 : BICYCLE_FRAMES;
-        if (!scuff) land = move == MOVE_HEADER ? other_y(i, 28 + (c >> 1)) : other_y(i, 56);
         launch(tx - bx, land - by, speed);
         arc(land, !scuff);
     } else if (kind == SHOT_LOB || kind == SHOT_DROP) {
@@ -750,7 +791,7 @@ static void strike(uint8_t i, uint8_t move) {
         dist = abs16(land - by);
         dist += min16(abs16(tx - bx), dist >> 1);
         if (kind == SHOT_LOB) {
-            speed = (uint8_t)clamp16((dist * 7) >> 5, 8, 36);
+            speed = (uint8_t)clamp16((dist * 7) >> 5, 8, 44);  // (44: a deep one, across)
             ball_vz = move == MOVE_VOLLEY ? CHIP_LIFT - 4 : CHIP_LIFT;
             ball_lob = 1;
         } else {
@@ -787,7 +828,7 @@ static void strike(uint8_t i, uint8_t move) {
     if (slam) burst(VFX_SLAM);  // an impact star: big for a slam, small on fire
     else if (ball_power) burst(VFX_FIRE);
     if (i == SIDE_YOU)
-        seen(slam ? SEEN_SLAM :
+        seen(scuff ? SEEN_SCUFF : slam ? SEEN_SLAM :
              move == MOVE_HEADER ? SEEN_HEADER : move == MOVE_BICYCLE ? SEEN_BICYCLE : kind);
     // A trail behind it: red a power shot (or anything on fire), blue a curve;
     // longer the more charged. Not a scuff, a lob or a drop shot.
@@ -846,7 +887,7 @@ static void knock_down(uint8_t i) {
 }
 
 // Planted and in reach: a clean strike, unless it's on fire and the meter isn't
-// three quarters full, when it's all they can do to pop it up.
+// three eighths full, when it's all they can do to pop it up.
 static void meet(uint8_t i, uint8_t move) {
     if (ball_power && pl_charge[i] < FIRE_MEET) pop_up(i, move, KICK_FRAMES);
     else strike(i, move);
@@ -917,17 +958,22 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     // Queued, the d-pad only aims: it doesn't walk you off toward a sideline.
     if ((pl_shot[i] && phase == PHASE_RALLY) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
-    // Momentum: toward the speed held (or the auto-run's), ACCEL a frame, BRAKE
-    // slowing; so a start, a stop and a turn each take a few frames.
-    int8_t speed = i == SIDE_YOU ? SPEED_YOU : SPEED_CPU;
+    // Momentum: toward the speed held (or the auto-run's), through approach().
+    int8_t speed = pl_top[i];
     int8_t tx = dx > 0 ? speed : dx < 0 ? -speed : 0;
     int8_t ty = dy > 0 ? speed : dy < 0 ? -speed : 0;
+    mv_firm = i;  // the CPU (SIDE_CPU, 1)
     if (pl_auto[i]) {
         tx = pl_wx[i];
         ty = pl_wy[i];
         pl_auto[i] = 0;
+        mv_firm = 1;
     }
+    mv_i = i;
+    mv_turn = 0;
     int8_t vx = approach(pl_vx[i], tx), vy = approach(pl_vy[i], ty);
+    if (!mv_turn) pl_skid[i] = 0;
+    else if (pl_skid[i] < 255) pl_skid[i]++;
     pl_vx[i] = vx;
     pl_vy[i] = vy;
     pl_x[i] += vx;
@@ -935,9 +981,11 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     keep_in(i);
     if (tx) pl_face[i] = tx < 0;
 
-    if (pl_shot[i] && (phase != PHASE_RALLY || live_for(i))) {
+    // The CPU's meter fills as it waits (a point every 4 frames; taps add more), and it
+    // gives up the strike held full too long. Yours fills only as you press (ready()).
+    if (i == SIDE_CPU && pl_shot[i] && (phase != PHASE_RALLY || live_for(i))) {
         if (pl_charge[i] < CHARGE_MAX) {
-            if (!((uint8_t)frame_count & 3) && ++pl_charge[i] == CHARGE_MAX && i == SIDE_YOU) sfx_play(SFX_CHARGE);  // a point every 4 frames (taps add more)
+            if (!((uint8_t)frame_count & 3)) ++pl_charge[i];
         } else if (phase == PHASE_RALLY && ++pl_hold[i] > HOLD_MAX) {
             unready(i);  // waited too long: the strike is given up
         }
@@ -970,7 +1018,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
         // (Only on a trace of this flight: an old one would send you the wrong way.)
         if (loose || (meet_flight[i] == ball_flight && !meet_out[i])) {
-            int8_t sp = i == SIDE_YOU ? SPEED_YOU : SPEED_CPU;
+            int8_t sp = pl_top[i];
             pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // a quarter of the way (SUB) a frame, near
             pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
             pl_auto[i] = 1;
@@ -1310,6 +1358,11 @@ void play_enter(void) BANKED {
     load_pitch();
     proj_init();
     initrand(game_seed);
+    for (uint8_t i = 0; i < 2; i++) {
+        pl_top[i] = i ? SPEED_CPU : SPEED_YOU;
+        pl_accel[i] = ACCEL;
+        pl_grip[i] = GRIP;
+    }
     score[0] = score[1] = 0;
     sets[0] = sets[1] = 0;
     set_won = 0;
@@ -1366,13 +1419,16 @@ void play_update(void) BANKED {
     }
     if (serve_timer) serve_timer--;
 
-    // You: the d-pad runs; A and B ready a strike (and combine, and tap).
+    // You: the d-pad runs; A and B ready a strike (and combine, and tap); SELECT
+    // calls it off.
+    if (joy_pressed & J_SELECT && phase == PHASE_RALLY) unready(SIDE_YOU);
     if (joy_pressed & (J_A | J_B)) {
         uint8_t b = !(joy_pressed & J_A);
         if (phase == PHASE_SERVE) {
             if (server == SIDE_YOU && !serve_timer) {
                 unready(SIDE_YOU);
                 pl_shot[SIDE_YOU] = b ? SHOT_CURVE : SHOT_POWER;
+                pl_charge[SIDE_YOU] = YOU_TAP;
                 pl_aim[SIDE_YOU] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
                 pl_depth[SIDE_YOU] = joy & J_UP ? 2 : joy & J_DOWN ? 0 : 1;
                 phase = PHASE_TOSS;
@@ -1399,7 +1455,11 @@ void play_update(void) BANKED {
     // The flight traces, last thing: after anything struck this frame (then none,
     // it's busy already), one side a frame.
     want_predict((uint8_t)frame_count & 1);
-    meter_update();
-    shot_label_update();
+    // The meter and your shot's label: not on a strike's frame (it's busy, and both
+    // change then): the next.
+    if (flight_frame != (uint8_t)frame_count) {
+        meter_update();
+        shot_label_update();
+    }
     draw();
 }

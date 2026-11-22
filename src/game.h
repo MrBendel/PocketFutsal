@@ -68,9 +68,10 @@
 #define SHOT_LOB 3
 #define SHOT_DROP 4
 // Readying a strike plants you until it goes, and you can only ready one with the
-// ball coming your way (or loose in your half). The meter fills as you wait, and
-// each tap of the button again adds more (up to TAP_MAX taps). A full meter on A or
-// B sets the ball on fire. Meeting a ball on fire needs half a meter.
+// ball coming your way (or loose in your half). Your meter fills only as you press
+// (YOU_TAP each press, the first too) and stays till the strike or SELECT; the CPU's
+// fills as it waits, and each tap adds more (up to TAP_MAX taps). A full meter on A
+// or B sets the ball on fire.
 #define CHARGE_MAX 32
 #define TAP_CHARGE 3
 #define TAP_MAX 5

@@ -65,13 +65,22 @@ that rallies against its CPU. Only measurements were taken; nothing was copied.
 |---|---|---|
 | A rally shot, one player to the other | 60-80 frames (about 1.1 s); the shadow 1.1-1.6 px a frame down a court about 120 px long | 53 frames median, 74 at p90 (was 33: twice as fast) |
 | A serve | about 49 frames, 2.75 px a frame | |
-| Running | about 1.75 px a frame across, about half that up and down | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
-| Starting / stopping / turning | about 10 / 8 / 14 frames | 8 / 6 / 14 (`ACCEL` 3, `BRAKE` 4) |
+| Running | the same speed every way (it looks half as fast up and down: the perspective) | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
+| Starting | a straight ramp, full speed in 7 frames | 8 frames (`ACCEL` 3) |
+| Letting go | a coast of 20 frames, easing down evenly | 22 frames, about 15 px (`GRIP` 1) |
+| Turning round | a skid at the coasting rate for 8-10 frames, then the full push: about 20 frames | 9 frames' skid (`SKID_FRAMES`), then `ACCEL`: about 21 |
 | A trail behind the ball | 5 afterimages | 4 dots, red or blue |
 
 So the whole ball plays at half speed: gravity 3/4 SUB a frame and every speed and lift
 halved, which keeps each arc's shape and height and doubles its time. Players accelerate,
-coast and turn (`approach()`), and the auto-run steers through the same momentum.
+coast and turn (`approach()`). The running rows come from the velocity itself, read
+from its RAM a frame at a time (build/scratch/mt/vel.mjs, 2026-11-22: from the playtest,
+"a real nice loose easing ... a real momentum to moving around the field"); the first
+pass, from sprite positions, had the coast at 8 frames. Each player's speed, push and
+grip (`pl_top`, `pl_accel`, `pl_grip`) are their own, for upgrades later (Mario
+Tennis's RPG mode raises them). The auto-run (the game running you to the ball) and the
+CPU brake firmly instead (`BRAKE` 4), so they stop where they mean to; it's your own
+running that glides.
 
 The court is played in flat coordinates (`game.h`) and drawn in perspective: each depth
 has a screen row and a width scale (`proj_y`, `proj_s` in `play.c`, the same formula as
@@ -104,17 +113,27 @@ slammed (the Captain Tsubasa feel).
 
 - **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
   ball as long as I'm near it, as long as you queue it up"): A or B any time in a
-  rally. It waits, and you move freely, until the ball comes your way; then it charges
-  (a step every 4 frames, each tap of the button again adds 3, up to 5 taps) and the
+  rally. It waits, and you move freely, until the ball comes your way; then the
   game runs you to where to meet it, at running speed with the same momentum, easing in
   as you get there, anywhere in your half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees). You only play the ball over your
   own half: no reaching over the net.
+- **The meter fills only as you press** (2026-11-22, from the playtest: "repeatedly
+  pressing A should fill the gauge, not holding it, and it shouldn't go down"): each
+  press of A or B adds 4, the first too, as many as you like; waiting and holding add
+  nothing, and it never drains or gives up. SELECT calls the strike off. The CPU's
+  still fills as it waits (a step every 4 frames, and up to 5 taps of 3) and gives up
+  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 12 (three
+  presses); less, and it pops up off you.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
-  you are. Neutral goes straight on; LEFT / RIGHT angle it as far across as a strike
-  goes (half as far as down the court), kept in the court; UP plays it deep, DOWN short.
+  you are. LEFT / RIGHT angle it as far across as a strike goes (half as far as down
+  the court), kept in the court; UP plays it deep, DOWN short. Neutral goes away from
+  the CPU (from the playtest: "no matter what, I always hit the ball to them"): half as
+  far across, to the side it isn't on, and in depth short of it when it's back by its
+  baseline (40 px past the net at most), past it when it's up near the net. Headers and
+  bicycle kicks are aimed the same way (they used to land at a fixed depth).
   Held as it goes, or last held while queued (they stick). Queued (and serving), the
   d-pad only aims: it doesn't walk you, so aiming left never leaves you on the left
   sideline striking straight. A yellow marker on the CPU's side shows where it will land
@@ -152,7 +171,7 @@ slammed (the Captain Tsubasa feel).
   20-27, a row of sprites placed a frame at most (src/vfx.c).
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
-  on fire. A slam met with three quarters of a meter is returned clean; less, and it
+  on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
 - **Unready**, your first touch controls it (v0.3); a ball on fire knocks you down.
 - **Bounces** (2026-11-22, from the playtest: some returns died where they landed): a
@@ -163,7 +182,9 @@ slammed (the Captain Tsubasa feel).
   strike arcs, to come down at a depth set by its charge (deeper the more charged), so
   the ball is in the air with its shadow under it, and it's lifted to clear the net
   (fast flat strikes land deeper, or long). A strike with almost no meter (under 4:
-  readied at the last moment) is scuffed: it comes down short, on your own side.
+  readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
+  the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
+  weak one is sped up instead of looping up like a pop-up; drop shots, 100.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
