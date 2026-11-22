@@ -104,17 +104,27 @@ slammed (the Captain Tsubasa feel).
 
 - **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
   ball as long as I'm near it, as long as you queue it up"): A or B any time in a
-  rally. It waits, and you move freely, until the ball comes your way; then it charges
-  (a step every 4 frames, each tap of the button again adds 3, up to 5 taps) and the
+  rally. It waits, and you move freely, until the ball comes your way; then the
   game runs you to where to meet it, at running speed with the same momentum, easing in
   as you get there, anywhere in your half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees). You only play the ball over your
   own half: no reaching over the net.
+- **The meter fills only as you press** (2026-11-22, from the playtest: "repeatedly
+  pressing A should fill the gauge, not holding it, and it shouldn't go down"): each
+  press of A or B adds 4, the first too, as many as you like; waiting and holding add
+  nothing, and it never drains or gives up. SELECT calls the strike off. The CPU's
+  still fills as it waits (a step every 4 frames, and up to 5 taps of 3) and gives up
+  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 12 (three
+  presses); less, and it pops up off you.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
-  you are. Neutral goes straight on; LEFT / RIGHT angle it as far across as a strike
-  goes (half as far as down the court), kept in the court; UP plays it deep, DOWN short.
+  you are. LEFT / RIGHT angle it as far across as a strike goes (half as far as down
+  the court), kept in the court; UP plays it deep, DOWN short. Neutral goes away from
+  the CPU (from the playtest: "no matter what, I always hit the ball to them"): half as
+  far across, to the side it isn't on, and in depth short of it when it's back by its
+  baseline (40 px past the net at most), past it when it's up near the net. Headers and
+  bicycle kicks are aimed the same way (they used to land at a fixed depth).
   Held as it goes, or last held while queued (they stick). Queued (and serving), the
   d-pad only aims: it doesn't walk you, so aiming left never leaves you on the left
   sideline striking straight. A yellow marker on the CPU's side shows where it will land
@@ -163,7 +173,9 @@ slammed (the Captain Tsubasa feel).
   strike arcs, to come down at a depth set by its charge (deeper the more charged), so
   the ball is in the air with its shadow under it, and it's lifted to clear the net
   (fast flat strikes land deeper, or long). A strike with almost no meter (under 4:
-  readied at the last moment) is scuffed: it comes down short, on your own side.
+  readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
+  the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
+  weak one is sped up instead of looping up like a pop-up; drop shots, 100.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
