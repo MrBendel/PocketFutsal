@@ -2,7 +2,7 @@
 import { settle, bootToTitle, TRAINING, MINIGAME } from './helpers.mjs';
 
 // Must match src/progress.h and src/minigame.h.
-export const MG = { MACHINE: 0, WALL: 1, JUGGLE: 2, SHOOTOUT: 3 };
+export const MG = { MACHINE: 0, WALL: 1, JUGGLE: 2, SHOOTOUT: 3, SLALOM: 4 };
 export const STAT = { POWER: 0, CONTROL: 1, AIM: 2, REFLEX: 3 };
 export const MG_PH = { BRIEF: 0, PLAY: 1, RESULT: 2 };
 export const MG_RUN = { READY: 0, LIVE: 1, OVER: 2 };

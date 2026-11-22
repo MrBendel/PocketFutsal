@@ -10,7 +10,7 @@
   "trail-power": "e56423ff",
   "trail-curve": "c91218f7",
   "menu-training": "63db7cde",
-  "training-hub": "1e0bf623",
+  "training-hub": "ad13bb00",
   "minigame-results": "4b3a4c05",
   "mg-machine-start": "6b4eeaa9",
   "mg-machine-firing": "adb03031",
@@ -23,5 +23,9 @@
   "juggle-milestone": "aa7f0f0a",
   "shootout-aim": "697d498f",
   "shootout-dive": "072e1c47",
-  "shootout-goal": "d844df09"
+  "shootout-goal": "d844df09",
+  "training-hub-scrolled": "2de0607f",
+  "slalom-live": "339a6cf6",
+  "slalom-clear": "3ca82e65",
+  "slalom-hit": "54f2a915"
 }

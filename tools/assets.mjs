@@ -36,7 +36,10 @@ import * as MG_MACHINE from './art/mg_machine.mjs';
 import * as MG_WALL from './art/mg_wall.mjs';
 import * as MG_JUGGLE from './art/mg_juggle.mjs';
 import * as MG_SHOOTOUT from './art/mg_shootout.mjs';
-const MINIGAME_ART = [['machine', MG_MACHINE], ['wall', MG_WALL], ['juggle', MG_JUGGLE], ['shootout', MG_SHOOTOUT]];
+import * as MG_SLALOM from './art/mg_slalom.mjs';
+const MINIGAME_ART = [
+  ['machine', MG_MACHINE], ['wall', MG_WALL], ['juggle', MG_JUGGLE], ['shootout', MG_SHOOTOUT], ['slalom', MG_SLALOM],
+];
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const GEN_DIR = path.join(ROOT, 'build', 'gen');

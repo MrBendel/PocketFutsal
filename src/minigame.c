@@ -26,16 +26,17 @@ uint8_t mg_card_delay;  // frames before a card takes a button (one held through
 #define XP_CAP 400
 
 // --- the games' details, by MG_* id ---
-static const char *const names[MG_COUNT] = {"BALL MACHINE", "TARGET WALL", "KEEPY-UPPY", "SHOOTOUT"};
+static const char *const names[MG_COUNT] = {"BALL MACHINE", "TARGET WALL", "KEEPY-UPPY", "SHOOTOUT", "CONE SLALOM"};
 // The stats each trains: the first takes all the XP, the second half.
 static const uint8_t trains[MG_COUNT][2] = {
     {STAT_REFLEX, STAT_CONTROL},  // the machine: get to it, put it back in
     {STAT_AIM, STAT_POWER},       // the wall: hit the lit panel
     {STAT_CONTROL, STAT_REFLEX},  // keepy-uppy: touch and timing
     {STAT_POWER, STAT_REFLEX},    // the shootout: shoot, then save
+    {STAT_REFLEX, STAT_CONTROL},  // cone slalom: dribble through gates
 };
 // XP a point of score. Bonuses: a new best, a win.
-static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5};
+static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5, 3};
 #define XP_BEST 10
 #define XP_WIN 20
 // How to play: four lines each, short enough for the compact font (about 36
@@ -49,6 +50,8 @@ static const char *const brief[MG_COUNT][4] = {
      "D-PAD TO STAY UNDER THE BALL."},
     {"FIVE PENALTIES EACH. SHOOTING:", "AIM WITH D-PAD, A FOR POWER.", "IN GOAL: READ THE CPU AND PRESS",
      "D-PAD + A TO DIVE. TIMING!"},
+    {"DRIBBLE THROUGH THE CONE GATES!", "D-PAD STEERS, UP/DN FOR PACE.", "A: QUICK CUT   B: CLOSE TRAP.",
+     "HEAVY TOUCHES KNOCK IT LOOSE!"},
 };
 static const char *const stat_names[STAT_COUNT] = {"POWER", "CONTROL", "AIM", "REFLEX"};
 
@@ -97,6 +100,7 @@ static void game_enter(void) {
         case MG_WALL: mg_wall_enter(); break;
         case MG_JUGGLE: mg_juggle_enter(); break;
         case MG_SHOOTOUT: mg_shootout_enter(); break;
+        case MG_SLALOM: mg_slalom_enter(); break;
     }
 }
 static void game_update(void) {
@@ -105,6 +109,7 @@ static void game_update(void) {
         case MG_WALL: mg_wall_update(); break;
         case MG_JUGGLE: mg_juggle_update(); break;
         case MG_SHOOTOUT: mg_shootout_update(); break;
+        case MG_SLALOM: mg_slalom_update(); break;
     }
 }
 

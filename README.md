@@ -44,6 +44,7 @@ mini games with your best in each. UP/DOWN chooses, A plays, B goes back.
 | **Target Wall** | Hit the ball at a wall: only the panel that lights up scores. Against the clock | AIM + POWER |
 | **Keepy-Uppy** | Juggle: time A to your foot (B to your head) as it drops. How many in a row? | CONTROL + REFLEX |
 | **Shootout** | Five penalties each: aim and time your shot, then guess the CPU's side and dive | POWER + REFLEX |
+| **Cone Slalom** | Dribble through timed cone gates; heavy touches knock the ball loose | REFLEX + CONTROL |
 
 Every game runs through one shell (`src/minigame.c`, the contract in `src/minigame.h`): a
 brief card, READY / GO!, START to pause (SELECT, paused, quits without XP), then a

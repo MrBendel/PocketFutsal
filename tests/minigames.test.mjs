@@ -23,18 +23,30 @@ test('the title has a third mode, training, and it opens the hub', () => {
   assert.equal(e.v('game_mode'), 2, 'training is still chosen');
 });
 
-test('the hub chooses a game; its brief plays or goes back', () => {
+test('the hub chooses a game, scrolls past four, and its brief plays or goes back', () => {
   const e = toTraining();
+  assert.equal(e.v('train_scroll'), 0);
   e.tap('DOWN');
   assert.equal(e.v('train_sel'), 1);
-  e.tap('UP').tap('UP');
-  assert.equal(e.v('train_sel'), 3, 'UP wraps round');
+  // Stepping down to the 5th game (Cone Slalom) scrolls the 4-row window down.
+  e.tap('DOWN').tap('DOWN').tap('DOWN');
+  assert.equal(e.v('train_sel'), MG.SLALOM);
+  assert.equal(e.v('train_scroll'), 1);
+  matchGolden(e, 'training-hub-scrolled');
+  // Wrapping UP from 0 jumps to the last game and scrolls to it.
+  e.tap('DOWN');
+  assert.equal(e.v('train_sel'), 0);
+  assert.equal(e.v('train_scroll'), 0);
+  e.tap('UP');
+  assert.equal(e.v('train_sel'), MG.SLALOM);
+  assert.equal(e.v('train_scroll'), 1);
   settle(e.tap('A'), MINIGAME, 'the brief');
-  assert.equal(e.v('mg_id'), MG.SHOOTOUT);
+  assert.equal(e.v('mg_id'), MG.SLALOM);
   assert.equal(e.v('mg_phase'), MG_PH.BRIEF);
   e.idle(25);
   settle(e.tap('B'), TRAINING, 'back to the hub');
-  assert.equal(e.v('train_sel'), 3, 'the hub remembers the choice');
+  assert.equal(e.v('train_sel'), MG.SLALOM, 'the hub remembers the choice');
+  assert.equal(e.v('train_scroll'), 1, 'the hub stays scrolled to the choice');
 });
 
 test('a game counts down, plays, pauses, and ends with XP and a new best', () => {

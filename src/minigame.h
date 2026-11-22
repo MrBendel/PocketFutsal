@@ -129,5 +129,7 @@ void mg_juggle_enter(void) BANKED;
 void mg_juggle_update(void) BANKED;
 void mg_shootout_enter(void) BANKED;
 void mg_shootout_update(void) BANKED;
+void mg_slalom_enter(void) BANKED;
+void mg_slalom_update(void) BANKED;
 
 #endif
