@@ -178,3 +178,45 @@ test('a forward run can receive a called return pass in stride',()=>{
  assert.equal(e.v('fs_owner'),0,'moving human receives the led return');
  assert.ok(e.v('fs_completed_passes','u16')>=2);
 });
+
+test('directional B sends the receiver into space instead of at their old position',()=>{
+ const e=humanSpace();setPlayer(e,1,96,112);
+ const x=at(e,'fs_pl_x',1,'i16'),y=at(e,'fs_pl_y',1,'i16');
+ e.hold('LEFT+B');
+ assert.equal(e.v('fs_target_x','i16'),x-24*16);
+ assert.equal(e.v('fs_target_y','i16'),y);
+ assert.ok(at(e,'fs_vx',1,'i8')<0,'receiver reacts immediately to the through pass');
+ e.idle();e.until(e=>e.v('fs_owner')===1,90,'teammate meeting the directional pass');
+ assert.ok(at(e,'fs_pl_x',1,'i16')<x-10*16,'receiver ran into the requested space');
+ assert.equal(e.v('fs_completed_passes','u16'),1);
+});
+
+test('a return called in flight is played on receipt and leads the human runner',()=>{
+ const e=humanSpace();setPlayer(e,0,48,160);setPlayer(e,1,112,176);e.idle(2);
+ e.tap('B').hold('UP',8).hold('UP+B');
+ assert.ok(e.v('fs_return_call')>0,'return request is buffered during flight');
+ assert.equal(e.v('fs_burst'),0,'calling a return does not spend the defensive burst');
+ for(let f=0;f<90&&e.v('fs_pass_count','u16')<2;f++)e.hold('UP');
+ assert.equal(e.v('fs_pass_count','u16'),2,'teammate immediately plays the requested return');
+ assert.equal(e.v('fs_receiver'),0);
+ assert.equal(e.v('fs_return_call'),0,'request is consumed once');
+ for(let f=0;f<80&&e.v('fs_owner')!==0;f++)e.hold('UP');
+ assert.equal(e.v('fs_owner'),0,'runner collects the return');
+ assert.equal(e.v('fs_completed_passes','u16'),2);
+});
+
+test('a buffered return is cancelled when an opponent takes possession',()=>{
+ const e=humanSpace();e.tap('B').idle(3).tap('B');
+ assert.ok(e.v('fs_return_call')>0);
+ put(e,'fs_owner',2);e.idle();
+ assert.equal(e.v('fs_return_call'),0);
+});
+
+test('an unfulfilled return request expires rather than triggering a later pass',()=>{
+ const e=humanSpace();e.tap('B').idle(3).tap('B');
+ set16(e,'fs_ball_z',200*16);set16(e,'fs_ball_vz',0);
+ set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);
+ e.idle(49);
+ assert.equal(e.v('fs_return_call'),0);
+ assert.equal(e.v('fs_pass_count','u16'),1);
+});

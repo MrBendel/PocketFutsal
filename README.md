@@ -35,8 +35,12 @@ ballistic arcs, with a shadow marking their ground position. High deliveries
 clear ground tackles, and a receiver controls the ball as it descends.
 
 Teammates run ahead into the opposite lane and continue their run after passing.
-Passes lead moving receivers. Try a one-two: **B to pass, run into space, B to
-call for the return, then A to finish**. AI defenders have a brief reaction delay
+Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court
+pixels into that direction to receive in space. Try a one-two: **B to pass, run
+into space, B to call for the return, then A to finish**. You can call while your
+first pass is still airborne: your teammate returns it on receiving. The call
+expires after 48 frames or when an opponent takes possession.
+AI defenders have a brief reaction delay
 and commit to tackles, so changing direction can create an opening.
 
 The original futnet mode and its tests remain active. Futsal logic and watchable

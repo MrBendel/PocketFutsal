@@ -31,6 +31,7 @@ int16_t fs_ai_tx[4], fs_ai_ty[4];
 int16_t fs_ball_z, fs_ball_vz, fs_target_x, fs_target_y;
 uint8_t fs_receiver, fs_flight_left, fs_is_shot;
 uint16_t fs_completed_passes;
+uint8_t fs_return_call;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
 uint8_t fs_tackling[4];
 uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
@@ -74,6 +75,7 @@ static void kickoff(uint8_t side) {
     fs_pl_y[fs_owner^1]=(side?96:128)*16;
     fs_ball_x=fs_pl_x[fs_owner]; fs_ball_y=fs_pl_y[fs_owner]; fs_ball_vx=fs_ball_vy=0;
     fs_held_ticks=0; fs_pickup_lock=0; fs_last_kicker=NOBODY;
+    fs_return_call=0;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -98,11 +100,19 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     fs_owner=NOBODY; fs_last_kicker=i; fs_pickup_lock=10; fs_held_ticks=0; fs_action[i]=10;
     sfx_play(SFX_TOUCH);
 }
-static void pass(uint8_t i) {
-    uint8_t mate=i^1;
+static void pass(uint8_t i, int8_t dx, int8_t dy) {
+    static uint8_t mate;
+    static int16_t tx,ty;
+    mate=i^1;
     fs_receiver=mate; fs_is_shot=0;
-    // Lead a moving teammate; they commit to receiving at this landing point.
-    kick(i,fs_pl_x[mate]+fs_vx[mate]*32,clamp(fs_pl_y[mate]+fs_vy[mate]*32,16*16,208*16));
+    // A direction sends the receiver into space; neutral leads their current run.
+    tx=fs_pl_x[mate];ty=fs_pl_y[mate];
+    if(dx||dy){tx+=dx*24*16;ty+=dy*24*16;}
+    else {tx+=fs_vx[mate]*32;ty+=fs_vy[mate]*32;}
+    kick(i,tx,clamp(ty,16*16,208*16));
+    // React to the delivery immediately rather than following a stale support run.
+    fs_ai_tx[mate]=fs_target_x;fs_ai_ty[mate]=fs_target_y;
+    if(i==1)fs_return_call=0;
     fs_pass_count++;
 }
 static void shoot(uint8_t i, int8_t aim) {
@@ -161,8 +171,8 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
 static void ai(uint8_t i){
     uint8_t mate=i^1, own=fs_owner!=NOBODY&&team(fs_owner)==team(i);
     int16_t goal=team(i)?224*16:0,tx=fs_ball_x,ty=fs_ball_y;
-    if(!fs_spectator&&i==1&&fs_owner==i&&(joy_pressed&J_B)){
-        pass(i);step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;
+    if(!fs_spectator&&i==1&&fs_owner==i&&((joy_pressed&J_B)||fs_return_call)){
+        pass(i,0,0);step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;
     }
     if(fs_think[i]){fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_think[i]=7;
@@ -180,7 +190,7 @@ static void ai(uint8_t i){
         if(pressure<42*16&&ab(fs_pl_x[defender]-fs_pl_x[i])<24*16)tx=fs_pl_x[defender]<80*16?120*16:40*16;
         int16_t forward=team(i)?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
         if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16)shoot(i,0);
-        else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i);
+        else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i,0,0);
         else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16)shoot(i,0);
     }else if(own){
         fs_role[i]=2;
@@ -345,6 +355,8 @@ void futsal_update(void) BANKED {
         draw(); return;
     }
     fs_sim_ticks++;
+    if(fs_return_call)fs_return_call--;
+    if(fs_owner!=NOBODY&&team(fs_owner))fs_return_call=0;
     for(uint8_t i=0;i<4;i++) {
         fs_moving[i]=0;
         if(fs_tackling[i]) fs_tackling[i]--;
@@ -352,10 +364,11 @@ void futsal_update(void) BANKED {
         if(i || fs_spectator) ai(i);
         else {
             int8_t dx=((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0),dy=((joy&J_DOWN)!=0)-((joy&J_UP)!=0);
-            if(fs_owner==0) { if(joy_pressed&J_A) shoot(0,dx); else if(joy_pressed&J_B) pass(0); }
+            if(fs_owner==0) { if(joy_pressed&J_A) shoot(0,dx); else if(joy_pressed&J_B) pass(0,dx,dy); }
             else {
                 if((joy_pressed&J_A) && !fs_cooldown[0]) tackle(0);
-                if((joy_pressed&J_B) && !fs_cooldown[0] && (fs_owner==NOBODY || team(fs_owner)!=0)) { fs_burst[0]=16; fs_cooldown[0]=60; }
+                if((joy_pressed&J_B)&&fs_owner==NOBODY&&fs_receiver==1)fs_return_call=48;
+                else if((joy_pressed&J_B) && !fs_cooldown[0] && (fs_owner==NOBODY || team(fs_owner)!=0)) { fs_burst[0]=16; fs_cooldown[0]=60; }
             }
             step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
         }
