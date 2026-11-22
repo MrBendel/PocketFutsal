@@ -13,6 +13,8 @@
 #define STATE_PLAY      1
 #define STATE_GAME_OVER 2
 #define STATE_FUTSAL    3
+#define STATE_TRAINING  4  // the mini games' hub (training.c)
+#define STATE_MINIGAME  5  // a mini game: its brief, the game, its results (minigame.c)
 #define STATE_NONE      0xFF  // before the first scene
 
 // Watchable: the state currently running, and the one requested for next frame.
@@ -43,5 +45,9 @@ void futsal_enter(void) BANKED;
 void futsal_update(void) BANKED;
 void game_over_enter(void) BANKED;
 void game_over_update(void) BANKED;
+void training_enter(void) BANKED;
+void training_update(void) BANKED;
+void minigame_enter(void) BANKED;
+void minigame_update(void) BANKED;
 
 #endif

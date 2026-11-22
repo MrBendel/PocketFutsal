@@ -32,6 +32,11 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { FUTSAL_PITCH, PITCH, HUD_TILES, SPRITE_TILES, PLAYER_TILES, asciiTile } from './tile-art.mjs';
+import * as MG_MACHINE from './art/mg_machine.mjs';
+import * as MG_WALL from './art/mg_wall.mjs';
+import * as MG_JUGGLE from './art/mg_juggle.mjs';
+import * as MG_SHOOTOUT from './art/mg_shootout.mjs';
+const MINIGAME_ART = [['machine', MG_MACHINE], ['wall', MG_WALL], ['juggle', MG_JUGGLE], ['shootout', MG_SHOOTOUT]];
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const GEN_DIR = path.join(ROOT, 'build', 'gen');
@@ -52,6 +57,12 @@ export const ASSETS = [
   { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs' },
   // The players' frames, both views (VRAM bank 1).
   { name: 'players', bank: true, ascii: PLAYER_TILES, src: 'tools/tile-art.mjs' },
+  // The mini games (src/mg_*.c): each a background (map from SCENE_TILES on) and
+  // its own sprite tiles, drawn in tools/art/mg_*.mjs.
+  ...MINIGAME_ART.flatMap(([id, art]) => [
+    { name: `mg_${id}_bg`, bank: true, ascii: art.BG.tiles, map: art.BG, mapBase: 80, src: `tools/art/mg_${id}.mjs` },
+    { name: `mg_${id}_spr`, bank: true, ascii: art.SPR, src: `tools/art/mg_${id}.mjs` },
+  ]),
 ];
 
 /** "player walk down", 4 -> ["player walk down (1).png", ..., "player walk down (4).png"] */

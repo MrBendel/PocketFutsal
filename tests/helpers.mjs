@@ -121,7 +121,7 @@ export const FRAME_CYCLES = 140448;
 export const FRAME_LIMIT = FRAME_CYCLES - 9120;  // 131,328
 
 // Scene IDs, must match src/state.h.
-export const TITLE = 0, PLAY = 1, GAME_OVER = 2;
+export const TITLE = 0, PLAY = 1, GAME_OVER = 2, FUTSAL = 3, TRAINING = 4, MINIGAME = 5;
 // Sides, shots, strikes and phases, must match src/game.h.
 export const YOU = 0, CPU = 1, NOBODY = 0xFF;
 export const SHOT_NONE = 0, SHOT_POWER = 1, SHOT_CURVE = 2, SHOT_LOB = 3, SHOT_DROP = 4;
