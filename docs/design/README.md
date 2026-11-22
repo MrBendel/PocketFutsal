@@ -5,6 +5,45 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## Training mode (2026-11-22): mini games and stats
+
+The RPG side: your player has four stats, raised by playing training mini games, and
+(next) the matches read them. Mini games aren't side content: they're how you level up.
+
+- **Stats**: POWER (how hard you strike), CONTROL (touch: first touches, juggling), AIM
+  (where the ball goes), REFLEX (getting there: returns, saves). Each has a level, 1 to
+  20, and XP toward the next (30 XP from 1 to 2, 15 more each level after). Your
+  **player level** is 1 plus every stat level gained.
+- **XP**: a mini game's score times its rate (machine 3, wall 4, keepy-uppy 2, shootout
+  5), +10 for a new best, +20 for a win, at most 400 from the score; all of it to the
+  game's first stat, half to its second.
+- **Feeding back**: each game gets a little kinder as its stats rise (wider timing
+  windows, more reach), so the levels are felt in training too.
+- **The save**: battery RAM, a tagged, versioned, checksummed block; a bad or old save
+  starts a fresh player.
+- **The games**, from the user's ideas (2026-11-22):
+  1. **Ball Machine**: a machine shoots the ball; return it in bounds.
+  2. **Target Wall**: only the part of the wall that lights up scores (after Mario
+     Tennis on the Game Boy Advance).
+  3. **Keepy-Uppy**: juggle a consecutive number of times.
+  4. **Shootout**: score on the CPU, then keep its shots out: timing, and guessing the
+     direction it will shoot.
+
+### More mini game ideas
+
+- **Cone Slalom** (REFLEX + CONTROL): dribble through gates against the clock; touches
+  too heavy run away from you.
+- **Crossbar Challenge** (AIM + POWER): chip from distance to ring the crossbar; wind
+  and distance grow.
+- **Rondo** (CONTROL + REFLEX): keep the ball from two CPU players in a circle with
+  one-touch passes to teammates.
+- **Cross & Volley** (POWER + AIM): crosses come in from the wings; volley or head them
+  past a keeper before they land.
+- **Rhythm Footwork** (REFLEX): a rhythm game of d-pad and button taps to the beat:
+  training montage.
+- **Futnet Serve Targets** (AIM): serve onto targets on the far court, using the match's
+  own serve.
+
 ## v0.3 (2026-11-21): futnet
 
 Decided 2026-11-21: the game follows the rules of futnet singles (UNIF, the governing
