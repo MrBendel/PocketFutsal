@@ -11,5 +11,8 @@
   "trail-curve": "c91218f7",
   "menu-training": "63db7cde",
   "training-hub": "1e0bf623",
-  "minigame-results": "4b3a4c05"
+  "minigame-results": "4b3a4c05",
+  "mg-machine-start": "6b4eeaa9",
+  "mg-machine-firing": "adb03031",
+  "mg-machine-return": "e34850e4"
 }
