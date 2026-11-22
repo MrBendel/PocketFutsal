@@ -14,7 +14,7 @@
 // ground, a volley at the waist, a header, or a bicycle kick for one that's just
 // gone over your head. Planted out of reach, you slide for it, and lie there a
 // while. A ball only just reached (a slide, a ball on fire met with less than
-// three quarters of a meter) pops up over the net, where met in the air with half a
+// three eighths of a meter) pops up over the net, where met in the air with half a
 // meter it's a slam, on fire. A full meter sets the ball on fire too. Unready, your
 // first touch controls it, up in front of you, to play with your second; on fire,
 // it knocks you down and goes on.
@@ -97,7 +97,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define DRIVE_SPEED 28    // A: + half the charge
 #define CURVE_SPEED 25    // B: + half the charge
 #define CURVE_OFS 44      // px a curve bends by the time it gets there
-#define HEADER_SPEED 16   // + a quarter of the charge
+#define HEADER_SPEED 24   // + a quarter of the charge: flat, not a loop up
 #define CHIP_LIFT 28      // a lob: about 32 px up, 74 frames in the air
 #define POP_LIFT 32       // a pop-up: about 43 px up, 84 frames
 #define BOUNCE_MIN 15     // a first bounce gets up at least this: about 9 px, 40 frames
@@ -108,7 +108,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
 #define POWER_FADE 20     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 8            // a ball slower than this (|vx| + |vy|) is loose
-#define FIRE_MEET 20      // the charge it takes to meet a ball on fire cleanly
+#define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (a press and a moment)
 #define SCUFF 4           // a strike with less charge than this is scuffed into the net
 #define KICK_FRAMES 14    // a strike's pose; no touches meanwhile
 #define BICYCLE_FRAMES 24
@@ -846,7 +846,7 @@ static void knock_down(uint8_t i) {
 }
 
 // Planted and in reach: a clean strike, unless it's on fire and the meter isn't
-// three quarters full, when it's all they can do to pop it up.
+// three eighths full, when it's all they can do to pop it up.
 static void meet(uint8_t i, uint8_t move) {
     if (ball_power && pl_charge[i] < FIRE_MEET) pop_up(i, move, KICK_FRAMES);
     else strike(i, move);

@@ -152,7 +152,7 @@ slammed (the Captain Tsubasa feel).
   20-27, a row of sprites placed a frame at most (src/vfx.c).
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
-  on fire. A slam met with three quarters of a meter is returned clean; less, and it
+  on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
 - **Unready**, your first touch controls it (v0.3); a ball on fire knocks you down.
 - **Bounces** (2026-11-22, from the playtest: some returns died where they landed): a

@@ -75,7 +75,7 @@ Not ready when it reaches you, your first touch **controls** it, up in front of 
 ready a strike as it comes down, and with half a meter your second touch is a **slam**.
 Planted out of reach, you **slide** for it: it pops up over the net, and you're on the
 floor a moment. A pop-up met in the air is a slam too, on fire, as is a full-meter strike;
-meeting a ball on fire takes three quarters of a meter, or it pops up off you (or knocks
+meeting a ball on fire takes three eighths of a meter, or it pops up off you (or knocks
 you down, if you slide to it or aren't ready). The side that lost the point serves: the ball is
 struck on the way down, and must go over.
 

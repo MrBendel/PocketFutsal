@@ -437,7 +437,7 @@ test('a third touch is a fault', () => {
   assert.equal(emu.v('point_reason'), POINT_TOUCHES);
 });
 
-test('a ball on fire: met with under three quarters of a meter it pops up; with more, a clean strike', () => {
+test('a ball on fire: met with under three eighths of a meter it pops up; with more, a clean strike', () => {
   let emu = quietRally();
   ballAt(emu, 80, 140, 0, 0, 96);
   emu.write8(emu.symbols.addr('ball_power'), 1);
