@@ -98,7 +98,7 @@ test('START begins a match seeded by press timing', () => {
   assert.equal(play(10).v('game_seed', 'u16'), a.v('game_seed', 'u16'));
 });
 
-test('the match opens 0-0 on your serve: along your line, then A tosses it up and strikes it on the way down', () => {
+test('the match opens 0-0 on your serve: the d-pad aims it, A tosses it up and strikes it on the way down', () => {
   const emu = startGame();
   assert.deepEqual([at(emu, 'score', YOU), at(emu, 'score', CPU)], [0, 0]);
   assert.equal(emu.v('phase'), PHASE_SERVE);
@@ -106,12 +106,12 @@ test('the match opens 0-0 on your serve: along your line, then A tosses it up an
   const y = at(emu, 'pl_y', YOU, 'i16'), x = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('A', 1).hold('UP+LEFT', 10);
   assert.equal(emu.v('phase'), PHASE_SERVE, 'not before READY goes');
-  assert.equal(at(emu, 'pl_y', YOU, 'i16'), y, 'the server keeps to the line');
-  assert.ok(at(emu, 'pl_x', YOU, 'i16') < x, 'but moves along it');
+  assert.deepEqual([at(emu, 'pl_x', YOU, 'i16'), at(emu, 'pl_y', YOU, 'i16')], [x, y], 'the server stays put');
   assert.ok(px(emu.v('ball_y', 'i16')) < px(y), 'the ball at your feet, in front');
-  served(emu).tap('A');
+  served(emu).hold('LEFT+A', 1);
   assert.equal(emu.v('phase'), PHASE_TOSS);
   emu.until((e) => e.v('phase') === PHASE_RALLY, 60, 'the strike');
+  assert.ok(emu.v('ball_vx', 'i16') < 0, 'aimed left');
   assert.equal(at(emu, 'pl_last_move', YOU), MOVE_KICK);
   assert.equal(emu.v('ball_serve'), 1);
   assert.ok(emu.v('ball_vy', 'i16') < 0, 'away up the court');
@@ -120,7 +120,7 @@ test('the match opens 0-0 on your serve: along your line, then A tosses it up an
   assert.equal(emu.v('ball_serve'), 0);
 });
 
-test('A queues a strike any time: it waits (you move freely) until the ball comes, then charges, you are run to it, and it goes', () => {
+test('A queues a strike any time: it waits until the ball comes (the d-pad only aims), then charges, you are run to it, and it goes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A');
@@ -128,7 +128,8 @@ test('A queues a strike any time: it waits (you move freely) until the ball come
   const x0 = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('RIGHT', 6);
   assert.equal(at(emu, 'pl_charge', YOU), 0, 'no charge yet');
-  assert.ok(at(emu, 'pl_x', YOU, 'i16') > x0, 'the d-pad still moves you');
+  assert.equal(at(emu, 'pl_x', YOU, 'i16'), x0, 'the d-pad aims, it doesn’t walk you');
+  assert.equal(at(emu, 'pl_aim', YOU), 2, 'aimed right');
   placePlayer(emu, YOU, 80, 190);
   ballAt(emu, 80, 120, 0, 0, 40);
   emu.idle(4);
@@ -249,9 +250,9 @@ test('planted, the game steps you toward the ball', () => {
 
 test('planted too late to get there, you slide for it: it pops up over the net, and you stay down a moment', () => {
   const emu = quietRally();
-  ballAt(emu, 104, 178, 0, 0, 80);
+  ballAt(emu, 112, 150, 0, 0, 96);
   emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
-  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 10, 'the slide');
+  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 20, 'the slide');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 12, 'the touch');
   assert.equal(at(emu, 'pl_last_move', YOU), MOVE_SLIDE);
   assert.equal(emu.v('ball_pop'), 1);
@@ -337,6 +338,22 @@ test('UP plays it deep, DOWN short; LEFT and RIGHT near the sidelines', () => {
   const [, deep] = land(['UP']), [, mid] = land([]), [, short] = land(['DOWN']);
   assert.ok(deep < mid - 12 && mid < short, `deep ${deep}, as charged ${mid}, short ${short}`);
   assert.ok(land(['LEFT'])[0] < 40 && land(['RIGHT'])[0] > 120, 'near the sidelines');
+});
+
+test('aim is a direction from where you are: from the side, neutral goes straight and LEFT / RIGHT angle away', () => {
+  const land = (x, keys) => {
+    const emu = quietRally();
+    placePlayer(emu, YOU, x, 190);
+    ballAt(emu, x + 2, 184);
+    readied(emu, SHOT_POWER, 16);
+    emu.hold(keys, 1);
+    emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
+    return px(emu.v('ball_x', 'i16'));
+  };
+  const straight = land(40, []);
+  assert.ok(Math.abs(straight - 42) <= 6, `straight on from x 40: lands at ${straight}`);
+  assert.ok(land(40, ['RIGHT']) > 80, 'RIGHT from the left side: across the court');
+  assert.ok(land(120, ['LEFT']) < 80, 'LEFT from the right side: across the court');
 });
 
 test('queued, a marker shows where your strike will land; it follows your aim', () => {

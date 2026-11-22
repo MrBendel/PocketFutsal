@@ -434,15 +434,14 @@ static void draw(void) {
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
-    // Your strike queued: a marker where it's aimed to land (no wider than a strike
-    // can go from where you are: half as far across as down the court).
+    // Your strike queued: a marker where it's aimed to land.
+    // (Every other frame, and not a strike's: it's another aim_point.)
     if (pl_shot[SIDE_YOU] && !goal_timer && (phase == PHASE_RALLY || server == SIDE_YOU)) {
+        if ((frame_count & 1) || (uint8_t)frame_count == flight_frame) return;
         aim_point(SIDE_YOU);
-        int16_t px0 = PX(pl_x[SIDE_YOU]), wide = (PX(pl_y[SIDE_YOU]) - aim_land) >> 1;
-        int16_t ax = clamp16(aim_tx, px0 - wide, px0 + wide);
         set_sprite_tile(OAM_AIM, S_AIM);
         set_sprite_prop(OAM_AIM, SPR_PAL_UI);
-        place(OAM_AIM, proj_x(ax, aim_land) + 4, (int16_t)proj_y[PROJ_I(aim_land)] - cam_y + 12);
+        place(OAM_AIM, proj_x(aim_tx, aim_land) + 4, (int16_t)proj_y[PROJ_I(aim_land)] - cam_y + 12);
     } else move_sprite(OAM_AIM, 0, 0);
 }
 
@@ -579,8 +578,8 @@ static void arc(int16_t land, uint8_t clear) {
     ball_vz = (TO_SUB(NET_H + 3) + drop - ball_z) / tn;
 }
 
-// Where player i's strike is aimed to land (aim_tx, aim_land): across, near a
-// sideline the way held (or last held while queued), else the middle; in depth,
+// Where player i's strike is aimed to land (aim_tx, aim_land): across, angled the
+// way held (or last held while queued), else straight ahead; in depth,
 // deeper the more charged, UP deeper and DOWN shorter. A lob lands just behind the
 // other player, a drop shot just over the net. The CPU picks its own as it readies.
 static void aim_point(uint8_t i) {
@@ -594,13 +593,16 @@ static void aim_point(uint8_t i) {
         aim = cpu_aim;
         depth = cpu_depth;
     }
-    aim_tx = aim == 0 ? COURT_X0 + 12 : aim == 2 ? COURT_X1 - 12 : CENTER_X;
     int16_t d = 24 + c + (c >> 1);  // past the net: 24 .. 72
     if (depth == 2) d += 24;
     else if (!depth) d = d > 40 ? d - 24 : 16;
     if (pl_shot[i] == SHOT_LOB) aim_land = PX(pl_y[i ^ 1]) + (i == SIDE_YOU ? -12 : 12);
     else if (pl_shot[i] == SHOT_DROP) aim_land = other_y(i, 18);
     else aim_land = other_y(i, d);
+    // A direction from where you are: straight ahead, or as far across as a strike
+    // goes (half as far as down the court) to the left or right; kept in the court.
+    int16_t x0 = PX(pl_x[i]), wide = abs16(aim_land - PX(pl_y[i])) >> 1;
+    aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + 6, COURT_X1 - 6);
 }
 
 // A clean strike: the readied shot, shaped by the ball's height (move).
@@ -686,7 +688,8 @@ static void strike(uint8_t i, uint8_t move) {
 static void pop_up(uint8_t i, uint8_t move, uint8_t frames) {
     int16_t bx = PX(ball_x), by = PX(ball_y);
     int16_t land = PX(pl_y[i ^ 1]) + (i == SIDE_YOU ? -10 : 10);
-    int16_t tx = CENTER_X + (int16_t)(rand() & 31) - 16;
+    aim_point(i);  // the way you're aiming, even so
+    int16_t tx = aim_tx;
     ball_plain();
     ball_vz = POP_LIFT;
     ball_pop = 1;
@@ -784,10 +787,9 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         return;
     }
     // Planted, readying a strike: still. Serving: along the line only.
-    // Queued with the ball on its way: the game moves you (below), not the d-pad.
-    // Serving: still once it's tossed.
-    if ((pl_shot[i] && phase == PHASE_RALLY && live_for(i)) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
-    if (phase != PHASE_RALLY && server == i) dy = 0;
+    // Queued, the d-pad only aims: it doesn't walk you off toward a sideline.
+    if ((pl_shot[i] && phase == PHASE_RALLY) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     int8_t speed = i == SIDE_YOU ? SPEED_YOU : SPEED_CPU;
     int8_t vx = dx > 0 ? speed : dx < 0 ? -speed : 0;
     int8_t vy = dy > 0 ? speed : dy < 0 ? -speed : 0;
@@ -828,7 +830,6 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // The game runs you to where to meet it, half as fast again as running,
         // anywhere in your half: queue it up and you get there. Going out, it
         // leaves it.
-        want_predict(i);
         int16_t tx = loose ? PX(ball_x) : meet_x[i];
         int16_t ty = loose ? PX(ball_y) : meet_y[i];
         ty += i == SIDE_YOU ? 6 : -6;  // stand just behind it: it's in front
@@ -903,11 +904,12 @@ static void predict(uint8_t i) {
 // Trace it again when its flight has changed (not on the very frame: that's a
 // strike's, busy already), now and then anyway (a placed ball, the curve), each
 // side on its own frames.
-// One trace a frame at most (the other side's waits a frame).
+// Trace side i's flight if it's changed (or now and then anyway: a placed ball,
+// the curve), not on a frame the flight changed (busy already).
 static void want_predict(uint8_t i) {
     uint8_t f = (uint8_t)frame_count;
-    if (f == predict_frame) return;
-    if ((meet_flight[i] != ball_flight && f != flight_frame) || ((f + (i << 3)) & 15) == 0) {
+    if (f == flight_frame || phase != PHASE_RALLY) return;
+    if (meet_flight[i] != ball_flight || ((f >> 1) & 7) == 0) {
         predict_frame = f;
         predict(i);
     }
@@ -937,7 +939,8 @@ static void cpu_update(void) {
     int16_t bx = PX(ball_x), by = PX(ball_y);
     int16_t tx = CENTER_X, ty = HOME_CPU;
     // Aim at the corner away from you, now and then down the middle.
-    if (!pl_shot[SIDE_CPU]) cpu_aim = (rand() & 3) == 0 ? 1 : PX(pl_x[SIDE_YOU]) < CENTER_X ? 2 : 0;
+    // Its aim: angled away from you (to the side of it you're not), now and then straight.
+    if (!pl_shot[SIDE_CPU]) cpu_aim = (rand() & 3) == 0 ? 1 : PX(pl_x[SIDE_YOU]) < PX(pl_x[SIDE_CPU]) ? 2 : 0;
     if (phase == PHASE_SERVE) {
         if (server == SIDE_CPU) {
             tx = cx;
@@ -960,7 +963,6 @@ static void cpu_update(void) {
                 ty = by - 6;
                 dist = 0;
             } else {
-                want_predict(SIDE_CPU);
                 if (meet_out[SIDE_CPU]) {
                     // Going out: let it go (out of its way, back toward the middle).
                     tx = bx < CENTER_X ? CENTER_X + 24 : CENTER_X - 24;
@@ -1205,6 +1207,9 @@ void play_update(void) BANKED {
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
     ball_update();
+    // The flight traces, last thing: after anything struck this frame (then none,
+    // it's busy already), one side a frame.
+    want_predict((uint8_t)frame_count & 1);
     meter_update();
     draw();
 }

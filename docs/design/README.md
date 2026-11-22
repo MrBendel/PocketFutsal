@@ -93,9 +93,13 @@ slammed (the Captain Tsubasa feel).
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees).
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
-  ball"): LEFT / RIGHT aims near that sideline, UP plays it deep, DOWN short; held as it
-  goes, or last held while queued (they stick). While your strike's queued, a yellow
-  marker on the CPU's side shows where it will land (lobs and drop shots too).
+  ball", then "the reticle's left but the ball goes straight"): a direction from where
+  you are. Neutral goes straight on; LEFT / RIGHT angle it as far across as a strike
+  goes (half as far as down the court), kept in the court; UP plays it deep, DOWN short.
+  Held as it goes, or last held while queued (they stick). Queued (and serving), the
+  d-pad only aims: it doesn't walk you, so aiming left never leaves you on the left
+  sideline striking straight. A yellow marker on the CPU's side shows where it will land
+  (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
 - **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,

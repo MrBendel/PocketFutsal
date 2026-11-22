@@ -37,12 +37,12 @@ the title switches between one set and the best of three.
 
 | Button | What it does |
 |---|---|
-| D-pad | Run (eight ways) in your half. Serving: along your line |
+| D-pad | Run (eight ways) in your half. Queued, or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
 | A or B again while ready | Tap for more power |
-| LEFT / RIGHT while ready | Aim toward that sideline (it sticks; a marker shows where it'll land) |
+| LEFT / RIGHT while ready | Angle it that way; neutral is straight on (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short |
 | START | Pause |
 
