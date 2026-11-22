@@ -44,6 +44,7 @@ static void enter_next_state(void) {
     switch (game_state) {
         case STATE_TITLE: title_enter(); break;
         case STATE_PLAY: play_enter(); break;
+        case STATE_FUTSAL: futsal_enter(); break;
         case STATE_GAME_OVER: game_over_enter(); break;
     }
     DISPLAY_ON;
@@ -75,6 +76,7 @@ void main(void) {
         switch (game_state) {
             case STATE_TITLE: title_update(); break;
             case STATE_PLAY: play_update(); break;
+            case STATE_FUTSAL: futsal_update(); break;
             case STATE_GAME_OVER: game_over_update(); break;
         }
         wait_frame();

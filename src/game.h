@@ -153,4 +153,6 @@ extern uint8_t trail_len;   // its dots
 extern uint8_t ball_lob;    // a lob: it sits up where it lands (slowed, a high bounce)
 extern uint8_t last_touch;  // the side that touched it last
 
+// Menu mode: 0 futnet, 1 futsal.
+extern uint8_t game_mode;
 #endif

@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { PITCH, HUD_TILES, SPRITE_TILES, PLAYER_TILES, asciiTile } from './tile-art.mjs';
+import { FUTSAL_PITCH, PITCH, HUD_TILES, SPRITE_TILES, PLAYER_TILES, asciiTile } from './tile-art.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const GEN_DIR = path.join(ROOT, 'build', 'gen');
@@ -45,6 +45,7 @@ export const ASSETS = [
   // The court, drawn in code in tools/tile-art.mjs: its unique tiles, plus a
   // 20x21 map (tile indices from mapBase on) and the tiles' palettes.
   { name: 'pitch', bank: true, ascii: PITCH.tiles, map: PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
+  { name: 'futsal_pitch', bank: true, ascii: FUTSAL_PITCH.tiles, map: FUTSAL_PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).

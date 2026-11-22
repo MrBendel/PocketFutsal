@@ -12,6 +12,26 @@ best of three). Proportions measured from Mario Tennis (GBC), rules from futnet:
 the design doc.
 The design is in [docs/design/README.md](docs/design/README.md).
 
+## Main menu and 2-on-2 futsal
+
+UP/DOWN chooses **Futnet Singles** or **2v2 Futsal**. LEFT/RIGHT or SELECT
+changes options: futnet match length, or futsal Watch/Play. START/A launches.
+
+Futsal is an arcade prototype: two outfield players per team, no dedicated
+goalkeepers, first to five goals. The court has goals at both baselines and
+rebounding walls outside the goal mouths. WATCH runs four AI players; PLAY gives
+you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
+in a futsal match; START pauses.
+
+With possession, A shoots and B passes. Without possession, A slide tackles and
+B bursts; both defensive actions have a cooldown. When your teammate carries,
+B calls for a pass. D-pad moves and left/right aims shots. AI positioning and
+match balance still need playtesting.
+
+The original futnet mode and its tests remain active. Futsal logic and watchable
+state live in `src/futsal.c` and `src/futsal.h`, with `fs_` prefixes for its state.
+Both modes share the graphics, sprite assets, build and emulator tooling.
+
 ## Quick start
 
 Needs Node 22+.

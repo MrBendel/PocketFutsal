@@ -603,9 +603,9 @@ function updateRecUi() {
 // Watches
 let watchList = store.get('watches', [
   // The match: positions are in sixteenths of a pixel (src/game.h).
-  { name: 'score', type: 'u8' }, { name: 'pl_charge', type: 'u8' }, { name: 'pl_shot', type: 'u8' },
-  { name: 'ball_x', type: 'i16' }, { name: 'ball_y', type: 'i16' }, { name: 'ball_z', type: 'i16' },
-  { name: 'ball_power', type: 'u8' }, { name: 'phase', type: 'u8' }, { name: 'pl_move', type: 'u8' }, { name: 'cpu_idle', type: 'u8' },
+  { name: 'game_mode', type: 'u8' }, { name: 'score', type: 'u8' }, { name: 'fs_owner', type: 'u8' },
+  { name: 'fs_spectator', type: 'u8' }, { name: 'ball_x', type: 'i16' }, { name: 'ball_y', type: 'i16' },
+  { name: 'fs_pass_count', type: 'u16' }, { name: 'fs_shot_count', type: 'u16' }, { name: 'fs_tackle_count', type: 'u16' },
 ]);
 function fillSymbols() {
   const dl = $('symbols');

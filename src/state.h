@@ -12,6 +12,7 @@
 #define STATE_TITLE     0
 #define STATE_PLAY      1
 #define STATE_GAME_OVER 2
+#define STATE_FUTSAL    3
 #define STATE_NONE      0xFF  // before the first scene
 
 // Watchable: the state currently running, and the one requested for next frame.
@@ -38,6 +39,8 @@ void title_enter(void) BANKED;
 void title_update(void) BANKED;
 void play_enter(void) BANKED;
 void play_update(void) BANKED;
+void futsal_enter(void) BANKED;
+void futsal_update(void) BANKED;
 void game_over_enter(void) BANKED;
 void game_over_update(void) BANKED;
 

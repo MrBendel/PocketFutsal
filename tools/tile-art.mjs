@@ -56,7 +56,7 @@ const C_COURT = 0, C_BAND = 1, C_FLOOR = 2, C_LINE = 3;
 const BOARD_TOP = 8;      // map rows above this are the far boards
 const BOARD_BOTTOM = 160; // and from this down, the near ones
 
-function drawCourt() {
+function drawCourt(futsal = false) {
   const px = Array.from({ length: H }, () => new Array(W).fill(C_FLOOR));
   const plot = (x, y, c) => {
     if (x >= 0 && x < W && y >= 0 && y < H) px[y][x] = c;
@@ -90,16 +90,31 @@ function drawCourt() {
     line(fx, NEAR - 1);
     line(fx, HALF);
   }
-  // The net across halfway: NET_H px high, a dark mesh under a white tape, a post
-  // at each end a little outside the sidelines.
-  const hy = projY(HALF), hx0 = projX(COURT_X0 - 6, HALF), hx1 = projX(COURT_X1 + 5, HALF);
-  for (let y = hy - NET_H; y < hy; y++) {
-    for (let x = hx0; x <= hx1; x++) {
-      if (y <= hy - NET_H + 1) plot(x, y, C_LINE);
-      else if ((x + y) % 2 === 0) plot(x, y, C_FLOOR);
-    }
+  if (futsal) {
+    // Open futsal court: goal mouths and penalty areas at both ends.
+    for (const end of [FAR, NEAR]) {
+      const inward = end === FAR ? 1 : -1;
+      for (let t = 0; t <= 1; t += 1 / 256) {
+        line(56 + t * 48, end - inward * 12);
+        line(56, end - inward * t * 12);
+        line(104, end - inward * t * 12);
+        line(40 + t * 80, end + inward * 32);
+        line(40, end + inward * t * 32);
+        line(120, end + inward * t * 32);
+      }
   }
-  for (let y = hy - NET_H - 2; y <= hy + 1; y++) plot(hx0, y, C_LINE), plot(hx1, y, C_LINE);
+  } else {
+    // The net across halfway: NET_H px high, a dark mesh under a white tape, a post
+    // at each end a little outside the sidelines.
+    const hy = projY(HALF), hx0 = projX(COURT_X0 - 6, HALF), hx1 = projX(COURT_X1 + 5, HALF);
+    for (let y = hy - NET_H; y < hy; y++) {
+      for (let x = hx0; x <= hx1; x++) {
+        if (y <= hy - NET_H + 1) plot(x, y, C_LINE);
+        else if ((x + y) % 2 === 0) plot(x, y, C_FLOOR);
+      }
+  }
+    for (let y = hy - NET_H - 2; y <= hy + 1; y++) plot(hx0, y, C_LINE), plot(hx1, y, C_LINE);
+  }
   // The boards, top and bottom (their own palette): 1 face, 2 dark top and shadow,
   // 3 a white stripe on the court side, rivets.
   for (let y = 0; y < H; y++) {
@@ -111,8 +126,8 @@ function drawCourt() {
 }
 
 /** The court as unique tiles, a 20x21 map of tile indices and one of palettes. */
-function buildPitch() {
-  const px = drawCourt();
+function buildPitch(futsal = false) {
+  const px = drawCourt(futsal);
   const tiles = [], keys = new Map(), map = [], attrs = [];
   for (let ty = 0; ty < PITCH_H; ty++) {
     for (let tx = 0; tx < PITCH_W; tx++) {
@@ -275,3 +290,5 @@ export const SPRITE_TILES = [
   trail2, blank,
   trail3, blank,
 ];
+
+export const FUTSAL_PITCH = buildPitch(true);
