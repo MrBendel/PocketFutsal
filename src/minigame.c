@@ -41,8 +41,8 @@ static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5};
 // How to play: four lines each, short enough for the compact font (about 36
 // letters across the screen).
 static const char *const brief[MG_COUNT][4] = {
-    {"THE MACHINE FIRES BALLS AT YOU.", "RUN TO EACH ONE AND PRESS A", "TO RETURN IT INSIDE THE LINES.",
-     "D-PAD AIMS. THREE MISSES: OUT!"},
+    {"THE MACHINE FIRES BALLS AT YOU.", "RUN TO EACH AND PRESS A. D-PAD", "AIMS: GOLD RING IS +3 POINTS!",
+     "THREE MISSES AND YOU ARE OUT!"},
     {"HIT THE BALL AT THE WALL.", "ONLY THE PANEL THAT LIGHTS UP", "SCORES. HOLD THE D-PAD TO AIM,",
      "A TO STRIKE. BEAT THE CLOCK!"},
     {"KEEP THE BALL UP! PRESS A AS", "IT DROPS TO YOUR FOOT. B FOR", "A HEADER WHEN IT IS HIGH. STAY",
