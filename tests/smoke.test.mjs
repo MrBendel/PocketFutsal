@@ -283,7 +283,7 @@ test('a lob (B then A) or a drop shot (A then B) is armed for a moment: struck l
   }
 });
 
-test('B then A is a lob, dropping just behind the CPU', () => {
+test('B then A is a lob, dropping deep behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);
   ballAt(emu, 80, 150, 0, 0, 30);
@@ -294,7 +294,45 @@ test('B then A is a lob, dropping just behind the CPU', () => {
   emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 80, 'it landing');
   assert.ok(top >= 24, `up ${top} px`);
   const y = px(emu.v('ball_y', 'i16'));
-  assert.ok(y <= 40 && y >= 20, `lands at ${y}, just behind the CPU at 40`);
+  assert.ok(y <= 20 && y >= 8, `lands at ${y}, well behind the CPU at 40`);
+});
+
+test('a lob coming down to you: a flashing marker where to meet it; queued, you are run there and slam it out of the air', () => {
+  const emu = quietRally();
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  incoming(emu, 60, 50, 26, 28);
+  set16(emu, 'ball_vx', 4);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.tap('A');
+  for (let k = 0; k < 3; k++) emu.tap('A');  // half a meter by then: a slam
+  emu.idle(4);
+  assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
+  assert.ok(marker(emu) > 0, 'the marker shows');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the slam');
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_HEADER, 'met in the air');
+  assert.equal(emu.v('ball_power'), 1, 'a slam, on fire');
+  assert.equal(marker(emu), 0, 'the marker gone');
+  const low = quietRally();
+  incoming(low, 60, 50, 26, 28);
+  set16(low, 'ball_vx', 4);
+  low.write8(low.symbols.addr('ball_lob'), 1);
+  low.tap('A');
+  low.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the header');
+  assert.equal(at(low, 'pl_last_move', YOU), MOVE_HEADER, 'less than half a meter: still out of the air');
+  assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
+});
+
+test('a drop shot coming to you shows where to meet it, after its bounce too', () => {
+  const emu = quietRally();
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  placePlayer(emu, YOU, 80, 200);
+  incoming(emu, 80, 60, 24, 22);
+  emu.write8(emu.symbols.addr('ball_drop'), 1);
+  emu.idle(4);
+  assert.ok(marker(emu) > 0, 'shown in flight');
+  emu.until((e) => e.v('ball_landings') === 1, 120, 'the bounce');
+  emu.idle(4);
+  assert.ok(marker(emu) > 0, 'still shown off the bounce');
 });
 
 test('a lob sits up where it lands: slowed to a quarter, and a high bounce to turn and reach', () => {

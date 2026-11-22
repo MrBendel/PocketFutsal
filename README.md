@@ -61,6 +61,7 @@ the title switches between one set and the best of three.
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
+| A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and slam it out of the air |
 | A or B again while ready | Tap for more power |
 | LEFT / RIGHT while ready | Angle it that way; neutral is straight on (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short |
