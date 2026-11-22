@@ -335,6 +335,33 @@ test('a drop shot coming to you shows where to meet it, after its bounce too', (
   assert.ok(marker(emu) > 0, 'still shown off the bounce');
 });
 
+test('bursts: an impact star off a slam, dust off a slide, sparks off the net', () => {
+  const oam = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 20);
+  const VFX = { SLAM: 0, FIRE: 1, DUST: 2, SPARK: 3 };
+  let emu = quietRally();
+  incoming(emu, 60, 50, 26, 28);
+  set16(emu, 'ball_vx', 4);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.tap('A');
+  for (let k = 0; k < 3; k++) emu.tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 120, 'the slam');
+  assert.equal(emu.v('vfx_kind'), VFX.SLAM);
+  emu.idle(3);
+  assert.ok(oam(emu) > 0 || emu.read8(emu.symbols.addr('shadow_OAM') + 4 * 21) > 0, 'drawn');
+  emu.idle(20);
+  assert.equal(emu.v('vfx_kind'), 255, 'over');
+  emu = quietRally();
+  ballAt(emu, 112, 150, 0, 0, 48);
+  emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
+  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 40, 'the slide');
+  assert.equal(emu.v('vfx_kind'), VFX.DUST);
+  emu = quietRally();
+  emu.write8(emu.symbols.addr('last_touch'), YOU);
+  ballAt(emu, 80, 130, 4, 0, -48);
+  emu.until((e) => e.v('ball_netted'), 20, 'the net');
+  assert.equal(emu.v('vfx_kind'), VFX.SPARK);
+});
+
 test('a lob sits up where it lands: slowed to a quarter, and a high bounce to turn and reach', () => {
   const emu = quietRally();
   incoming(emu, 80, 120, 20, 20);

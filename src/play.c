@@ -31,6 +31,8 @@
 #include "game.h"
 #include "pitch.h"
 #include "play_hud.h"
+#include "vfx.h"
+#include "proj.h"
 #include "hud.h"
 #include "sprites.h"
 #include "players.h"
@@ -160,6 +162,7 @@ int16_t meet_x[2], meet_y[2];  // where each side means to meet the ball (court 
 uint8_t meet_out[2];  // the ball's landing out: that side lets it go
 uint8_t ball_flight;    // counts each change in the ball's flight (a touch, a bounce, the net)
 uint8_t flight_frame;   // the frame it last changed on
+int16_t ball_hx, ball_hwy;  // the ball's centre as last drawn: hardware x, hardware y + camera (for effects)
 uint8_t meet_slam[2];   // meet_* is the slam spot: a lob or a pop-up, met coming down
 uint8_t meet_flight[2]; // the flight each side's meet_* was traced for
 uint8_t predict_frame;  // the frame a trace last ran on
@@ -213,7 +216,6 @@ uint8_t hud_pending;   // redraw the HUD at the start of the next frame
 
 // The perspective, by depth from -16 to 239 (index depth + 16): the map row, and
 // the width scale /128. The same formula as tools/tile-art.mjs, worked out once.
-#define PROJ_OFS 16
 uint8_t proj_y[256];
 uint8_t proj_s[256];
 
@@ -255,18 +257,7 @@ static int16_t drag(int16_t v) {
 }
 
 // floor(a / b), b > 0, for the tables (once, at the start).
-static int32_t floordiv(int32_t a, int32_t b) {
-    return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
-
-static void proj_init(void) {
-    for (int16_t i = 0; i < 256; i++) {
-        int32_t fy = i - PROJ_OFS;
-        int32_t row = COURT_SY + floordiv((int32_t)PROJ_K0 * 448 * fy + (int32_t)(PROJ_K1 - PROJ_K0) * fy * fy, 114688L);  /* 448 * 256 */
-        proj_y[i] = (uint8_t)row;
-        proj_s[i] = (uint8_t)(PROJ_S0 + floordiv((int32_t)(128 - PROJ_S0) * fy, COURT_NEAR));
-    }
-}
+// (proj_init: proj.c.)
 
 #define PROJ_I(fy) ((uint8_t)((fy) + PROJ_OFS))
 // A court point -> screen x (px).
@@ -488,6 +479,9 @@ static void draw(void) {
     set_sprite_tile(OAM_BALL, S_BALL + ((ball_roll & 8) ? 2 : 0));
     set_sprite_prop(OAM_BALL, ball_power ? SPR_PAL_POWER : SPR_PAL_BALL);
     place(OAM_BALL, sx, sy - bz);
+    ball_hx = sx + 4;
+    ball_hwy = sy - bz + 4 + cam_y;
+    vfx_draw(cam_y);
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
@@ -616,6 +610,16 @@ static void launch(int16_t dx, int16_t dy, uint8_t speed) {
 }
 
 // A touch by player i (in their half: they're the holder). A third is a fault.
+// A burst effect at the ball; dust at a player's feet.
+static void burst(uint8_t kind) {
+    vfx_start(kind, ball_hx, ball_hwy);
+}
+
+static void dust(uint8_t i) {
+    int16_t py = PX(pl_y[i]);
+    vfx_start(VFX_DUST, proj_x(PX(pl_x[i]), py) + 8, (int16_t)proj_y[PROJ_I(py)] + 20);
+}
+
 static void new_flight(void) {
     ball_flight++;
     ball_trail = 0;
@@ -729,7 +733,8 @@ static void strike(uint8_t i, uint8_t move) {
     uint8_t scuff = c < SCUFF && phase == PHASE_RALLY;
     int16_t land = scuff ? other_y(i, -10) : aim_land;
     ball_plain();
-    if (move != MOVE_KICK && (was_pop || was_lob) && c >= CHARGE_MAX / 2) {
+    uint8_t slam = move != MOVE_KICK && (was_pop || was_lob) && c >= CHARGE_MAX / 2;
+    if (slam) {
         // A pop-up (or your own control) or a lob met in the air before it lands,
         // half charged: a slam, on fire, deep. (Less, it's a header: still out of the air.)
         ball_power = 1;
@@ -792,8 +797,10 @@ static void strike(uint8_t i, uint8_t move) {
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
     struck(i, move, frames);
+    if (slam) burst(VFX_SLAM);  // an impact star: big for a slam, small on fire
+    else if (ball_power) burst(VFX_FIRE);
     if (i == SIDE_YOU)
-        seen(move != MOVE_KICK && (was_pop || was_lob) && c >= CHARGE_MAX / 2 ? SEEN_SLAM :
+        seen(slam ? SEEN_SLAM :
              move == MOVE_HEADER ? SEEN_HEADER : move == MOVE_BICYCLE ? SEEN_BICYCLE : kind);
     // A trail behind it: red a power shot (or anything on fire), blue a curve;
     // longer the more charged. Not a scuff, a lob or a drop shot.
@@ -840,6 +847,7 @@ static void control(uint8_t i) {
 
 static void knock_down(uint8_t i) {
     new_flight();
+    dust(i);
     // On fire, met unready or at full stretch: down they go, and it goes on, slowed.
     pl_move[i] = MOVE_DOWN;
     pl_move_timer[i] = DOWN_FRAMES;
@@ -864,6 +872,7 @@ static void slide(uint8_t i, int8_t vx, int8_t vy) {
     pl_move[i] = MOVE_SLIDE;
     pl_move_timer[i] = SLIDE_FRAMES;
     unready(i);
+    dust(i);
     sfx_play(SFX_CATCH);
 }
 
@@ -1244,6 +1253,7 @@ static void ball_update(void) {
             ball_curve_t = 0;
             ball_netted = 1;
             new_flight();
+            burst(VFX_SPARK);
             sfx_play(SFX_BOARD);
         } else {
             // Over: the other side's ball now, their two touches and one bounce.
@@ -1306,6 +1316,7 @@ void play_enter(void) BANKED {
     banked_bkg_data(SCENE_TILES, PITCH_TILE_COUNT, pitch_tiles, BANK(pitch));
     banked_bkg_data((uint8_t)T_METER, HUD_TILE_COUNT, hud_tiles, BANK(hud));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
+    vfx_load();
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     proj_init();

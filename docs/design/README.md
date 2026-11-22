@@ -145,6 +145,11 @@ slammed (the Captain Tsubasa feel).
   if it's gone over you), on fire; with less, a header, still out of the air. A drop
   shot gets the marker too, off its bounce as well, and hops higher (about 11 px).
   The CPU taps hard against a ball on fire, so a slam can be met clean.
+- **Bursts** (2026-11-22): an impact star where a slam is met (big) or a strike goes on
+  fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
+  BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
+  the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
+  20-27, a row of sprites placed a frame at most (src/vfx.c).
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it
