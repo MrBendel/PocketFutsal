@@ -28,6 +28,17 @@ B bursts; both defensive actions have a cooldown. When your teammate carries,
 B calls for a pass. D-pad moves and left/right aims shots. AI positioning and
 match balance still need playtesting.
 
+The 2v2 gameplay pass adds acceleration, braking and momentum when reversing.
+A slide has a short crouch, then commits feet-first to its launch direction;
+it steals only when the foot reaches a low ball. Passes and shots travel on
+ballistic arcs, with a shadow marking their ground position. High deliveries
+clear ground tackles, and a receiver controls the ball as it descends.
+
+Teammates run ahead into the opposite lane and continue their run after passing.
+Passes lead moving receivers. Try a one-two: **B to pass, run into space, B to
+call for the return, then A to finish**. AI defenders have a brief reaction delay
+and commit to tackles, so changing direction can create an opening.
+
 The original futnet mode and its tests remain active. Futsal logic and watchable
 state live in `src/futsal.c` and `src/futsal.h`, with `fs_` prefixes for its state.
 Both modes share the graphics, sprite assets, build and emulator tooling.

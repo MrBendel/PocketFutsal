@@ -384,7 +384,7 @@ static void place(uint8_t n, int16_t x, int16_t y) {
 // point under its feet, or under the middle of it lying.
 static void draw_player(uint8_t i, uint8_t tile, uint8_t lie, int16_t sx, int16_t sy, uint8_t pal, uint8_t flip) {
     uint8_t n = i ? (ball_oam == 8 ? 4 : 5) : (ball_oam ? 0 : 1);
-    gfx_actor(n, tile, lie, sx, sy, pal, flip);
+    gfx_actor(n, tile, lie, sx, sy, pal | S_BANK, flip);
 }
 
 // The ball's trail: where it was 4, 8, 12 and 16 frames ago, smaller and dimmer

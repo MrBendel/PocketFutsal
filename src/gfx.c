@@ -209,27 +209,16 @@ void gfx_player_shadow(uint8_t first, int16_t x, int16_t y) {
     move_sprite(first + 1, (uint8_t)(x + 8), ground_y);
 }
 
-// Write each actor's contiguous shadow-OAM block through one pointer. This
-// avoids repeated sprite-index multiplication and per-column function calls.
-void gfx_actor(uint8_t first, uint8_t tile, uint8_t wide, int16_t x, int16_t y, uint8_t pal, uint8_t flip) {
-    volatile OAM_item_t *o = &shadow_OAM[first];
-    pal |= S_BANK;
-    if (flip) pal |= S_FLIPX;
-    o[0].prop = pal; o[1].prop = pal; o[2].prop = pal;
-    if (wide) {
-        o[0].tile = tile + (flip ? 4 : 0); o[1].tile = tile + 2;
-        o[2].tile = tile + (flip ? 0 : 4);
-        uint8_t visible = y >= -1 && y <= 159;
-        o[0].y = o[1].y = o[2].y = visible ? (uint8_t)(y + 1) : 0;
-        o[0].x = (uint8_t)(x - 4); o[1].x = (uint8_t)(x + 4); o[2].x = (uint8_t)(x + 12);
-        o[3].y = 0;
-    } else {
-        uint8_t l = flip ? tile + 4 : tile, r = flip ? tile : tile + 4;
-        o[0].tile = l; o[1].tile = l + 2; o[2].tile = r; o[3].tile = r + 2;
-        o[3].prop = pal;
-        o[0].x = o[1].x = (uint8_t)x;
-        o[2].x = o[3].x = (uint8_t)(x + 8);
-        o[0].y = o[2].y = y >= 7 && y <= 167 ? (uint8_t)(y - 7) : 0;
-        o[1].y = o[3].y = y >= -9 && y <= 151 ? (uint8_t)(y + 9) : 0;
-    }
+// GBDK's assembly metasprite renderer writes the actor block without C's
+// repeated pointer arithmetic. Tile order stays identical to the original ABI.
+static const metasprite_t actor_right[]={{0,0,0,0},{16,0,2,0},{-16,8,4,0},{16,0,6,0},METASPR_TERM};
+static const metasprite_t actor_left[]={{0,0,4,0},{16,0,6,0},{-16,8,0,0},{16,0,2,0},METASPR_TERM};
+static const metasprite_t actor_slide_right[]={{0,0,0,0},{0,8,2,0},{0,8,4,0},METASPR_TERM};
+static const metasprite_t actor_slide_left[]={{0,0,4,0},{0,8,2,0},{0,8,0,0},METASPR_TERM};
+void gfx_actor(uint8_t first,uint8_t tile,uint8_t wide,int16_t x,int16_t y,uint8_t pal,uint8_t flip){
+    const metasprite_t *pose;
+    if(flip)pal|=S_FLIPX;
+    if(wide){pose=flip?actor_slide_left:actor_slide_right;x-=4;y++;shadow_OAM[first+3].y=0;}
+    else{pose=flip?actor_left:actor_right;y-=7;}
+    move_metasprite_ex(pose,tile,pal,first,(uint8_t)x,(uint8_t)y);
 }
