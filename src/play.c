@@ -79,6 +79,8 @@
 #define CHIP_LIFT 56      // a lob: about 32 px up, 37 frames in the air
 #define POP_LIFT 64       // a pop-up: about 43 px up, 42 frames
 #define GRAVITY 3
+#define BOUNCE_MIN 30     // a first bounce gets up at least this: about 9 px, 20 frames
+#define DROP_HOP 24       // a drop shot's: about 6 px, 16 frames
 #define POWER_FADE 40     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 16           // a ball slower than this (|vx| + |vy|) is loose
 #define FIRE_MEET 24      // the charge it takes to meet a ball on fire cleanly
@@ -948,21 +950,26 @@ static void ball_update(void) {
             ball_serve = 0;
         }
     }
-    // In the air: gravity, and a bounce as it lands. A drop shot barely bounces;
-    // a pop-up can only be slammed before it lands.
+    // In the air: gravity, and a bounce as it lands: three quarters as high again.
+    // The first bounce in a half always gets up a playable height (a futnet ball
+    // bounces over half a metre); a drop shot's only just. A pop-up can only be
+    // slammed before it lands.
     if (ball_z || ball_vz) {
         ball_vz -= GRAVITY;
         ball_z += ball_vz;
         if (ball_z <= 0) {
+            int16_t up = (-ball_vz * 3) >> 2;
+            uint8_t first = !ball_landings;
             ball_z = 0;
             ball_pop = 0;
             if (ball_drop) {
                 ball_drop = 0;
-                ball_vz = (-ball_vz) >> 2;
-                if (ball_vz < 8) ball_vz = 8;
+                up = (-ball_vz) >> 2;
+                if (up < DROP_HOP) up = DROP_HOP;
                 ball_vx >>= 1;
                 ball_vy >>= 1;
-            } else ball_vz = ball_vz < -8 ? (-ball_vz) >> 1 : 0;
+            } else if (first && up < BOUNCE_MIN) up = BOUNCE_MIN;
+            ball_vz = up > 8 ? up : 0;
             if (phase == PHASE_RALLY && !goal_timer) landed();
         }
     }

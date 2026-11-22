@@ -325,6 +325,20 @@ test('barely charged, a strike is scuffed: it never gets over, and it\'s the CPU
   assert.equal(pointWithin(emu, 80), CPU);
 });
 
+test('the first bounce in your half always gets up where you can play it, even off a low ball or a drop shot', () => {
+  for (const drop of [0, 1]) {
+    const emu = quietRally();
+    ballAt(emu, 80, 150, 1, 0, 40);  // skimming in, barely off the ground
+    set16(emu, 'ball_vz', -4);
+    emu.write8(emu.symbols.addr('ball_drop'), drop);
+    emu.until((e) => e.v('ball_landings') === 1, 20, 'the bounce');
+    let top = 0;
+    for (let k = 0; k < 12; k++) top = Math.max(top, px(emu.idle(1).v('ball_z', 'i16')));
+    assert.equal(emu.v('goal_timer'), 0, 'not dead');
+    assert.ok(top >= (drop ? 5 : 8), `${drop ? 'a drop shot' : 'a low ball'} gets ${top} px up`);
+  }
+});
+
 test('a second bounce in a half is the other side\'s point', () => {
   const emu = quietRally();
   emu.write8(emu.symbols.addr('last_touch'), YOU);
