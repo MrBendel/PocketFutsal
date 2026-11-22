@@ -121,8 +121,12 @@ slammed (the Captain Tsubasa feel).
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.)
+- **B then A: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **A then B: drop shot**,
+  dying just past halfway. (Mario Tennis has these the other way round.) The second
+  button arms it for 24 frames (about 0.4 s), so press it just before the ball arrives;
+  struck later it's the curve or the power shot again (2026-11-22, from the playtest:
+  "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **No distance limits** (2026-11-22, from the playtest): you're run to the ball from
@@ -134,6 +138,18 @@ slammed (the Captain Tsubasa feel).
   A slide that gets there pops the ball up, and you're down a short while; miss and
   you're down longer. (Measured with build/scratch/misses.mjs: balls getting past within
   30 px of a queued player went from 32 to 15 in seven matches.)
+- **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
+  of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
+  your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
+  there; met in the air with half a meter it's a **slam** (a header, or a bicycle kick
+  if it's gone over you), on fire; with less, a header, still out of the air. A drop
+  shot gets the marker too, off its bounce as well, and hops higher (about 11 px).
+  The CPU taps hard against a ball on fire, so a slam can be met clean.
+- **Bursts** (2026-11-22): an impact star where a slam is met (big) or a strike goes on
+  fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
+  BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
+  the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
+  20-27, a row of sprites placed a frame at most (src/vfx.c).
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three quarters of a meter is returned clean; less, and it

@@ -47,6 +47,7 @@
 // match is one set, or the best of three (match_sets, chosen on the title).
 #define SET_POINTS 11
 #define SET_CAP 15
+#define GOAL_FRAMES 110  // a point's celebration, frames
 
 // The rules of the rally (futnet singles), and how a point was won (point_reason):
 // - two touches a side (both yours, one after the other if you like), one bounce;
