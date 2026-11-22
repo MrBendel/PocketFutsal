@@ -29,8 +29,9 @@ extracted on first build.
 ## How to play
 
 You're blue, at the bottom, defending the near goal; the CPU is red, at the top. You
-each keep to your own half, like tennis. The ball is always loose: you strike it
-rather than carry it, and a goal is a point.
+each keep to your own half, over a low net, like tennis (or futnet). The ball is always
+loose: you strike it rather than carry it. A strike has to clear the net and land in
+their half; a second bounce there is your point, and so is a goal.
 
 | Button | What it does |
 |---|---|
@@ -39,7 +40,7 @@ rather than carry it, and a goal is a point.
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
 | A or B again while ready | Tap for more power |
-| LEFT / RIGHT as the strike goes | Aim at that corner of the goal |
+| LEFT / RIGHT while ready | Aim at that corner of the goal (it sticks) |
 | START | Pause |
 
 Press A or B once the ball is coming your way: you plant, and the strike charges as you

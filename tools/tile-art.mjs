@@ -32,6 +32,7 @@ const COURT_X0 = 8, COURT_X1 = 152, CX = 80;
 const FAR = 0, NEAR = 224, HALF = 112;
 const GOAL_X0 = 32, GOAL_X1 = 128;
 const CROSSBAR = 16;     // px high
+const NET_H = 6;         // px: the low net across halfway (src/game.h)
 const COURT_SY = 32;     // the far goal line's map row, in px
 const PROJ_K0 = 92, PROJ_K1 = 164;  // rows per depth unit, /256, at the far and near lines
 const PROJ_S0 = 111;     // the width scale at the far line, /128 (128 at the near one)
@@ -101,6 +102,16 @@ function drawCourt() {
       last = x;
     }
   }
+  // The low net across halfway (futnet): NET_H px high, a dark mesh under a white
+  // tape, a post at each end.
+  const hy = projY(HALF), hx0 = projX(COURT_X0 - 5, HALF), hx1 = projX(COURT_X1 + 4, HALF);
+  for (let y = hy - NET_H; y < hy; y++) {
+    for (let x = hx0; x <= hx1; x++) {
+      if (y === hy - NET_H) plot(x, y, C_LINE);
+      else if ((x + y) % 2 === 0) plot(x, y, C_FLOOR);
+    }
+  }
+  for (let y = hy - NET_H - 2; y <= hy; y++) plot(hx0, y, C_LINE), plot(hx1, y, C_LINE);
   // The far goal: posts and crossbar standing up off the line, the net behind them.
   const fl = projY(FAR), fx0 = projX(GOAL_X0, FAR), fx1 = projX(GOAL_X1, FAR);
   for (let y = fl - CROSSBAR - 4; y < fl; y++) {

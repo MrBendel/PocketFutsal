@@ -75,8 +75,18 @@ slammed (the Captain Tsubasa feel).
   on fire. A slam met with three quarters of a meter is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
 - **Unready**, the ball pops up off you (a ball on fire knocks you down).
-- **The court**: each goal is two thirds of its back line; boards round the rest, and
-  above the crossbar, so the ball only stops for a goal.
+- **The net and the bounce** (decided 2026-11-21, after the first playtest: the ball
+  went dead in play): tennis rules over a low net (futnet, football-tennis, is a real
+  sport). A 6 px net across halfway. Every strike arcs, to come down at a depth set by
+  its charge (deeper the more charged), so the ball is in the air with its shadow under
+  it. Landing first on the striker's own side (scuffed, or off the net) is the other
+  side's point; a second bounce, or a ball that dies, is the striker's. A strike with
+  almost no meter (under 4: readied at the last moment) is scuffed into the net.
+- **The court**: each goal is two thirds of its back line, and into it is a point
+  straight away; boards round the rest, and above the crossbar.
+- **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
+- **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
+  meter fills.
 - **Serve**: the side that conceded serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT.
 - **Scoring**: a goal is a point. First to 7, by 2.
@@ -86,7 +96,8 @@ slammed (the Captain Tsubasa feel).
   halfway, drops it short if you're back on your line, curves one time in four, and aims
   away from you. Same slides and pop-ups as you. A little slower than you.
 - **Balance so far** (build/scratch/sim2.mjs, a bot that re-reads the ball every 12
-  frames): close matches, 1,300-2,500 frames a point. Not yet tested by hand.
+  frames): with the net, points take 400-600 frames, most won on a second bounce; the
+  CPU beats the bot (which is slow to get back for deep balls).
 
 ## v0.1 (2026-11-21): first playable (replaced)
 

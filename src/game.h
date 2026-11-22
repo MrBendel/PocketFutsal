@@ -25,6 +25,7 @@
 #define GOAL_X0 32     // the goal mouths, between the posts: two thirds of the line
 #define GOAL_X1 128
 #define CROSSBAR 16    // px: a ball higher than this hits the boards above the goal
+#define NET_H 6        // px: the low net across halfway (futnet); lower than this, it's in the net
 
 // The perspective (tools/tile-art.mjs projY, projS).
 #define COURT_SY 32    // the far goal line's map row, px
@@ -40,6 +41,13 @@
 #define NOBODY 0xFF
 
 #define WIN_POINTS 7  // first to seven, by two
+
+// How a point was won (point_reason). Tennis rules over a low net, plus goals: a
+// strike must clear the net and land in the other half; a second bounce (or a ball
+// that dies) is the striker's point; into a goal is a point straight away.
+#define POINT_GOAL 0
+#define POINT_NET 1     // landed on the striker's own side first (often off the net)
+#define POINT_BOUNCE 2  // bounced twice, or died, in the other half
 
 // Strikes, readied before the ball arrives: A a power shot, straight where the
 // d-pad points; B a curve, bending in to the side the d-pad holds. B then A is a
@@ -86,7 +94,9 @@ extern uint8_t last_scorer;   // the side that scored last (NOBODY before the fi
 extern uint8_t server;        // the side serving this point
 extern uint8_t phase;         // PHASE_*
 extern uint8_t serve_timer;   // counts down before the server may toss (READY)
-extern uint8_t goal_timer;    // a goal's celebration counts down, then the serve
+extern uint8_t goal_timer;    // a point's celebration counts down, then the serve
+extern uint8_t point_reason;  // POINT_*: how the last point was won
+extern uint8_t ball_landings; // times the ball has landed since it was last touched
 extern uint8_t paused;
 extern uint8_t cam_y;         // the background's scroll, 0 .. CAM_MAX
 
@@ -102,6 +112,7 @@ extern uint8_t pl_move_timer[2];   // its pose shows while this counts down; no 
 extern uint8_t pl_shots[2];        // strikes this match
 extern uint8_t pl_last_move[2];    // the last strike's MOVE_*, for the tests
 extern uint8_t pl_taps[2];         // taps added to this charge
+extern uint8_t pl_aim[2];          // 0 left corner, 1 middle, 2 right: the last way held while planted
 extern int8_t pl_slide_vx[2], pl_slide_vy[2];  // a slide's step a frame
 extern int16_t cpu_tx, cpu_ty;     // where the CPU is heading (court px)
 extern uint8_t cpu_aim;            // its next aim: 0 left corner, 1 middle, 2 right

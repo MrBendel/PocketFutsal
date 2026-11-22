@@ -129,6 +129,7 @@ export const CHARGE_MAX = 32, TAP_CHARGE = 3, TAP_MAX = 8;
 export const MOVE_NONE = 0, MOVE_KICK = 1, MOVE_VOLLEY = 2, MOVE_HEADER = 3, MOVE_BICYCLE = 4, MOVE_SLIDE = 5,
   MOVE_DOWN = 6, MOVE_BLOCK = 7;
 export const PHASE_SERVE = 0, PHASE_TOSS = 1, PHASE_RALLY = 2;
+export const POINT_GOAL = 0, POINT_NET = 1, POINT_BOUNCE = 2;
 // The court (flat coordinates, px).
 export const COURT_FAR = 0, COURT_NEAR = 224, HALFWAY = 112, CENTER_X = 80;
 /** Sixteenths of a pixel -> pixels. */

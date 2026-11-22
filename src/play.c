@@ -71,15 +71,15 @@
 #define POWER_SPEED 96    // a ball on fire
 #define DRIVE_SPEED 56    // A: + the charge
 #define CURVE_SPEED 50    // B: + the charge
-#define CURVE_OFS 28      // px a curve bends by the time it gets there
+#define CURVE_OFS 44      // px a curve bends by the time it gets there
 #define HEADER_SPEED 32   // + half the charge
 #define CHIP_LIFT 56      // a lob: about 32 px up, 37 frames in the air
-#define DROP_LIFT 30      // a drop shot: about 9 px up, 20 frames
 #define POP_LIFT 64       // a pop-up: about 43 px up, 42 frames
 #define GRAVITY 3
 #define POWER_FADE 40     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 16           // a ball slower than this (|vx| + |vy|) is loose
 #define FIRE_MEET 24      // the charge it takes to meet a ball on fire cleanly
+#define SCUFF 4           // a strike with less charge than this is scuffed into the net
 #define KICK_FRAMES 14    // a strike's pose; no touches meanwhile
 #define BICYCLE_FRAMES 24
 #define BLOCK_FRAMES 16
@@ -90,7 +90,8 @@
 #define GOAL_FRAMES 110
 #define BALL_R 3          // px: the ball's radius on the court
 #define HOME_CPU 24       // the CPU's depth, waiting
-#define CPU_PLANT 72      // px: the CPU readies when the ball's this close and it's in place
+#define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
+#define CPU_LATE 56       // px: and this close, in place or not
 #define NET_BACK 10       // px: the back of a goal's net behind its line
 
 uint16_t game_seed;
@@ -103,6 +104,8 @@ uint8_t server;
 uint8_t phase;
 uint8_t serve_timer;
 uint8_t goal_timer;
+uint8_t point_reason;
+uint8_t ball_landings;
 uint8_t paused;
 uint8_t cam_y;
 
@@ -117,6 +120,7 @@ uint8_t pl_move_timer[2];
 uint8_t pl_shots[2];
 uint8_t pl_last_move[2];
 uint8_t pl_taps[2];
+uint8_t pl_aim[2];
 int8_t pl_slide_vx[2], pl_slide_vy[2];
 int16_t cpu_tx, cpu_ty;
 uint8_t cpu_aim;
@@ -215,8 +219,11 @@ static void hud_draw(void) {
         return;
     }
     if (note_timer) {
-        if (goal_timer) win_text(2, 0, last_scorer == SIDE_YOU ? "GOAL! YOU SCORE" : "GOAL! CPU SCORES");
-        else win_text(5, 0, server == SIDE_YOU ? "YOU SERVE" : "CPU SERVES");
+        uint8_t you = last_scorer == SIDE_YOU;
+        if (!goal_timer) win_text(5, 0, server == SIDE_YOU ? "YOU SERVE" : "CPU SERVES");
+        else if (point_reason == POINT_GOAL) win_text(2, 0, you ? "GOAL! YOU SCORE" : "GOAL! CPU SCORES");
+        else if (point_reason == POINT_NET) win_text(3, 0, you ? "NET! POINT YOU" : "NET! POINT CPU");
+        else win_text(0, 0, you ? "2 BOUNCES! POINT YOU" : "2 BOUNCES! POINT CPU");
         return;
     }
     win_text(0, 0, "YOU");
@@ -249,6 +256,7 @@ static void meter_update(void) {
 static void unready(uint8_t i) {
     pl_shot[i] = SHOT_NONE;
     pl_charge[i] = pl_hold[i] = pl_taps[i] = 0;
+    pl_aim[i] = 1;
 }
 
 static void ball_plain(void) {
@@ -360,8 +368,15 @@ static void draw(void) {
         else if (pl_vx[i] || pl_vy[i]) f = (frame_count & 8) ? F_RUN_A : F_RUN_B;
         uint8_t tile = lie ? T_LYING : (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
         uint8_t pal = i == SIDE_YOU ? SPR_PAL_YOU : SPR_PAL_CPU;
-        // A full meter: flashing, the fire is ready.
-        if (pl_charge[i] == CHARGE_MAX && (frame_count & 4)) pal = SPR_PAL_POWER;
+        if (pl_shot[i]) {
+            // Charging: flashing through white and fire, faster as the meter
+            // fills (every 8 frames, 4 from half, 2 full).
+            uint8_t c = pl_charge[i];
+            uint8_t step = (uint8_t)(c == CHARGE_MAX ? frame_count >> 1 : c >= CHARGE_MAX / 2 ? frame_count >> 2 : frame_count >> 3);
+            step %= 3;
+            if (step == 1) pal = SPR_PAL_FLASH;
+            else if (step == 2 && c >= CHARGE_MAX / 2) pal = SPR_PAL_POWER;
+        }
         int16_t py = PX(pl_y[i]);
         int16_t sx = proj_x(PX(pl_x[i]), py);
         int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - lift;
@@ -423,6 +438,7 @@ static void ready(uint8_t i, uint8_t b) {
     if (!s) {
         unready(i);
         pl_shot[i] = b ? SHOT_CURVE : SHOT_POWER;
+        if (i == SIDE_YOU) pl_aim[i] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
         return;
     }
     if (s == SHOT_POWER && b) {
@@ -455,6 +471,7 @@ static void launch(int16_t dx, int16_t dy, uint8_t speed) {
 
 static void struck(uint8_t i, uint8_t move, uint8_t frames) {
     last_touch = i;
+    ball_landings = 0;
     phase = PHASE_RALLY;
     if (move != MOVE_SLIDE) {
         pl_face[i] = PX(ball_x) < PX(pl_x[i]);
@@ -466,44 +483,59 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
     pl_shots[i]++;
 }
 
+// Set ball_vz so the ball comes down at depth `land` (px): its time in the air t
+// is the distance over its speed, and from height z0 it lands after t frames
+// with vz = 1.5 t - z0 / t (gravity 3). Every strike arcs, so the ball is in the
+// air, its shadow under it, and clears the net if it's meant to.
+static void arc(int16_t land) {
+    int16_t vy = abs16(ball_vy);
+    if (!vy) vy = 1;
+    int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 6, 80);
+    ball_vz = ((3 * t) >> 1) - ball_z / t;
+}
+
 // A clean strike: the readied shot, shaped by the ball's height (move).
 static void strike(uint8_t i, uint8_t move) {
     uint8_t was_pop = ball_pop;
     int16_t bx = PX(ball_x), by = PX(ball_y);
-    // Toward the far goal: its middle, or a corner if LEFT or RIGHT is held (the
-    // CPU picks its corner as it readies).
+    // Toward the far goal: its middle, or a corner: the way you're holding, or
+    // last held while planted (the CPU picks its corner as it readies).
     int16_t ty = i == SIDE_YOU ? COURT_FAR - 8 : COURT_NEAR + 8;
-    uint8_t aim = 1;
+    uint8_t aim = pl_aim[i];
     if (i == SIDE_YOU) {
         if (joy & J_LEFT) aim = 0;
         else if (joy & J_RIGHT) aim = 2;
     } else aim = cpu_aim;
-    int16_t tx = aim == 0 ? GOAL_X0 + 6 : aim == 2 ? GOAL_X1 - 6 : CENTER_X;
+    int16_t tx = aim == 0 ? GOAL_X0 + 4 : aim == 2 ? GOAL_X1 - 4 : CENTER_X;
     uint8_t c = pl_charge[i], kind = pl_shot[i], speed, frames = KICK_FRAMES;
     if (phase != PHASE_RALLY && c == CHARGE_MAX) c--;  // no serves on fire
     uint8_t fire = c == CHARGE_MAX;
+    // Where it comes down: deeper the more it's charged. Barely charged at all,
+    // it's scuffed: it comes down on your own side, short of the net.
+    int16_t land = c < SCUFF && phase == PHASE_RALLY ? other_y(i, -10) : other_y(i, 24 + c + (c >> 1));
     ball_plain();
     if (was_pop && move != MOVE_KICK) {
-        // A pop-up met in the air: a slam, on fire, straight and driven down.
+        // A pop-up met in the air: a slam, on fire, straight and deep.
         ball_power = 1;
-        ball_vz = move == MOVE_BICYCLE ? 4 : -6;
         if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
         else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
         launch(tx - bx, ty - by, POWER_SPEED);
+        arc(other_y(i, 64));
     } else if (move == MOVE_HEADER || move == MOVE_BICYCLE) {
         // In the air: always straight.
         if (move == MOVE_BICYCLE && c >= CHARGE_MAX / 2) {
             speed = POWER_SPEED;
             ball_power = 1;
         } else speed = move == MOVE_HEADER ? HEADER_SPEED + (c >> 1) : DRIVE_SPEED + 16 + (c >> 1);
-        ball_vz = move == MOVE_HEADER ? -6 : 4;
         frames = move == MOVE_HEADER ? KICK_FRAMES + 4 : BICYCLE_FRAMES;
         launch(tx - bx, ty - by, speed);
+        arc(move == MOVE_HEADER ? other_y(i, 28 + (c >> 1)) : other_y(i, 56));
     } else if (kind == SHOT_LOB || kind == SHOT_DROP) {
         // Placed: a lob drops just behind the other player, a drop shot just past
-        // halfway. Their time in the air is known, so the speed is the distance
-        // over it (7/16 of it a frame for a lob, 4/5 for a drop shot).
-        int16_t land, dist;
+        // halfway. A lob's time in the air is known, so its speed is the distance
+        // over it (7/16 of it a frame); a drop shot goes at 4/5 of the distance a
+        // frame (about 20 frames), up to 64, lifted to come down there.
+        int16_t dist;
         if (kind == SHOT_LOB) {
             land = PX(pl_y[i ^ 1]) + (i == SIDE_YOU ? -12 : 12);
             dist = abs16(land - by);
@@ -513,10 +545,10 @@ static void strike(uint8_t i, uint8_t move) {
             land = other_y(i, 18);
             dist = abs16(land - by);
             speed = (uint8_t)clamp16((dist * 4) / 5, 12, 64);
-            ball_vz = DROP_LIFT;
             ball_drop = 1;
         }
         launch(tx - bx, land - by, speed);
+        if (kind == SHOT_DROP) arc(land);  // its speed is capped: the lift makes up the distance
     } else if (kind == SHOT_CURVE) {
         // Set off CURVE_OFS px wide of the target and bent back in: a steady push
         // across for its time in flight, t frames (at its starting speed: the ball
@@ -526,18 +558,18 @@ static void strike(uint8_t i, uint8_t move) {
         int8_t side = aim == 0 ? -1 : aim == 2 ? 1 : PX(pl_x[i]) < CENTER_X ? 1 : -1;
         speed = fire ? POWER_SPEED - 16 : CURVE_SPEED + c;
         ball_power = fire;
-        ball_vz = move == MOVE_VOLLEY ? 6 : 8;
         int16_t t = clamp16((abs16(ty - by) << 4) / speed, 16, 90);
         int16_t push = clamp16((384 * CURVE_OFS) / (t * t), 1, 60);
         ball_curve = side > 0 ? (int8_t)push : -(int8_t)push;
         ball_curve_t = (uint8_t)t;
         launch(tx - side * CURVE_OFS - bx, ty - by, speed);
+        arc(land);
     } else {
-        // Power: straight and low.
+        // Power: straight, a low fast arc.
         speed = fire ? POWER_SPEED : DRIVE_SPEED + c + (move == MOVE_VOLLEY ? 8 : 0);
         ball_power = fire;
-        ball_vz = fire ? 0 : move == MOVE_VOLLEY ? 4 : 8;
         launch(tx - bx, ty - by, speed);
+        arc(land);
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
     struck(i, move, frames);
@@ -566,7 +598,6 @@ static void knock_down(uint8_t i) {
     ball_power = 0;
     ball_vx >>= 1;
     ball_vy >>= 1;
-    last_touch = i;
     sfx_play(SFX_PARRY);
 }
 
@@ -753,7 +784,7 @@ static void cpu_update(void) {
             }
             uint8_t there = abs16(tx - cx) <= 3 && abs16(ty - cy) <= 3;
             if (!pl_shot[SIDE_CPU]) {
-                if ((there && dist < CPU_PLANT) || (!loose && dist < 28)) cpu_ready();
+                if ((there && dist < CPU_PLANT) || (!loose && dist < CPU_LATE)) cpu_ready();
             } else if (!(frame_count & 7) && (rand() & 1)) {
                 ready(SIDE_CPU, pl_shot[SIDE_CPU] == SHOT_CURVE);  // a tap
             }
@@ -767,13 +798,27 @@ static void cpu_update(void) {
 }
 
 // --- the ball ---
-static void goal(uint8_t side) {
+static void point(uint8_t side, uint8_t reason) {
     score[side]++;
     last_scorer = side;
+    point_reason = reason;
     goal_timer = GOAL_FRAMES;
     ball_power = 0;
-    sfx_play(SFX_GOAL);
+    sfx_play(reason == POINT_GOAL ? SFX_GOAL : SFX_WHISTLE);
     note(GOAL_FRAMES);
+}
+
+// The ball has come down (tennis rules): first on the striker's own side, it
+// didn't get over (the other side's point); a second time, or dead, it's the
+// striker's.
+static void landed(void) {
+    uint8_t s = last_touch;
+    uint8_t half = PX(ball_y) < HALFWAY ? SIDE_CPU : SIDE_YOU;
+    if (!ball_landings && half == s) {
+        point(s ^ 1, POINT_NET);
+        return;
+    }
+    if (++ball_landings >= 2 || !ball_vz) point(s, POINT_BOUNCE);
 }
 
 static void board(void) {
@@ -797,8 +842,16 @@ static void ball_update(void) {
         ball_cacc &= 15;
     }
     int16_t x = ball_x + ball_vx, y = ball_y + ball_vy;
-    // In the air: gravity, and a bounce or two as it lands. A drop shot dies
-    // where it lands; a pop-up can only be slammed before it does.
+    // The net: crossing halfway lower than its top, it's stopped and drops back.
+    if ((PX(y) < HALFWAY) != (PX(ball_y) < HALFWAY) && ball_z < TO_SUB(NET_H)) {
+        y = ball_y;
+        ball_vy = -(ball_vy >> 2);
+        ball_vx >>= 1;
+        ball_curve_t = 0;
+        sfx_play(SFX_BOARD);
+    }
+    // In the air: gravity, and a bounce as it lands. A drop shot barely bounces;
+    // a pop-up can only be slammed before it lands.
     if (ball_z || ball_vz) {
         ball_vz -= GRAVITY;
         ball_z += ball_vz;
@@ -807,10 +860,12 @@ static void ball_update(void) {
             ball_pop = 0;
             if (ball_drop) {
                 ball_drop = 0;
-                ball_vz = 0;
-                ball_vx >>= 2;
-                ball_vy >>= 2;
-            } else ball_vz = ball_vz < -12 ? (-ball_vz) >> 1 : 0;
+                ball_vz = (-ball_vz) >> 2;
+                if (ball_vz < 8) ball_vz = 8;
+                ball_vx >>= 1;
+                ball_vy >>= 1;
+            } else ball_vz = ball_vz < -8 ? (-ball_vz) >> 1 : 0;
+            if (phase == PHASE_RALLY && !goal_timer) landed();
         }
     }
     if (!ball_z) {
@@ -834,8 +889,8 @@ static void ball_update(void) {
             if (py > COURT_NEAR + NET_BACK) y = TO_SUB(COURT_NEAR + NET_BACK), ball_vy = 0;
             if (PX(ball_z) > CROSSBAR - 2) ball_z = TO_SUB(CROSSBAR - 2), ball_vz = 0;
             if (!goal_timer) {
-                if (py < COURT_FAR - BALL_R) goal(SIDE_YOU);
-                else if (py > COURT_NEAR + BALL_R) goal(SIDE_CPU);
+                if (py < COURT_FAR - BALL_R) point(SIDE_YOU, POINT_GOAL);
+                else if (py > COURT_NEAR + BALL_R) point(SIDE_CPU, POINT_GOAL);
             }
         } else {
             y = py < HALFWAY ? TO_SUB(COURT_FAR + BALL_R) : TO_SUB(COURT_NEAR - BALL_R);
@@ -919,6 +974,7 @@ void play_update(void) BANKED {
             if (server == SIDE_YOU && !serve_timer) {
                 unready(SIDE_YOU);
                 pl_shot[SIDE_YOU] = b ? SHOT_CURVE : SHOT_POWER;
+                pl_aim[SIDE_YOU] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
                 phase = PHASE_TOSS;
                 ball_vz = TOSS_LIFT;
                 sfx_play(SFX_TOUCH);
@@ -926,6 +982,11 @@ void play_update(void) BANKED {
         } else if (pl_shot[SIDE_YOU] || can_ready(SIDE_YOU)) {
             ready(SIDE_YOU, b);
         }
+    }
+    // Planted (or serving), LEFT or RIGHT sets your aim, and it sticks.
+    if (pl_shot[SIDE_YOU]) {
+        if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
+        else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
     }
     int8_t dx = joy & J_RIGHT ? 1 : joy & J_LEFT ? -1 : 0;
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;

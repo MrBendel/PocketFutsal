@@ -91,7 +91,7 @@ void win_frame(uint8_t x, uint8_t y, uint8_t w, uint8_t h) BANKED;
 #define BG_PAL_UI 6
 // Sprite palettes, by what uses them (the palette is bits 0-2 of a sprite's flags).
 #define SPR_PAL_YOU 0     // your player: blue
-#define SPR_PAL_FLASH 1   // colors inverted, for a warning or a hit
+#define SPR_PAL_FLASH 1   // white: a player charging flashes through it
 #define SPR_PAL_CPU 2     // the CPU's player: red
                           // 3, 4: free
 #define SPR_PAL_BALL 5

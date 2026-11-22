@@ -45,6 +45,8 @@ static const uint16_t boards[4] = {FLOOR, C(64, 112, 200), C(24, 40, 96), LINE};
 #define INK C(24, 20, 32)
 static const uint16_t you[4] = {0, SKIN, C(56, 112, 248), INK};
 static const uint16_t cpu[4] = {0, SKIN, C(232, 48, 48), INK};
+// Charging: the player flashes through this (and the fire colors).
+static const uint16_t flash[4] = {0, C(255, 255, 255), C(255, 255, 208), C(112, 112, 160)};
 // The ball: white, grey patches; on fire after a power shot.
 static const uint16_t ball[4] = {0, C(255, 255, 255), C(96, 96, 112), INK};
 static const uint16_t power[4] = {0, C(255, 240, 120), C(255, 112, 24), C(176, 24, 16)};
@@ -59,6 +61,7 @@ void palettes_play(void) BANKED {
     set_bg(BG_PAL_UI, hud);  // the window: the HUD
     set_obj(SPR_PAL_YOU, you);
     set_obj(SPR_PAL_CPU, cpu);
+    set_obj(SPR_PAL_FLASH, flash);
     set_obj(SPR_PAL_BALL, ball);
     set_obj(SPR_PAL_POWER, power);
     set_obj(SPR_PAL_UI, marks);
