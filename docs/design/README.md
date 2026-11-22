@@ -155,6 +155,9 @@ slammed (the Captain Tsubasa feel).
   and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
   from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
   fades out at the bounce or the next touch.
+- **Shot label** (2026-11-22, a debugging aid: "I'm hitting lobs when I mean curves"): the
+  HUD says your shot where it says YOU: PWR, CRV, LOB or DRP while queued, then for a
+  second what went (HDR and BIK go straight, SLM a slam, POP a pop-up, CTL a control).
 - **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT, and must go over.
 - **CPU**: traces the ball's flight 12 frames a step (gravity and a bounce, not the curve,

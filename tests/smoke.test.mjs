@@ -241,6 +241,23 @@ test('a struck ball leaves a trail: red off A, blue off B, longer charged; it fa
   }
 });
 
+test('the HUD names your shot where it says YOU: queued, then what went', () => {
+  const emu = quietRally();
+  const label = (e) => e.v('shot_shown');
+  emu.idle(1);
+  assert.equal(label(emu), SHOT_NONE, 'YOU, nothing queued');
+  ballAt(emu, 80, 150, 0, 0, 30);
+  emu.tap('B');
+  assert.equal(label(emu), SHOT_CURVE, 'CRV');
+  emu.tap('A');
+  assert.equal(label(emu), SHOT_LOB, 'B then A: LOB');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 160, 'the lob');
+  emu.idle(1);
+  assert.equal(label(emu), SHOT_LOB, 'what went, for a moment');
+  emu.idle(70);
+  assert.equal(label(emu), SHOT_NONE, 'then YOU again');
+});
+
 test('B then A is a lob, dropping just behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);

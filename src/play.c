@@ -187,6 +187,19 @@ uint8_t ball_fall;  // counts frames in the air: gravity acts on 3 in 4
 uint8_t ball_roll;  // counts up as the ball rolls: its two frames
 
 uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
+// Your shot on the HUD, where it says YOU (a debugging aid): the one queued, or for a
+// moment after a strike what went (SEEN_*), else YOU.
+#define SEEN_POP 5
+#define SEEN_CONTROL 6
+#define SEEN_SLAM 7
+#define SEEN_HEADER 8
+#define SEEN_BICYCLE 9
+#define SEEN_FRAMES 60
+static const char seen_names[] = "YOUPWRCRVLOBDRPPOPCTLSLMHDRBIK";
+uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
+uint8_t shot_seen_t;  // frames left showing it
+uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
+static uint8_t shot_buf[3];
 uint8_t meter_buf[8];  // its tiles, queued to the window's map
 uint8_t note_timer;    // the HUD shows a note (GOAL!) while this counts down
 uint8_t hud_pending;   // redraw the HUD at the start of the next frame
@@ -301,6 +314,7 @@ static void hud_draw(void) {
     win_number(14, 0, score[SIDE_CPU], 2, 0);
     win_text(17, 0, "CPU");
     meter_shown = 0xFF;  // the meter's tiles were cleared: draw them again
+    shot_shown = 0xFF;
 }
 
 // The note's drawn at the start of the next frame (hud_pending): a point lands in
@@ -322,6 +336,26 @@ static void meter_update(void) {
         meter_buf[k] = T_METER + (m >= full ? 2 : m + 1 == full ? 1 : 0);
     }
     gfx_vram_copy(get_win_xy_addr(6, 0), meter_buf, 8, 0);
+}
+
+// Your shot's label, where it says YOU: queued to the window's map when it changes.
+static void seen(uint8_t what) {
+    shot_seen = what;
+    shot_seen_t = SEEN_FRAMES;
+}
+
+static void shot_label_update(void) {
+    if (paused || note_timer) return;
+    uint8_t k = pl_shot[SIDE_YOU];
+    if (shot_seen_t) {
+        shot_seen_t--;
+        if (!k) k = shot_seen;
+    }
+    if (k == shot_shown) return;
+    shot_shown = k;
+    const char *n = seen_names + (k << 1) + k;
+    for (uint8_t j = 0; j < 3; j++) shot_buf[j] = FONT_TILES + (uint8_t)(n[j] - ' ');
+    gfx_vram_copy(get_win_xy_addr(0, 0), shot_buf, 3, 0);
 }
 
 // --- setting up ---
@@ -758,6 +792,9 @@ static void strike(uint8_t i, uint8_t move) {
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
     struck(i, move, frames);
+    if (i == SIDE_YOU)
+        seen(was_pop && move != MOVE_KICK && c >= CHARGE_MAX / 2 ? SEEN_SLAM :
+             move == MOVE_HEADER ? SEEN_HEADER : move == MOVE_BICYCLE ? SEEN_BICYCLE : kind);
     // A trail behind it: red a power shot (or anything on fire), blue a curve;
     // longer the more charged. Not a scuff, a lob or a drop shot.
     if (!scuff && (ball_power || kind == SHOT_POWER || kind == SHOT_CURVE)) {
@@ -783,6 +820,7 @@ static void pop_up(uint8_t i, uint8_t move, uint8_t frames) {
     launch(tx - bx, land - by, (uint8_t)clamp16((dist * 3) >> 4, 4, 30));
     sfx_play(SFX_TOUCH);
     struck(i, move, frames);
+    if (i == SIDE_YOU) seen(SEEN_POP);
 }
 
 // Reached unready: a first touch, the ball up in front of you, to play again with
@@ -791,6 +829,7 @@ static void pop_up(uint8_t i, uint8_t move, uint8_t frames) {
 // &ball_vy, and passed struck() the address's low byte as i.)
 static void control(uint8_t i) {
     struck(i, MOVE_CONTROL, CONTROL_FRAMES);
+    if (i == SIDE_YOU) seen(SEEN_CONTROL);
     ball_plain();
     ball_vx = 0;
     ball_vy = last_touch == SIDE_YOU ? -2 : 2;  // 74 frames: 9 px ahead, still in reach
@@ -1330,5 +1369,6 @@ void play_update(void) BANKED {
     // it's busy already), one side a frame.
     want_predict((uint8_t)frame_count & 1);
     meter_update();
+    shot_label_update();
     draw();
 }
