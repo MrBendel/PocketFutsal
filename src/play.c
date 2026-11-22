@@ -103,6 +103,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 // other. Gravity is 3/4 SUB a frame each frame (3 frames in 4: ball_fall), so
 // speeds and lifts are half what they'd be at gravity 3: the same arcs, twice as long.
 #define POWER_SPEED 48    // a ball on fire
+#define GOLD_SPEED 56     // a gold slam
 #define DRIVE_SPEED 28    // A: + half the charge
 #define CURVE_SPEED 25    // B: + half the charge
 #define CURVE_OFS 44      // px a curve bends by the time it gets there
@@ -188,6 +189,7 @@ uint8_t cpu_idle;  // non-zero: the CPU's player stands still (tests, the playte
 int16_t ball_x, ball_y, ball_z;
 int16_t ball_vx, ball_vy, ball_vz;
 uint8_t ball_power;
+uint8_t ball_gold;    // a gold slam: on fire, and only a full meter meets it clean
 int8_t ball_curve;
 uint8_t ball_curve_t;
 int16_t ball_cacc;  // the curve's push, building up to whole SUBs of speed
@@ -199,7 +201,7 @@ uint8_t ball_trail;   // the trail behind it: 0 none, TRAIL_POWER red, TRAIL_CUR
 uint8_t trail_len;    // dots in it (2..4, by charge); shrinks to nothing once it's over
 uint8_t trail_n;      // frames recorded since the strike (older positions aren't its)
 uint8_t trail_i;      // the ring's newest entry
-uint8_t trail_blue;   // the last trail was a curve's (its color as it fades)
+uint8_t trail_pal;    // the last trail's palette (its color as it fades)
 int16_t trail_x[16], trail_y[16];  // where the ball was drawn, a frame each (y on the court, not the screen)
 uint8_t last_touch;
 uint8_t sets[2];
@@ -215,14 +217,14 @@ uint8_t ball_roll;  // counts up as the ball rolls: its two frames
 uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 // Your shot on the HUD, where it says YOU (a debugging aid): the one queued, or for a
 // moment after a strike what went (SEEN_*), else YOU.
-#define SEEN_POP 5
-#define SEEN_CONTROL 6
-#define SEEN_SLAM 7
-#define SEEN_HEADER 8
-#define SEEN_BICYCLE 9
-#define SEEN_SCUFF 10     // a strike with next to no charge: mishit, short of the net
+#define SEEN_POP 6
+#define SEEN_CONTROL 7
+#define SEEN_SLAM 8
+#define SEEN_HEADER 9
+#define SEEN_BICYCLE 10
+#define SEEN_SCUFF 11     // a strike with next to no charge: mishit, short of the net
 #define SEEN_FRAMES 60
-static const char seen_names[] = "YOUPWRCRVLOBDRPPOPCTLSLMHDRBIKMIS";
+static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMIS";
 uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
 uint8_t shot_seen_t;  // frames left showing it
 uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
@@ -348,7 +350,7 @@ static void unready(uint8_t i) {
 }
 
 static void ball_plain(void) {
-    ball_power = ball_curve = ball_curve_t = ball_pop = ball_drop = ball_lob = ball_dropped = 0;
+    ball_power = ball_gold = ball_curve = ball_curve_t = ball_pop = ball_drop = ball_lob = ball_dropped = 0;
     ball_trail = trail_len = 0;
     ball_cacc = 0;
 }
@@ -423,8 +425,9 @@ static void draw_trail(int16_t sx, int16_t wy) {
     if (trail_n < 16) trail_n++;
     if (!ball_trail && trail_len && !((uint8_t)frame_count & 1)) trail_len--;
     if (goal_timer) trail_len = 0;
-    uint8_t pal = ball_trail == TRAIL_CURVE || (!ball_trail && trail_blue) ? SPR_PAL_TRAIL_CURVE : SPR_PAL_TRAIL_POWER;
-    if (ball_trail) trail_blue = ball_trail == TRAIL_CURVE;
+    if (ball_trail)  // red, blue, or gold (the fire's)
+        trail_pal = ball_trail == TRAIL_CURVE ? SPR_PAL_TRAIL_CURVE : ball_trail == TRAIL_GOLD ? SPR_PAL_POWER : SPR_PAL_TRAIL_POWER;
+    uint8_t pal = trail_pal;
     for (uint8_t k = 0; k < TRAIL_MAX; k++) {
         uint8_t age = (k + 1) << 2, n = OAM_TRAIL + k;
         if (k >= trail_len || age >= trail_n) {
@@ -575,6 +578,11 @@ static void ready(uint8_t i, uint8_t b) {
             pl_aim[i] = joy & J_LEFT ? 0 : joy & J_RIGHT ? 2 : 1;
             pl_depth[i] = joy & J_UP ? 2 : joy & J_DOWN ? 0 : 1;
         }
+        return;
+    }
+    // A slam coming to you (its spot flashing): the other button makes it gold.
+    if (i == SIDE_YOU && meet_slam[i] && (ball_lob || ball_pop) && ((s == SHOT_POWER && b) || (s == SHOT_CURVE && !b))) {
+        pl_shot[i] = SHOT_GOLD;
         return;
     }
     // The other button arms a lob (B then A) or a drop shot (A then B), or keeps it
@@ -765,14 +773,17 @@ static void strike(uint8_t i, uint8_t move) {
     uint8_t slam = move != MOVE_KICK && (was_pop || was_lob) && c >= CHARGE_MAX / 2;
     if (slam) {
         // A pop-up (or your own control) or a lob met in the air before it lands,
-        // half charged: a slam, on fire, deep. (Less, it's a header: still out of the air.)
-        ball_power = 1;
-        if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
-        else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
+        // half charged: a slam, a jumping bicycle kick, on fire, deep. By the button:
+        // A red (straight), B blue (bending, the curve's way), both gold (straight,
+        // faster still, and only a full meter meets it clean). Anything else queued
+        // (a lob, a drop shot) slams red. (Less charged, it's a header: still out of the air.)
+        fire = 1;
+        move = MOVE_BICYCLE;
+        frames = BICYCLE_FRAMES;
         land = other_y(i, 64);
-        launch(tx - bx, land - by, POWER_SPEED);
-        arc(land, 1);
-    } else if (move == MOVE_HEADER || move == MOVE_BICYCLE) {
+        if (kind != SHOT_CURVE && kind != SHOT_GOLD) kind = SHOT_POWER;
+    } else if (kind == SHOT_GOLD) kind = SHOT_POWER;  // gold only as a slam
+    if (!slam && (move == MOVE_HEADER || move == MOVE_BICYCLE)) {
         // In the air: always straight. On fire at a full meter (a bicycle kick, at half).
         if (fire || (move == MOVE_BICYCLE && c >= CHARGE_MAX / 2)) {
             speed = POWER_SPEED;
@@ -808,7 +819,7 @@ static void strike(uint8_t i, uint8_t move) {
         // (tuned: build/scratch/curve.mjs); t is arc()'s, the push from a table
         // (two divisions fewer on a busy frame).
         int8_t side = aim == 0 ? -1 : aim == 2 ? 1 : PX(pl_x[i]) < CENTER_X ? 1 : -1;
-        speed = fire ? POWER_SPEED - 8 : CURVE_SPEED + (c >> 1);
+        speed = slam ? POWER_SPEED : fire ? POWER_SPEED - 8 : CURVE_SPEED + (c >> 1);
         ball_power = fire;
         launch(tx - side * CURVE_OFS - bx, land - by, speed);
         arc(land, !scuff);
@@ -817,9 +828,10 @@ static void strike(uint8_t i, uint8_t move) {
         ball_curve = side > 0 ? (int8_t)push : -(int8_t)push;
         ball_curve_t = t;
     } else {
-        // Power: straight, a low fast arc.
-        speed = fire ? POWER_SPEED : DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
+        // Power: straight, a low fast arc. (Gold: faster still.)
+        speed = kind == SHOT_GOLD ? GOLD_SPEED : fire ? POWER_SPEED : DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
         ball_power = fire;
+        ball_gold = kind == SHOT_GOLD;
         launch(tx - bx, land - by, speed);
         arc(land, !scuff);
     }
@@ -833,7 +845,7 @@ static void strike(uint8_t i, uint8_t move) {
     // A trail behind it: red a power shot (or anything on fire), blue a curve;
     // longer the more charged. Not a scuff, a lob or a drop shot.
     if (!scuff && (ball_power || kind == SHOT_POWER || kind == SHOT_CURVE)) {
-        ball_trail = kind == SHOT_CURVE ? TRAIL_CURVE : TRAIL_POWER;
+        ball_trail = kind == SHOT_CURVE ? TRAIL_CURVE : kind == SHOT_GOLD ? TRAIL_GOLD : TRAIL_POWER;
         trail_len = ball_power ? TRAIL_MAX : c >= CHARGE_MAX / 2 ? 3 : 2;
         trail_n = 0;
     }
@@ -889,7 +901,7 @@ static void knock_down(uint8_t i) {
 // Planted and in reach: a clean strike, unless it's on fire and the meter isn't
 // three eighths full, when it's all they can do to pop it up.
 static void meet(uint8_t i, uint8_t move) {
-    if (ball_power && pl_charge[i] < FIRE_MEET) pop_up(i, move, KICK_FRAMES);
+    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : FIRE_MEET)) pop_up(i, move, KICK_FRAMES);
     else strike(i, move);
 }
 
@@ -1437,6 +1449,7 @@ void play_update(void) BANKED {
             }
         } else if (pl_shot[SIDE_YOU] || (phase == PHASE_RALLY && !pl_move_timer[SIDE_YOU])) {
             ready(SIDE_YOU, b);  // queue it any time: it charges once the ball's coming
+            if (!b && (joy_pressed & J_B)) ready(SIDE_YOU, 1);  // A and B at once: both
         }
     }
     // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and

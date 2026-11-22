@@ -67,6 +67,7 @@
 #define SHOT_CURVE 2
 #define SHOT_LOB 3
 #define SHOT_DROP 4
+#define SHOT_GOLD 5  // both buttons, a slam coming: a gold slam
 // Readying a strike plants you until it goes, and you can only ready one with the
 // ball coming your way (or loose in your half). Your meter fills only as you press
 // (YOU_TAP each press, the first too) and stays till the strike or SELECT; the CPU's
@@ -151,6 +152,7 @@ extern uint8_t ball_drop;   // a drop shot: it barely bounces
 extern uint8_t ball_trail;  // the trail behind it: 0 none, TRAIL_POWER (red), TRAIL_CURVE (blue)
 #define TRAIL_POWER 1
 #define TRAIL_CURVE 2
+#define TRAIL_GOLD 3
 extern uint8_t trail_len;   // its dots
 extern uint8_t ball_lob;    // a lob: it sits up where it lands (slowed, a high bounce)
 extern uint8_t last_touch;  // the side that touched it last
