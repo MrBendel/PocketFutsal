@@ -6,12 +6,12 @@
 #include "game.h"
 #include "play_hud.h"
 
-extern uint8_t note_timer, set_won, meter_shown, shot_shown, shot_seen, shot_seen_t;
+extern uint8_t note_timer, set_won, meter_shown, shot_shown, shot_seen, shot_seen_t, go_cue;
 
 // Each frame: the meter (8 tiles, 2 steps each, for your charge) and your shot's
 // label, where it says YOU (the one queued, or for a moment what went, SEEN_* in
 // play.c), each queued to the window's map when it changes.
-static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMIS";
+static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMISGO!";
 uint8_t meter_buf[8];
 static uint8_t shot_buf[3];
 
@@ -31,6 +31,7 @@ void hud_update(void) BANKED {
         shot_seen_t--;
         if (!k) k = shot_seen;
     }
+    if (!k && go_cue) k = 12;  // GO! (play.c's SEEN_GO)
     if (k == shot_shown) return;
     shot_shown = k;
     const char *n = seen_names + (k << 1) + k;

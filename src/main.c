@@ -46,6 +46,8 @@ static void enter_next_state(void) {
         case STATE_PLAY: play_enter(); break;
         case STATE_FUTSAL: futsal_enter(); break;
         case STATE_GAME_OVER: game_over_enter(); break;
+        case STATE_TRAINING: training_enter(); break;
+        case STATE_MINIGAME: minigame_enter(); break;
     }
     DISPLAY_ON;
     fade_in();
@@ -78,6 +80,8 @@ void main(void) {
             case STATE_PLAY: play_update(); break;
             case STATE_FUTSAL: futsal_update(); break;
             case STATE_GAME_OVER: game_over_update(); break;
+            case STATE_TRAINING: training_update(); break;
+            case STATE_MINIGAME: minigame_update(); break;
         }
         wait_frame();
     }

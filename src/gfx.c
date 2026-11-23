@@ -268,7 +268,12 @@ void gfx_ball_step(int16_t vx,int16_t vy){
     if(gfx_ball_distance>=64){
         // Keep fast shots readable instead of skipping poses and strobing.
         if(gfx_ball_distance>=128)gfx_ball_distance=127;
-        gfx_ball_distance-=64;if(++gfx_ball_phase==6)gfx_ball_phase=0;
+        // The frames roll the ball's face down the screen (coming toward you):
+        // played backwards going up it, away from you (playtest: "it always rotates
+        // the same direction").
+        gfx_ball_distance-=64;
+        if(vy<0){if(!gfx_ball_phase)gfx_ball_phase=6;gfx_ball_phase--;}
+        else if(++gfx_ball_phase==6)gfx_ball_phase=0;
     }
 }
 uint8_t gfx_ball_tile(void){

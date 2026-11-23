@@ -5,6 +5,45 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## Training mode (2026-11-22): mini games and stats
+
+The RPG side: your player has four stats, raised by playing training mini games, and
+(next) the matches read them. Mini games aren't side content: they're how you level up.
+
+- **Stats**: POWER (how hard you strike), CONTROL (touch: first touches, juggling), AIM
+  (where the ball goes), REFLEX (getting there: returns, saves). Each has a level, 1 to
+  20, and XP toward the next (30 XP from 1 to 2, 15 more each level after). Your
+  **player level** is 1 plus every stat level gained.
+- **XP**: a mini game's score times its rate (machine 3, wall 4, keepy-uppy 2, shootout
+  5), +10 for a new best, +20 for a win, at most 400 from the score; all of it to the
+  game's first stat, half to its second.
+- **Feeding back**: each game gets a little kinder as its stats rise (wider timing
+  windows, more reach), so the levels are felt in training too.
+- **The save**: battery RAM, a tagged, versioned, checksummed block; a bad or old save
+  starts a fresh player.
+- **The games**, from the user's ideas (2026-11-22):
+  1. **Ball Machine**: a machine shoots the ball; return it in bounds.
+  2. **Target Wall**: only the part of the wall that lights up scores (after Mario
+     Tennis on the Game Boy Advance).
+  3. **Keepy-Uppy**: juggle a consecutive number of times.
+  4. **Shootout**: score on the CPU, then keep its shots out: timing, and guessing the
+     direction it will shoot.
+
+### More mini game ideas
+
+- **Cone Slalom** (REFLEX + CONTROL): dribble through gates against the clock; touches
+  too heavy run away from you.
+- **Crossbar Challenge** (AIM + POWER): chip from distance to ring the crossbar; wind
+  and distance grow.
+- **Rondo** (CONTROL + REFLEX): keep the ball from two CPU players in a circle with
+  one-touch passes to teammates.
+- **Cross & Volley** (POWER + AIM): crosses come in from the wings; volley or head them
+  past a keeper before they land.
+- **Rhythm Footwork** (REFLEX): a rhythm game of d-pad and button taps to the beat:
+  training montage.
+- **Futnet Serve Targets** (AIM): serve onto targets on the far court, using the match's
+  own serve.
+
 ## v0.3 (2026-11-21): futnet
 
 Decided 2026-11-21: the game follows the rules of futnet singles (UNIF, the governing
@@ -29,7 +68,7 @@ calls are marked *(ours)*.
 
 The two touches give the game its set-up-and-attack move: reached unready, your first
 touch **controls** the ball up in front of you (not over the net); ready a strike as
-it comes down, and with half a meter your second touch is a **slam**, on fire.
+it comes down, and with two presses your second touch is a **slam**, on fire.
 
 The HUD says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
 that didn't go over), and SET TO ... at the end of a set.
@@ -124,8 +163,8 @@ slammed (the Captain Tsubasa feel).
   press of A or B adds 4, the first too, as many as you like; waiting and holding add
   nothing, and it never drains or gives up. SELECT calls the strike off. The CPU's
   still fills as it waits (a step every 4 frames, and up to 5 taps of 3) and gives up
-  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 12 (three
-  presses); less, and it pops up off you.
+  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 8 (two
+  presses; the CPU 12); less, and it pops up off you.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
   you are. LEFT / RIGHT angle it as far across as a strike goes (half as far as down
@@ -160,7 +199,7 @@ slammed (the Captain Tsubasa feel).
 - **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
   of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
   your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
-  there; met in the air with half a meter it's a **slam**, on fire, deep; with less, a
+  there; met in the air with two presses (8; the CPU half a meter) it's a **slam**, on fire, deep; with less, a
   header, still out of the air. A drop shot gets the marker too, off its bounce as well,
   and hops higher (about 11 px). The CPU taps hard against a ball on fire, so a slam can
   be met clean.
@@ -192,6 +231,44 @@ slammed (the Captain Tsubasa feel).
   readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
   the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
   weak one is sped up instead of looping up like a pop-up; drop shots, 100.
+- **The CPU under pressure** (2026-11-22, from "how can we improve playability": points
+  went on and on, a player who didn't aim getting about 70 touches a point): the CPU,
+  meeting your shot, may mishit it. Out of 64: a quarter of how far it ran for it (from
+  where it stood as you struck it) plus half the shot's speed, past 30. It runs about
+  74 px for a shot at the median, at speed 28: no chance; a wide fast one (100 px, 40)
+  about a quarter. Mostly it pops up (a slam for you); a quarter of the time it's scuffed
+  into its own half. Aiming bots now win their points in about 15 s, 11-8 or 9-6.
+- **Cues** (the same playtest): the CPU's struck it to you and nothing's queued, your
+  player blinks white and the HUD says **GO!** (a fire shot met unready knocks you down:
+  the commonest lost point left). Each press of A or B ticks; two presses (a slam
+  ready) and full have their own chimes (SFX_TICK, SFX_HALF, SFX_CHARGE). The slam spot
+  is a 16x8 ring (two sprites, S_RING at tile 28, after the ball's spin tiles).
+- **From two recorded matches** (2026-11-22, played on a phone, lost 3-11 and 1-11;
+  tools/match-report.mjs replays a recording and breaks it down): you press 2 or 3 times
+  before the ball arrives (first press about 35 frames after the CPU's strike, the ball
+  there at about 55), so the meter sat at 4-8. At 12 to meet fire, a third of your
+  touches popped up, and the CPU slammed them past you (half the points lost). Of 25
+  slam chances you reached the ring for 9 and slammed 2: the rest were headers, short
+  of half a meter. Three shots went out by the left sideline, aimed 6 px inside it: a
+  long kick lands up to 10 px past its aim. So: two presses meet fire (FIRE_MEET_YOU 8)
+  and slam (SLAM_CHARGE 8; the chime moved there), and aim stays 16 px inside the lines
+  (AIM_IN). The CPU's thresholds are unchanged.
+- **Deep by the button, a slam zone, the ball's spin** (2026-11-22, from the playtest:
+  "near impossible to get the lob shots before they landed in the zone", "it always
+  seems to shoot the balls short... A shots the deepest where B shots should aim to
+  curve mid field", "the ball always rotates the same direction"):
+  - Your A lands 64-80 px past the net by the meter (UP 16 deeper, to 96; DOWN 24
+    shorter); B 48-56, mid-court. The CPU's depths are unchanged.
+  - Charged for a slam (two presses), you leap at a lob or a pop-up coming down from
+    up to 28 px across and 20 in depth (SLAM_LEAP_X, SLAM_LEAP_FWD; a strike reaches
+    16 and 4-8), moving up to 12 px, and strike it the next frame (a leap and a strike
+    in one frame was a match's busiest frame).
+  - Shots landed long: arc() sped up a slow shot with >> on a negative, which rounds
+    away from zero, so your shots (going up the court) went a tenth faster than their
+    time in the air allowed: serves 20 px long. Sped up as a size now, the time cut by
+    103/128 a step and z0 / t from a table: within 6 px, no division.
+  - The ball's frames roll its face down the screen (toward you); going up it, they
+    play backwards.
 - **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts

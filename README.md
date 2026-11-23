@@ -80,6 +80,31 @@ The original futnet mode and its tests remain active. Futsal logic and watchable
 state live in `src/futsal.c` and `src/futsal.h`, with `fs_` prefixes for its state.
 Both modes share the graphics, sprite assets, build and emulator tooling.
 
+## Training: mini games and your player's stats
+
+The title's third mode, **Training**, opens a hub: your **player level**, four stats
+(**POWER**, **CONTROL**, **AIM**, **REFLEX**) each with a level and an XP bar, and the
+mini games with your best in each. UP/DOWN chooses, A plays, B goes back.
+
+| Mini game | The idea | Trains |
+|---|---|---|
+| **Ball Machine** | A machine fires balls over the net; return them inside the lines. Three misses and you're out | REFLEX + CONTROL |
+| **Target Wall** | Hit the ball at a wall: only the panel that lights up scores. Against the clock | AIM + POWER |
+| **Keepy-Uppy** | Juggle: time A to your foot (B to your head) as it drops. How many in a row? | CONTROL + REFLEX |
+| **Shootout** | Five penalties each: aim and time your shot, then guess the CPU's side and dive | POWER + REFLEX |
+| **Cone Slalom** | Dribble through timed cone gates; heavy touches knock the ball loose | REFLEX + CONTROL |
+
+Every game runs through one shell (`src/minigame.c`, the contract in `src/minigame.h`): a
+brief card, READY / GO!, START to pause (SELECT, paused, quits without XP), then a
+results card with the score, your best and the XP won. A game's score is its XP (times
+a per-game rate, plus bonuses for a new best or a win): all of it to the first stat it
+trains, half to the second. Levels go to 20; the save is in battery RAM
+(`src/progress.c`), so it survives power off. The match modes can read `stat_lv[]`
+(`src/progress.h`) to make your player feel the levels.
+
+Each game is `src/mg_<name>.c`, its art `tools/art/mg_<name>.mjs` and its tests
+`tests/mg_<name>.test.mjs`; the shell's own tests are in `tests/minigames.test.mjs`.
+
 ## Quick start
 
 Needs Node 22+.
@@ -112,6 +137,7 @@ the title switches between one set and the best of three.
 | A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and, with half a meter, jump and bicycle-kick it: a **slam**. A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
 | A or B again while ready | Tap for more power: the meter fills only as you press, and stays |
 | SELECT while ready | Call the strike off |
+| You blink, **GO!** on the HUD | The CPU's struck it to you and nothing's queued: press A or B now |
 | LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short; neutral, away from the CPU: short of it at the back, past it up close |
 | START | Pause |

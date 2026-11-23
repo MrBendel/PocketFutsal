@@ -14,6 +14,7 @@ import { build } from './build.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const PORT = +(argv[argv.indexOf('--port') + 1] || 0) || 8080;
+const HOST = argv.includes('--host') ? argv[argv.indexOf('--host') + 1] : '127.0.0.1';
 const AUTO_BUILD = !argv.includes('--no-build');
 const REPLAYS = path.join(ROOT, 'replays');
 const ROM = path.join(ROOT, 'build', 'pocketfutsal.gb');
@@ -158,8 +159,8 @@ const server = http.createServer(async (req, res) => {
 const json = (res, v) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
 const notFound = (res, msg = 'not found') => { res.writeHead(404, { 'content-type': 'text/plain' }); res.end(msg); };
 
-server.listen(PORT, '127.0.0.1', () => {
-  const url = `http://localhost:${PORT}/`;
+server.listen(PORT, HOST, () => {
+  const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/`;
   console.log(`[serve] playtest page: ${url}`);
   console.log('[serve] editing files in src/ rebuilds and reloads automatically. Ctrl+C to stop.');
   if (argv.includes('--open')) {

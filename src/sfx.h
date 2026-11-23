@@ -20,7 +20,9 @@
 #define SFX_CATCH 7    // a dive
 #define SFX_PARRY 8    // knocked down by a power shot
 #define SFX_CHARGE 9   // the meter is full
-#define SFX_COUNT 10
+#define SFX_TICK 10    // a press on the meter
+#define SFX_HALF 11    // the meter's at half: a slam's ready
+#define SFX_COUNT 12
 
 // --- watchable state ---
 extern uint8_t sfx_last;      // the last sound started (0xFF: none yet)

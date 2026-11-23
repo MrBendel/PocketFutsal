@@ -322,6 +322,23 @@ test('a lob coming down to you: a flashing marker where to meet it; queued, you 
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
+test('charged for a slam (two presses), you leap at a lob coming down well outside your reach', () => {
+  const leap = (charge) => {
+    const emu = quietRally();
+    incoming(emu, 104, 196, 0, -6);  // 24 px across, 6 behind you, coming down
+    set16(emu, 'ball_z', 30 * 16);
+    emu.write8(emu.symbols.addr('ball_lob'), 1);
+    readied(emu, SHOT_POWER, charge);
+    emu.idle(3);
+    return emu;
+  };
+  const yes = leap(8);
+  assert.equal(at(yes, 'pl_shots', YOU), 1, 'leapt and struck it');
+  assert.equal(at(yes, 'pl_last_move', YOU), MOVE_BICYCLE, 'a slam: a jumping bicycle kick');
+  assert.equal(yes.v('ball_power'), 1, 'on fire');
+  assert.equal(at(leap(4), 'pl_shots', YOU), 0, 'one press: no leap');
+});
+
 test('a slam by the button: A red, B blue (bending), both gold (faster; only a full meter meets it clean)', () => {
   const slam = (first, second) => {
     const emu = quietRally();
@@ -530,6 +547,20 @@ test('UP plays it deep, DOWN short; LEFT and RIGHT near the sidelines', () => {
   assert.ok(land(['LEFT'])[0] < 40 && land(['RIGHT'])[0] > 120, 'near the sidelines');
 });
 
+test('A plays it deep, deeper the more charged; B curves to mid-court', () => {
+  const land = (shot, charge) => {
+    const emu = quietRally();
+    ballAt(emu, 82, 184);
+    readied(emu, shot, charge);
+    emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 160, 'it landing');
+    return HALFWAY - px(emu.v('ball_y', 'i16'));  // px past the net
+  };
+  const a8 = land(SHOT_POWER, 8), a24 = land(SHOT_POWER, 24), b8 = land(SHOT_CURVE, 8);
+  assert.ok(a8 >= 60 && a8 <= 80, `A, two presses: deep, ${a8} px past the net`);
+  assert.ok(a24 > a8 + 4 && a24 <= 100, `A, six presses: deeper, ${a24}`);
+  assert.ok(b8 >= 40 && b8 <= 64, `B: mid-court, ${b8}`);
+});
+
 test('aim is a direction from where you are: neutral goes half across, away from the CPU; LEFT / RIGHT angle all the way', () => {
   const land = (x, keys, cpuX = 20) => {
     const emu = quietRally();
@@ -730,6 +761,39 @@ test('between shots you jog back home; a volley right at the net stays low and l
   emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return e.v('ball_landings') > 0 || e.v('goal_timer'); }, 120, 'it landing');
   assert.ok(top < 40, `up ${top} px (it went up 111 and long)`);
   assert.equal(emu.v('goal_timer'), 0, 'in');
+});
+
+test('cues: the ball coming and nothing queued, you blink and the HUD says GO!; each press ticks, half and full chime', () => {
+  const emu = quietRally();
+  incoming(emu, 80, 40, 20, 30);
+  emu.idle(3);
+  assert.equal(emu.v('go_cue'), 1, 'press!');
+  assert.equal(emu.v('shot_shown'), 12, 'GO! on the HUD');
+  emu.tap('A');
+  assert.equal(emu.v('go_cue'), 0, 'queued: no more cue');
+  assert.equal(emu.v('sfx_last'), 10, 'a tick');
+  emu.tap('A').tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX / 2);
+  assert.equal(emu.v('sfx_last'), 11, 'half: a slam is ready');
+});
+
+test('the CPU mishits only under pressure: a long run for a fast shot', () => {
+  const meet = (fromX) => {
+    const emu = quietRally();
+    placePlayer(emu, CPU, 80, 40);
+    emu.write8(emu.symbols.addr('pl_shot') + CPU, SHOT_POWER);
+    emu.write8(emu.symbols.addr('pl_charge') + CPU, 20);
+    ballAt(emu, 80, 70, 2, 0, -40);
+    emu.write8(emu.symbols.addr('last_touch'), YOU);
+    emu.write8(emu.symbols.addr('holder'), CPU);
+    set16(emu, 'cpu_from_x', fromX);
+    set16(emu, 'cpu_from_y', 40);
+    const r0 = emu.v('cpu_rattled');
+    emu.until((e) => at(e, 'pl_shots', CPU) > 0, 40, 'the CPU meeting it');
+    return emu.v('cpu_rattled') - r0;
+  };
+  assert.equal(meet(80), 0, 'where it stood: clean');
+  assert.equal(meet(-2000), 1, 'a long run: rattled (popped up or scuffed)');
 });
 
 test('START pauses and resumes', () => {
