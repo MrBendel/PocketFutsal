@@ -37,6 +37,9 @@ uint8_t fs_receiver, fs_flight_left, fs_is_shot;
 uint16_t fs_completed_passes;
 uint8_t fs_return_call;
 uint8_t fs_ball_fall,fs_kicked;
+uint8_t fs_touch_timer,fs_pending_kick,fs_pending_timer;
+int8_t fs_pending_dx,fs_pending_dy;
+uint16_t fs_dribble_touches;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
 uint8_t fs_tackling[4];
 uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
@@ -83,6 +86,7 @@ static void kickoff(uint8_t side) {
     fs_held_ticks=0; fs_pickup_lock=0; fs_last_kicker=NOBODY;
     fs_return_call=0;
     fs_ball_fall=0;
+    fs_touch_timer=fs_pending_kick=fs_pending_timer=0;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -116,6 +120,7 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     fs_power_trail=fs_trail_n=0;
     shadow_OAM[18].y=0;shadow_OAM[19].y=0;shadow_OAM[20].y=0;shadow_OAM[21].y=0;
     fs_owner=NOBODY; fs_last_kicker=i; fs_pickup_lock=10; fs_held_ticks=0; fs_action[i]=10;
+    fs_touch_timer=0;
     sfx_play(SFX_TOUCH);
 }
 static void pass(uint8_t i, int8_t dx, int8_t dy) {
@@ -193,7 +198,7 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
 static void ai(uint8_t i){
     uint8_t mate=i^1, own=fs_owner!=NOBODY&&team(fs_owner)==team(i);
     int16_t goal=team(i)?224*16:0,tx=fs_ball_x,ty=fs_ball_y;
-    if(!fs_spectator&&i==1&&fs_owner==i&&((joy_pressed&J_B)||fs_return_call)){
+    if(!fs_spectator&&i==1&&fs_owner==i&&((joy_pressed&J_B)||fs_return_call)&&distance(i,fs_ball_x,fs_ball_y)<=12*16){
         pass(i,0,0);return;
     }
     if(fs_think[i]||fs_kicked){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
@@ -209,9 +214,10 @@ static void ai(uint8_t i){
         }
         tx=(fs_pl_x[i]<80*16?58:102)*16;ty=goal;
         // Attack a side of the press instead of driving into its centre.
-        if(pressure<42*16&&ab(fs_pl_x[defender]-fs_pl_x[i])<24*16)tx=fs_pl_x[defender]<80*16?120*16:40*16;
+        if(pressure<64*16&&ab(fs_pl_x[defender]-fs_pl_x[i])<40*16)tx=fs_pl_x[defender]<80*16?120*16:40*16;
         int16_t forward=team(i)?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
-        if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16)shoot(i,0);
+        if(distance(i,fs_ball_x,fs_ball_y)>12*16){tx=fs_ball_x;ty=fs_ball_y;}
+        else if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16)shoot(i,0);
         else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i,0,0);
         else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16)shoot(i,0);
     }else if(own){
@@ -242,15 +248,34 @@ static void ai(uint8_t i){
     if(!fs_kicked)step_player(i,tx,ty);
 }
 static void ball_update(void) {
+    static uint8_t i,dribbling;
+    static int16_t gap;
+    static int8_t vx,vy;
+    dribbling=fs_owner!=NOBODY;
     if(fs_owner!=NOBODY) {
         fs_power_trail=0;
-        uint8_t i=fs_owner;int16_t offset=fs_dribble_x[i]&&fs_dribble_y[i]?5*16:7*16;
-        fs_ball_x=clamp(fs_pl_x[i]+(fs_moving[i]?fs_vx[i]*5:fs_dribble_x[i]*offset),10*16,150*16);
-        fs_ball_y=clamp(fs_pl_y[i]+(fs_moving[i]?fs_vy[i]*5:fs_dribble_y[i]*offset),0,224*16);
-        fs_ball_z=16;fs_ball_vz=0;fs_flight_left=0;
-        fs_ball_vx=fs_vx[i];fs_ball_vy=fs_vy[i];
+        i=fs_owner;fs_flight_left=0;fs_is_shot=0;
         if(fs_held_ticks<255) fs_held_ticks++;
-        return;
+        if(fs_touch_timer)fs_touch_timer--;
+        gap=distance(i,fs_ball_x,fs_ball_y);
+        if(gap>24*16){
+            // Control is an association, not a tether. A hard cut can leave
+            // the rolling ball behind, where either team can collect it.
+            fs_owner=NOBODY;fs_last_kicker=i;fs_pickup_lock=4;
+            fs_receiver=NOBODY;fs_pending_kick=0;
+        }else if(!fs_touch_timer&&gap<9*16&&fs_ball_z<=3*16){
+            vx=fs_vx[i];vy=fs_vy[i];
+            if(vx||vy){
+                fs_ball_vx=vx+(vx<0?-16:vx>0?16:0);
+                fs_ball_vy=vy+(vy<0?-16:vy>0?16:0);
+                fs_ball_z=0;fs_ball_vz=6;fs_ball_fall=0;
+                fs_touch_timer=10;fs_dribble_touches++;
+            }
+        }
+        // The ball rolls between discrete touches. It keeps its old direction
+        // through a turn and slows independently when the player stops.
+        if(fs_ball_vx>2)fs_ball_vx-=2;else if(fs_ball_vx<-2)fs_ball_vx+=2;else fs_ball_vx=0;
+        if(fs_ball_vy>2)fs_ball_vy-=2;else if(fs_ball_vy<-2)fs_ball_vy+=2;else fs_ball_vy=0;
     }
     fs_ball_x+=fs_ball_vx; fs_ball_y+=fs_ball_vy;
     if(fs_flight_left)fs_flight_left--;
@@ -272,9 +297,18 @@ static void ball_update(void) {
         }
         fs_ball_y=clamp(fs_ball_y,0,224*16); fs_ball_vy=-(fs_ball_vy-fs_ball_vy/4);
     }
-    if(!fs_ball_z&&!(fs_sim_ticks&3)) { if(fs_ball_vx) fs_ball_vx+=fs_ball_vx>0?-1:1; if(fs_ball_vy) fs_ball_vy+=fs_ball_vy>0?-1:1; }
+    if(!dribbling&&!fs_ball_z&&!(fs_sim_ticks&3)) { if(fs_ball_vx) fs_ball_vx+=fs_ball_vx>0?-1:1; if(fs_ball_vy) fs_ball_vy+=fs_ball_vy>0?-1:1; }
     if(fs_pickup_lock) fs_pickup_lock--;
-    if(fs_ball_z>8*16)return;
+    if(fs_ball_z>8*16||fs_kicked)return;
+    if(fs_owner!=NOBODY){
+        // Check the two opposing feet on alternating frames. Teammates do not
+        // steal a controlled dribble; opponents can intercept its exposed ball.
+        i=((fs_owner&2)^2)+(fs_sim_ticks&1);
+        if(fs_action[i]<=10&&distance(i,fs_ball_x,fs_ball_y)<6*16){
+            fs_owner=i;fs_held_ticks=0;fs_touch_timer=6;fs_pending_kick=0;
+        }
+        return;
+    }
     // Rotate pickup priority to avoid a permanent advantage to blue.
     for(uint8_t k=0;k<4;k++) {
         uint8_t i=(k+(fs_sim_ticks&3))&3;
@@ -282,8 +316,9 @@ static void ball_update(void) {
         if(fs_action[i]>10) continue;
         if(distance(i,fs_ball_x,fs_ball_y)<(fs_is_shot&&ab(fs_ball_vx)+ab(fs_ball_vy)>48?5*16:14*16)) {
             if(fs_receiver==i)fs_completed_passes++;
-            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_ball_z=16;fs_ball_vz=0;
-            fs_ball_vx=fs_vx[i];fs_ball_vy=fs_vy[i];break;
+            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_touch_timer=0;
+            // A trap kills the delivery's speed without moving its position.
+            fs_ball_vx=fs_ball_vy=0;fs_ball_vz=0;fs_ball_z=0;break;
         }
     }
 }
@@ -371,7 +406,7 @@ void futsal_enter(void) BANKED {
     }
     initrand(game_seed); score[0]=score[1]=sets[0]=sets[1]=0;
     match_sets=1; winner=NOBODY; fs_paused=fs_goal_timer=fs_hud_pending=0;
-    fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=0;
+    fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=fs_dribble_touches=0;
     move_win(7,HUD_WY); SHOW_WIN; gfx_sprite_split(HUD_WY);
     kickoff(0); hud(); draw();
 }
@@ -391,19 +426,33 @@ void futsal_update(void) BANKED {
     }
     fs_sim_ticks++;
     fs_kicked=0;
+    if(fs_pending_timer)fs_pending_timer--;else fs_pending_kick=0;
     if(fs_return_call)fs_return_call--;
     if(fs_owner!=NOBODY&&team(fs_owner))fs_return_call=0;
-    for(uint8_t i=0;i<4;i++) {
+    // Alternate team order: the last team to update must not always win a
+    // contested touch now that the dribbled ball has its own position.
+    for(uint8_t k=0;k<4;k++) {
+        uint8_t i=k^(fs_sim_ticks&2);
         fs_moving[i]=0;
         if(fs_tackling[i]) fs_tackling[i]--;
         if(fs_cooldown[i]) fs_cooldown[i]--; if(fs_action[i]) fs_action[i]--; if(fs_burst[i]) fs_burst[i]--;
         if(i || fs_spectator) ai(i);
         else {
             int8_t dx=((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0),dy=((joy&J_DOWN)!=0)-((joy&J_UP)!=0);
-            if(fs_owner==0) { if(joy_pressed&J_A) shoot(0,dx); else if(joy_pressed&J_B) pass(0,dx,dy); }
+            if(fs_owner==0) {
+                if(joy_pressed&(J_A|J_B)){
+                    fs_pending_kick=(joy_pressed&J_A)?2:1;fs_pending_timer=20;
+                    fs_pending_dx=dx;fs_pending_dy=dy;
+                }
+                if(fs_pending_kick&&distance(0,fs_ball_x,fs_ball_y)<=12*16){
+                    if(fs_pending_kick==2)shoot(0,fs_pending_dx);else pass(0,fs_pending_dx,fs_pending_dy);
+                    fs_pending_kick=0;
+                }
+            }
             else {
+                fs_pending_kick=0;
                 if((joy_pressed&J_A) && !fs_cooldown[0]) tackle(0);
-                if((joy_pressed&J_B)&&fs_owner==NOBODY&&fs_receiver==1)fs_return_call=48;
+                if((joy_pressed&J_B)&&(fs_owner==1||(fs_owner==NOBODY&&fs_receiver==1)))fs_return_call=48;
                 else if((joy_pressed&J_B) && !fs_cooldown[0] && (fs_owner==NOBODY || team(fs_owner)!=0)) { fs_burst[0]=16; fs_cooldown[0]=60; }
             }
             if(!fs_kicked)step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);

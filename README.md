@@ -36,7 +36,12 @@ clear ground tackles, and a receiver controls the ball as it descends.
 Ball flight uses the same vector launch and gravity model as Futnet: precise
 angles toward the target, quick low exchanges over short distances, and higher
 arcs on longer deliveries. Shots travel faster than passes. Bounces lose pace
-and height, and the dribbled ball follows the player's actual momentum through turns.
+and height.
+Dribbling uses separate foot touches: the ball rolls ahead and slows under its
+own momentum between contacts. Stopping does not pull it back to the player.
+A hard cut can leave it exposed or loose, and opponents can intercept the ball
+without touching the carrier. Pass/shot inputs wait briefly for kicking reach;
+steer back onto the ball to play it. AI carriers also recover their next touch.
 
 Teammates run ahead into the opposite lane and continue their run after passing.
 Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court

@@ -9,5 +9,7 @@ extern int8_t fs_vx[4], fs_vy[4];
 extern int16_t fs_ball_z, fs_ball_vz, fs_target_x, fs_target_y;
 extern uint8_t fs_receiver, fs_flight_left;
 extern uint16_t fs_completed_passes;
+extern uint8_t fs_touch_timer;
+extern uint16_t fs_dribble_touches;
 extern uint16_t fs_sim_ticks, fs_pass_count, fs_shot_count, fs_tackle_count;
 #endif
