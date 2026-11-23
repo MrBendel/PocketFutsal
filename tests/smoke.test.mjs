@@ -322,6 +322,26 @@ test('a lob coming down to you: a flashing marker where to meet it; queued, you 
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
+test('the slam zone: a ring of dots as wide as your leap while the lob is far, closing on the spot as it comes', () => {
+  const emu = quietRally();
+  const oam = (n) => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n + 1), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n)];
+  const spread = () => oam(29)[0] - oam(30)[0];  // the right dot's x less the left's
+  incoming(emu, 60, 50, 26, 28);
+  set16(emu, 'ball_vx', 4);
+  emu.write8(emu.symbols.addr('ball_lob'), 1);
+  emu.idle(6);
+  assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
+  assert.ok(oam(29)[1] > 0, 'the dots show');
+  const wide = spread();
+  assert.ok(wide >= 50, `far: as wide as the leap, ${wide} px`);
+  matchGolden(emu, 'slam-zone');
+  emu.until((e) => Math.abs(px(e.v('ball_y', 'i16')) - at(e, 'meet_y', YOU, 'i16')) <= 4, 200, 'it reaching the spot');
+  assert.ok(spread() <= 22, `at the spot: closed in, ${spread()} px (from ${wide})`);
+  emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
+  emu.idle(2);
+  assert.equal(oam(29)[1], 0, 'gone once it lands');
+});
+
 test('charged for a slam (two presses), you leap at a lob coming down well outside your reach', () => {
   const leap = (charge) => {
     const emu = quietRally();
@@ -721,8 +741,10 @@ test('the CPU plays: it returns your serve and can win a point', () => {
 
 test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 20, 0, 0, 12);  // far off, coming slowly, high (going away, you'd jog home)
+  ballAt(emu, 140, 20, 0, 24, 12);  // far off, coming, high, and going out wide: no run home or to it
   set16(emu, 'ball_vz', 60);
+  emu.idle(2);
+  assert.equal(at(emu, 'meet_out', YOU), 1, 'landing out: you let it go');
   const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
   emu.hold('RIGHT', 4);
   assert.ok(vx() > 6 && vx() < 22, `speeding up: ${vx()}`);
@@ -736,6 +758,36 @@ test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a 
   assert.ok(vx() > 10, `turning: skidding ${vx()}`);
   emu.hold('LEFT', 12);
   assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
+});
+
+test('the ball coming to you, nothing queued, the d-pad let go: you make for where to meet it', () => {
+  const emu = quietRally();
+  placePlayer(emu, YOU, 40, 190);
+  incoming(emu, 110, 90, 30, 20);  // across the court from you, coming
+  emu.idle(30);
+  const x = px(at(emu, 'pl_x', YOU, 'i16'));
+  assert.equal(at(emu, 'pl_shot', YOU), 0, 'nothing queued');
+  assert.ok(x > 70, `running across to it: x ${x} (from 40, it meets at ${at(emu, 'meet_x', YOU, 'i16')})`);
+  const held = quietRally();
+  placePlayer(held, YOU, 40, 190);
+  incoming(held, 110, 90, 30, 20);
+  held.hold('LEFT', 30);
+  assert.ok(px(at(held, 'pl_x', YOU, 'i16')) < 40, 'the d-pad still takes you where you like');
+});
+
+test('run to the ball, you still skid turning round (side to side costs you)', () => {
+  const emu = quietRally();
+  const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
+  placePlayer(emu, YOU, 24, 190);
+  incoming(emu, 150, 116, 20, 44);  // high, a long way across
+  emu.idle(12);
+  assert.ok(vx() >= 16, `running right for it: ${vx()}`);
+  set16(emu, 'ball_x', 20 * 16);  // it's over on the left now: a new flight
+  emu.write8(emu.symbols.addr('ball_flight'), emu.v('ball_flight') + 1);
+  emu.idle(5);
+  assert.ok(vx() > 8, `skidding, not turned on the spot: ${vx()}`);
+  emu.idle(20);
+  assert.ok(vx() < -8, `then off the other way: ${vx()}`);
 });
 
 test('between shots you jog back home; a volley right at the net stays low and lands in', () => {

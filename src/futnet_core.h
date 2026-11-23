@@ -72,7 +72,7 @@ void fc_ready(uint8_t i, uint8_t b, uint8_t allow_gold);
 } while (0)
 // Step player i's velocity (approach with accel/grip/skid/brake) toward (tx, ty),
 // integrate position, clamp to [fc_min_x..fc_max_x] x [fc_min_y..fc_max_y], and update facing.
-void fc_step_move(uint8_t i, int8_t tx, int8_t ty, uint8_t firm);
+void fc_step_move(uint8_t i, int8_t tx, int8_t ty, uint8_t firm);  // firm: 0 eases, 1 brakes hard, 2 brakes hard but skids turning
 // Compute player i's palette with the 3-stage charge-up flash (own -> white -> fire).
 uint8_t fc_charge_pal(uint8_t i, uint8_t base_pal);
 // Set ball_vx/ball_vy toward (dx, dy) px away at speed (|vx|+|vy|).

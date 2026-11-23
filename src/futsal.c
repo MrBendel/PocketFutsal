@@ -54,6 +54,7 @@ uint8_t fs_tackling[4];
 uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
 uint8_t fs_side[4];
 uint8_t fs_role[4]; // 0 chase, 1 carry, 2 support, 3 cover
+uint8_t fs_kickoff_phase,fs_thought;
 uint8_t fs_ball_oam, fs_hud_pending;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
 uint8_t fs_trail_x[16], fs_trail_y[16];
@@ -97,6 +98,9 @@ static void kickoff(uint8_t side) {
     fs_ball_fall=0;
     fs_touch_timer=fs_pending_kick=fs_pending_timer=0;
     fs_pass_charge=fs_return_lob=fs_lob=fs_air_shot=fs_zone_ready=0;
+    // A fixed slot-based schedule replayed the same successful red press at
+    // every restart. Stagger perception evenly, with a seeded phase per kickoff.
+    fs_kickoff_phase=rand()&7;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -104,7 +108,8 @@ static void kickoff(uint8_t side) {
         fs_aerial[i]=fs_air_hit[i]=fs_air_kind[i]=0;
         fs_vx[i]=fs_vy[i]=fs_slide_vx[i]=fs_slide_vy[i]=0;
         fs_dribble_x[i]=0; fs_dribble_y[i]=team(i)?1:-1;
-        fs_think[i]=i<<1; fs_ai_tx[i]=fs_pl_x[i]; fs_ai_ty[i]=fs_pl_y[i];
+        fs_think[i]=((i<<1)+fs_kickoff_phase)&7;
+        fs_ai_tx[i]=fs_pl_x[i];fs_ai_ty[i]=fs_pl_y[i];
     }
 }
 // Futnet's launch model: a precise vector at a chosen court speed, then an arc
@@ -112,7 +117,8 @@ static void kickoff(uint8_t side) {
 static void kick(uint8_t i, int16_t tx, int16_t ty) {
     static int16_t dx,dy,sum,t;
     static uint8_t speed;
-    tx=clamp(tx,14*16,146*16); ty=clamp(ty,0,224*16);
+    // Passes clamp their destinations before launch; shot targets are already
+    // inside the goal. Avoid three software clamp calls on busy shot frames.
     dx=tx-fs_ball_x;dy=ty-fs_ball_y;
     if(fs_lob){
         fs_ball_vx=dx<0?-((-dx)>>6):dx>>6;
@@ -128,7 +134,7 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     // Speeds are powers of two: distance / speed is a cheap shift. As in
     // Futnet, long deliveries get more air time and short exchanges stay low.
     t=fs_is_shot?(sum+4)>>3:(sum+2)>>2;
-    t=clamp(t,4,96);
+    if(t<4)t=4; // Court bounds keep even the longest quick pass below 96.
     fs_ball_vz=(3*(t+1))>>3;
     if(fs_air_shot)fs_ball_vz-=fs_ball_z/t;else fs_ball_z=0;
     }
@@ -153,7 +159,7 @@ static void pass(uint8_t i, int8_t dx, int8_t dy,uint8_t lob) {
     else {tx+=fs_vx[mate]*32;ty+=fs_vy[mate]*32;}
     // A called lob gives the fixed human player a forward finishing zone.
     if(lob&&i==1&&!fs_spectator)ty-=16*16;
-    kick(i,tx,clamp(ty,16*16,208*16));
+    kick(i,clamp(tx,14*16,146*16),clamp(ty,16*16,208*16));
     // React to the delivery immediately rather than following a stale support run.
     fs_ai_tx[mate]=fs_target_x;fs_ai_ty[mate]=fs_target_y;
     if(i==1)fs_return_call=fs_return_lob=0;
@@ -263,7 +269,8 @@ static void ai(uint8_t i){
         pass(i,0,0,fs_return_lob);return;
     }
     if(!fs_spectator&&i==1&&fs_owner==i&&fs_pass_charge&&fs_pass_source==1){step_player(i,fs_ball_x,fs_ball_y);return;}
-    if(fs_think[i]||fs_kicked){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
+    if(fs_think[i]||fs_kicked||fs_thought){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
+    fs_thought=1;
     fs_think[i]=7;
     if(fs_lob&&fs_receiver==i&&aerial_try(i))return;
     fs_role[i]=0;
@@ -515,7 +522,7 @@ void futsal_update(void) BANKED {
         draw(); return;
     }
     fs_sim_ticks++;
-    fs_kicked=0;
+    fs_kicked=fs_thought=0;
     fs_zone_ready=fs_lob&&fs_ball_vz<0&&fs_flight_left<=28&&fs_ball_z>=10*16;
     if(fs_pending_timer)fs_pending_timer--;else fs_pending_kick=0;
     if(fs_return_call)fs_return_call--;

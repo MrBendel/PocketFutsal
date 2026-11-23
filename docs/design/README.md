@@ -269,6 +269,11 @@ slammed (the Captain Tsubasa feel).
     103/128 a step and z0 / t from a table: within 6 px, no division.
   - The ball's frames roll its face down the screen (toward you); going up it, they
     play backwards.
+- **The slam zone** (2026-11-22, from the playtest: "something bigger that acts like a
+  target to say get here now", then "we don't need the arrow"): round the slam spot's
+  ring, 8 dots (sprites 29-36, tile 30, set once a match: a frame only moves them) as
+  far out as your leap reaches while the ball's 64 px or more from the spot in depth,
+  closing on the ring as it comes: closed, it's there. A drop shot's marker has none.
 - **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts

@@ -483,3 +483,30 @@ test('BURST FX contact flash animates at the strike point, pauses and cleans up'
  e.shot('futsal-burst-contact');e.tap('START').idle(20);
  assert.equal(e.v('fs_fx_timer'),0);assert.equal(e.read8(0xfe00+33*4),0);assert.equal(e.read8(0xfe00+34*4),0);
 });
+
+test('kickoff perception timing varies across seeds and reproduces the same seed',()=>{
+ const seeds=[1,42,77,511,1024,2026,4242,6553];
+ const phases=seeds.map(seed=>startGame(undefined,seed).v('fs_kickoff_phase'));
+ assert.ok(new Set(phases).size>=4,'kickoffs must not repeat one fixed slot schedule');
+ assert.equal(startGame(undefined,42).v('fs_kickoff_phase'),phases[1],'seeded timing is reproducible');
+});
+
+test('seeded Watch matches give both teams wins and comparable scoring opportunities',()=>{
+ const wins=[0,0],goals=[0,0],shots=[0,0];let worst=0;
+ for(const seed of [1,7,19,42,77,123,256,511]){
+  const e=startGame(undefined,seed);let previousShots=0;
+  for(let f=0;f<18000&&e.v('game_state')===PLAY;f++){
+   e.idle();if(e.v('game_state')!==PLAY||e.v('in_transition'))continue;
+   worst=Math.max(worst,e.lastFrameCycles);
+   const count=e.v('fs_shot_count','u16');if(count!==previousShots){shots[e.v('fs_last_kicker')>>1]+=count-previousShots;previousShots=count;}
+  }
+  settle(e,GAME_OVER,'balanced Watch match');
+  for(let t=0;t<2;t++){const score=at(e,'score',t);goals[t]+=score;if(score===5)wins[t]++;}
+ }
+ console.log({balance:{wins,goals,shots,worst}});
+ assert.ok(wins[0]>=2&&wins[1]>=2,'neither team should dominate the seeded sample');
+ const blueShare=goals[0]/(goals[0]+goals[1]);
+ assert.ok(blueShare>=.35&&blueShare<=.65,'neither side receives a persistent scoring advantage');
+ assert.ok(shots[0]>=8&&shots[1]>=8,'both teams must create real shots, not just own goals');
+ assert.ok(worst<65664,`balanced match frame budget: ${worst}`);
+});
