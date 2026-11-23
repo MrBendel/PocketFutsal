@@ -78,79 +78,85 @@ void fc_ready(uint8_t i, uint8_t b, uint8_t allow_gold) {
     }
 }
 
-void fc_combo_tick(uint8_t i) {
-    if (pl_combo[i] && i == SIDE_YOU && !--pl_combo[i]) {
-        if (pl_shot[i] == SHOT_LOB) pl_shot[i] = SHOT_CURVE;
-        else if (pl_shot[i] == SHOT_DROP) pl_shot[i] = SHOT_POWER;
-    }
-}
+int16_t fc_min_x, fc_max_x, fc_min_y, fc_max_y;
 
-static uint8_t mv_i, mv_firm, mv_turn;
-static int8_t approach(int8_t v, int8_t t) {
-    if (v == t) return v;
-    uint8_t turn = (v > 0 && t < 0) || (v < 0 && t > 0);
-    uint8_t d = pl_accel[mv_i];
-    mv_turn |= turn;
-    if (turn || (v > 0 && t < v) || (v < 0 && t > v)) {
-        if (mv_firm) d = FC_BRAKE;
-        else if (!turn || pl_skid[mv_i] < FC_SKID_FRAMES) d = pl_grip[mv_i];
-    }
-    if (v < t) {
-        v += d;
-        if (v > t) v = t;
-    } else {
-        v -= d;
-        if (v < t) v = t;
-    }
-    return v;
-}
+#define STEP_AXIS(v, t) do { \
+    int8_t _v = (v), _t = (t); \
+    if (_v != _t) { \
+        uint8_t _turn = (_v > 0 && _t < 0) || (_v < 0 && _t > 0); \
+        uint8_t _d = accel; \
+        turn |= _turn; \
+        if (_turn || (_v > 0 && _t < _v) || (_v < 0 && _t > _v)) { \
+            if (firm) _d = FC_BRAKE; \
+            else if (!_turn || skid < FC_SKID_FRAMES) _d = grip; \
+        } \
+        if (_v < _t) { _v += _d; if (_v > _t) _v = _t; } \
+        else { _v -= _d; if (_v < _t) _v = _t; } \
+        (v) = _v; \
+    } \
+} while (0)
 
-void fc_step_move(uint8_t i, int8_t tx, int8_t ty, uint8_t firm,
-                  int16_t x0, int16_t x1, int16_t y0, int16_t y1) {
-    mv_i = i;
-    mv_firm = firm;
-    mv_turn = 0;
-    int8_t vx = approach(pl_vx[i], tx);
-    int8_t vy = approach(pl_vy[i], ty);
-    if (!mv_turn) pl_skid[i] = 0;
-    else if (pl_skid[i] < 255) pl_skid[i]++;
+void fc_step_move(uint8_t i, int8_t tx, int8_t ty, uint8_t firm) {
+    uint8_t accel = pl_accel[i], grip = pl_grip[i], skid = pl_skid[i], turn = 0;
+    int8_t vx = pl_vx[i], vy = pl_vy[i];
+    STEP_AXIS(vx, tx);
+    STEP_AXIS(vy, ty);
+    pl_skid[i] = !turn ? 0 : skid < 255 ? skid + 1 : 255;
     pl_vx[i] = vx;
     pl_vy[i] = vy;
-    pl_x[i] = clamp16(pl_x[i] + vx, x0, x1);
-    pl_y[i] = clamp16(pl_y[i] + vy, y0, y1);
+    if (vx) {
+        int16_t x = pl_x[i] + vx;
+        if (x < fc_min_x) x = fc_min_x;
+        else if (x > fc_max_x) x = fc_max_x;
+        pl_x[i] = x;
+    }
+    if (vy) {
+        int16_t y = pl_y[i] + vy;
+        if (y < fc_min_y) y = fc_min_y;
+        else if (y > fc_max_y) y = fc_max_y;
+        pl_y[i] = y;
+    }
     if (tx) pl_face[i] = tx < 0;
 }
 
 uint8_t fc_charge_pal(uint8_t i, uint8_t base_pal) {
-    uint8_t pal = base_pal;
-    if (pl_shot[i]) {
-        uint8_t c = pl_charge[i];
-        uint8_t mask = c == CHARGE_MAX ? 1 : c >= CHARGE_MAX / 2 ? 3 : 7;
-        if (!((uint8_t)frame_count & mask) && ++pl_flash[i] > 2) pl_flash[i] = 0;
-        if (pl_flash[i] == 1) pal = SPR_PAL_FLASH;
-        else if (pl_flash[i] == 2 && c >= CHARGE_MAX / 2) pal = SPR_PAL_POWER;
+    if (!pl_shot[i]) return base_pal;
+    uint8_t c = pl_charge[i];
+    uint8_t mask = c == CHARGE_MAX ? 1 : c >= CHARGE_MAX / 2 ? 3 : 7;
+    if (!((uint8_t)frame_count & mask)) {
+        uint8_t f = pl_flash[i] + 1;
+        pl_flash[i] = f > 2 ? 0 : f;
     }
-    return pal;
+    uint8_t f = pl_flash[i];
+    if (f == 1) return SPR_PAL_FLASH;
+    if (f == 2 && c >= CHARGE_MAX / 2) return SPR_PAL_POWER;
+    return base_pal;
 }
 
 void fc_launch_vel(int16_t dx, int16_t dy, uint8_t speed) {
-    int16_t wide = abs16(dy) >> 1;
+    uint16_t ady = dy < 0 ? (uint16_t)(-dy) : (uint16_t)dy;
+    int16_t wide = (int16_t)(ady >> 1);
     if (dx > wide) dx = wide;
     else if (dx < -wide) dx = -wide;
-    int16_t sum = abs16(dx) + abs16(dy);
+    uint16_t adx = dx < 0 ? (uint16_t)(-dx) : (uint16_t)dx;
+    uint16_t sum = adx + ady;
     if (!sum) sum = 1;
-    ball_vx = (dx * speed) / sum;
-    int16_t vy = (int16_t)speed - abs16(ball_vx);
+    uint16_t avx = (adx * (uint16_t)speed) / sum;
+    ball_vx = dx < 0 ? -(int16_t)avx : (int16_t)avx;
+    int16_t vy = (int16_t)speed - (int16_t)avx;
     ball_vy = dy < 0 ? -vy : vy;
 }
 
 void fc_arc(int16_t land, uint8_t clear) {
-    int16_t vy = abs16(ball_vy);
+    int16_t vy = ball_vy < 0 ? -ball_vy : ball_vy;
     if (!vy) vy = 1;
-    int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 400);
+    int16_t dy = land - PX(ball_y);
+    uint16_t ady = dy < 0 ? (uint16_t)(-dy) : (uint16_t)dy;
+    uint16_t ut = (ady << 4) / (uint16_t)vy;
+    int16_t t = ut < 12 ? 12 : ut > 400 ? 400 : (int16_t)ut;
     uint8_t most = ball_drop ? FC_ARC_MAX : FC_ARC_FLAT;
     if (t > most) {
-        int16_t vx = abs16(ball_vx);
+        int16_t vx = ball_vx < 0 ? -ball_vx : ball_vx;
         do {
             vx += vx >> 2;
             vy += vy >> 2;
@@ -166,16 +172,23 @@ void fc_arc(int16_t land, uint8_t clear) {
 }
 
 void fc_net_clear(void) {
-    int16_t vy = abs16(ball_vy);
+    int16_t vy = ball_vy < 0 ? -ball_vy : ball_vy;
     if (!vy || (ball_vy < 0 ? PX(ball_y) <= HALFWAY : PX(ball_y) >= HALFWAY)) return;
-    int16_t tn = clamp16((abs16(HALFWAY - PX(ball_y)) << 4) / vy, 6, 160);
-    int16_t drop = ((tn * (tn + 1)) >> 3) * 3;
-    if (ball_z + ball_vz * tn - drop >= TO_SUB(NET_H + 3)) return;
-    ball_vz = (TO_SUB(NET_H + 3) + drop - ball_z) / tn;
+    int16_t dy = HALFWAY - PX(ball_y);
+    uint16_t ady = dy < 0 ? (uint16_t)(-dy) : (uint16_t)dy;
+    uint16_t utn = (ady << 4) / (uint16_t)vy;
+    uint8_t tn8 = utn < 6 ? 6 : utn > 160 ? 160 : (uint8_t)utn;
+    int16_t d = (int16_t)(((uint16_t)tn8 * (uint8_t)(tn8 + 1)) >> 3);
+    int16_t drop = d + (d << 1);
+    if (ball_z + ball_vz * (int16_t)tn8 - drop >= TO_SUB(NET_H + 3)) return;
+    ball_vz = (TO_SUB(NET_H + 3) + drop - ball_z) / tn8;
 }
 
-uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land,
-                       uint8_t aim, uint8_t scuff, uint8_t slam, uint8_t is_serve) {
+uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_t flags) {
+    uint8_t aim = flags & 3;
+    uint8_t scuff = (flags & FC_F_SCUFF) != 0;
+    uint8_t slam = (flags & FC_F_SLAM) != 0;
+    uint8_t is_serve = (flags & FC_F_SERVE) != 0;
     int16_t bx = PX(ball_x), by = PX(ball_y);
     uint8_t c = pl_charge[i], kind = pl_shot[i], speed;
     if (is_serve && c == CHARGE_MAX) c--;
@@ -236,21 +249,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land,
     return move;
 }
 
-void fc_curve_step(void) {
-    if (!ball_curve_t) return;
-    ball_curve_t--;
-    ball_cacc += ball_curve;
-    ball_vx += ball_cacc >> 4;
-    ball_cacc &= 15;
-}
-
-static void place_oam(uint8_t n, int16_t x, int16_t y) {
-    if (y < 0 || y > 160 || x < 0 || x > 168) {
-        move_sprite(n, 0, 0);
-        return;
-    }
-    move_sprite(n, (uint8_t)x, (uint8_t)y);
-}
+static uint8_t trail_clear;
 
 void fc_trail_draw(uint8_t oam_first, int16_t sx, int16_t wy, int16_t cam_y) {
     trail_i = (trail_i + 1) & 15;
@@ -258,6 +257,13 @@ void fc_trail_draw(uint8_t oam_first, int16_t sx, int16_t wy, int16_t cam_y) {
     trail_y[trail_i] = wy;
     if (trail_n < 16) trail_n++;
     if (!ball_trail && trail_len && !((uint8_t)frame_count & 1)) trail_len--;
+    if (!trail_len || trail_n <= 4) {
+        if (trail_clear) return;
+        for (uint8_t k = 0; k < FC_TRAIL_MAX; k++) shadow_OAM[oam_first + k].y = 0;
+        trail_clear = 1;
+        return;
+    }
+    trail_clear = 0;
     if (ball_trail)
         trail_pal = ball_trail == TRAIL_CURVE ? SPR_PAL_TRAIL_CURVE
                   : ball_trail == TRAIL_GOLD  ? SPR_PAL_POWER
@@ -266,12 +272,19 @@ void fc_trail_draw(uint8_t oam_first, int16_t sx, int16_t wy, int16_t cam_y) {
     for (uint8_t k = (uint8_t)frame_count & 1; k < FC_TRAIL_MAX; k += 2) {
         uint8_t age = (k + 1) << 2, n = oam_first + k;
         if (k >= trail_len || age >= trail_n) {
-            move_sprite(n, 0, 0);
+            shadow_OAM[n].y = 0;
             continue;
         }
         uint8_t e = (trail_i - age) & 15;
-        set_sprite_tile(n, FC_S_TRAIL + (k << 1));
-        set_sprite_prop(n, pal);
-        place_oam(n, trail_x[e], trail_y[e] - cam_y);
+        int16_t px = trail_x[e], py = trail_y[e] - cam_y;
+        if (py < 0 || py > 160 || px < 0 || px > 168) {
+            shadow_OAM[n].y = 0;
+        } else {
+            OAM_item_t *o = &shadow_OAM[n];
+            o->y = (uint8_t)py;
+            o->x = (uint8_t)px;
+            o->tile = FC_S_TRAIL + (k << 1);
+            o->prop = pal;
+        }
     }
 }

@@ -477,7 +477,7 @@ static void strike(uint8_t move, int16_t rel_x, int16_t rel_fwd) {
     ball_y = mg_machine_by;
     ball_z = mg_machine_bz;
     move = fc_strike_ball(SIDE_YOU, move, mg_machine_land_x, mg_machine_land_y,
-                          aim, mg_machine_netted, 0, 0);
+                          FC_FLAGS(aim, mg_machine_netted, 0, 0));
     mg_machine_bvx = ball_vx;
     mg_machine_bvy = ball_vy;
     mg_machine_bvz = ball_vz;
@@ -548,8 +548,9 @@ static void player_update(void) {
         tx = joy & J_RIGHT ? sp : joy & J_LEFT ? -sp : 0;
         ty = joy & J_DOWN ? sp : joy & J_UP ? -sp : 0;
     }
-    fc_step_move(SIDE_YOU, tx, ty, firm,
-                 TO_SUB(PL_X_MIN), TO_SUB(PL_X_MAX), TO_SUB(PL_Y_MIN), TO_SUB(PL_Y_MAX));
+    fc_min_x = TO_SUB(PL_X_MIN); fc_max_x = TO_SUB(PL_X_MAX);
+    fc_min_y = TO_SUB(PL_Y_MIN); fc_max_y = TO_SUB(PL_Y_MAX);
+    fc_step_move(SIDE_YOU, tx, ty, firm);
     mg_machine_px = pl_x[SIDE_YOU];
     mg_machine_py = pl_y[SIDE_YOU];
     mg_machine_pvx = pl_vx[SIDE_YOU];

@@ -385,8 +385,9 @@ static void you_move(void) {
     int8_t sp = mg_wall_charging ? (PL_SPEED >> 1) : PL_SPEED;
     int8_t tx = (joy & J_RIGHT) ? sp : (joy & J_LEFT) ? -sp : 0;
     int8_t ty = (joy & J_DOWN) ? sp : (joy & J_UP) ? -sp : 0;
-    fc_step_move(SIDE_YOU, tx, ty, 1,
-                 PL_X_MIN << 4, PL_X_MAX << 4, PL_D_MIN << 4, PL_D_MAX << 4);
+    fc_min_x = PL_X_MIN << 4; fc_max_x = PL_X_MAX << 4;
+    fc_min_y = PL_D_MIN << 4; fc_max_y = PL_D_MAX << 4;
+    fc_step_move(SIDE_YOU, tx, ty, 1);
     mg_wall_px = pl_x[SIDE_YOU];
     mg_wall_pd = pl_y[SIDE_YOU];
     if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) mg_wall_walk++;

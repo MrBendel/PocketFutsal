@@ -573,6 +573,7 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
 // t_n frames on, so a fast flat strike is lifted, and lands deeper (or long).
 int16_t arc_t;         // arc()'s time in the air, frames
 uint8_t arc_clear;     // the arc just struck is to clear the net: net_clear() next frame
+static uint8_t clear_frame;  // frame net_clear() ran on (spread predict() off it)
 static void arc(int16_t land, uint8_t clear) { fc_arc(land, clear); }
 static void net_clear(void) { fc_net_clear(); }
 
@@ -638,7 +639,7 @@ static void strike(uint8_t i, uint8_t move) {
         frames = BICYCLE_FRAMES;
     } else if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
-    move = fc_strike_ball(i, move, aim_tx, land, aim, scuff, slam, phase != PHASE_RALLY);
+    move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
     uint8_t trail = ball_trail;  // struck() calls new_flight() which clears ball_trail
     struck(i, move, frames);
     ball_trail = trail;
@@ -795,9 +796,11 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         pl_auto[i] = 0;
         firm = 1;
     }
-    int16_t lo = i == SIDE_YOU ? TO_SUB(HALFWAY + 10) : TO_SUB(OUT_Y0 + 8);
-    int16_t hi = i == SIDE_YOU ? TO_SUB(OUT_Y1 - 4) : TO_SUB(HALFWAY - 10);
-    fc_step_move(i, tx, ty, firm, TO_SUB(OUT_X0 + 8), TO_SUB(OUT_X1 - 8), lo, hi);
+    fc_min_x = TO_SUB(OUT_X0 + 8);
+    fc_max_x = TO_SUB(OUT_X1 - 8);
+    fc_min_y = i == SIDE_YOU ? TO_SUB(HALFWAY + 10) : TO_SUB(OUT_Y0 + 8);
+    fc_max_y = i == SIDE_YOU ? TO_SUB(OUT_Y1 - 4) : TO_SUB(HALFWAY - 10);
+    fc_step_move(i, tx, ty, firm);
 
     // The CPU's meter fills as it waits (a point every 4 frames; taps add more), and it
     // gives up the strike held full too long. Yours fills only as you press (ready()).
@@ -887,7 +890,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
 // the curve), not on a frame the flight changed (busy already).
 static void want_predict(uint8_t i) {
     uint8_t f = (uint8_t)frame_count;
-    if (f == flight_frame || phase != PHASE_RALLY) return;
+    if (f == flight_frame || f == clear_frame || phase != PHASE_RALLY) return;
     // Going away from i over the other half: nothing to meet (only a strike turns
     // it round, a new flight), so no trace: fewer traces, the busiest frames lighter.
     // (Over i's own half, a control touch going up and away: still traced.)
@@ -1022,6 +1025,7 @@ static void landed(void) {
 static void ball_update(void) {
     if (arc_clear && (uint8_t)frame_count != flight_frame) {
         arc_clear = 0;
+        clear_frame = (uint8_t)frame_count;
         net_clear();
     }
     if (phase == PHASE_SERVE) {
