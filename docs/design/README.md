@@ -152,9 +152,13 @@ slammed (the Captain Tsubasa feel).
 
 - **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
   ball as long as I'm near it, as long as you queue it up"): A or B any time in a
-  rally. It waits, and you move freely, until the ball comes your way; then the
-  game runs you to where to meet it, at running speed with the same momentum, easing in
-  as you get there, anywhere in your half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
+  rally. **Queued, you're locked** where you stand, the d-pad only aiming (2026-11-23,
+  from the playtest, replacing the game running you to the ball: "player positions
+  himself after kick to where they think the ball is landing next, they press a key to
+  power up A or B or both. The player is locked, when they're near the ball at return
+  distance they either return or slide and return or if they're too far they miss").
+  Getting there is yours, with the d-pad, before you press; only a ball loose in your
+  half walks you to it. The CPU is still run to where to meet it. The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees). You only play the ball over your
   own half: no reaching over the net.
@@ -187,19 +191,18 @@ slammed (the Captain Tsubasa feel).
   "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
-- **No distance limits** (2026-11-22, from the playtest): you're run to the ball from
-  anywhere in your half, to where it crosses your line if it's low enough to play
-  there (worked out exactly before it bounces), else to just behind its bounce. You
-  reach a body width either side (16 px), a header 35 px up (a jump), a bicycle kick 39.
-  At the last moment, if a slide gets there (your reach plus a 36 px lunge, toward where
-  it'll cross your line, a ball up to 23 px high), you slide for it; further, you miss.
-  A slide that gets there pops the ball up, and you're down a short while; miss and
-  you're down longer. (Measured with build/scratch/misses.mjs: balls getting past within
+- **Return, slide and return, or miss** (2026-11-23): you reach a body width either
+  side (16 px), a header 35 px up (a jump), a bicycle kick 39. At the last moment, if a
+  slide gets there (your reach plus a 36 px lunge, toward where it'll cross your line,
+  a ball up to 23 px high), you slide for it and return it with the strike you readied
+  (on fire without the meter to meet it, you're knocked down), and you're down a short
+  while; further, you miss, and you're down longer. (Before, the game ran you to the
+  ball from anywhere in your half, and a slide only popped it up.) (Measured with build/scratch/misses.mjs: balls getting past within
   30 px of a queued player went from 32 to 15 in seven matches.)
 - **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
   of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
-  your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
-  there; met in the air with two presses (8; the CPU half a meter) it's a **slam**, on fire, deep; with less, a
+  your half has a flashing marker where it drops to 26 px up. Get there (a charged slam
+  leaps up to 28 px across to it); met in the air with two presses (8; the CPU half a meter) it's a **slam**, on fire, deep; with less, a
   header, still out of the air. A drop shot gets the marker too, off its bounce as well,
   and hops higher (about 11 px). The CPU taps hard against a ball on fire, so a slam can
   be met clean.
@@ -215,7 +218,7 @@ slammed (the Captain Tsubasa feel).
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
   20-27, a row of sprites placed a frame at most (src/vfx.c).
-- **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
+- **Pop-ups**: a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
