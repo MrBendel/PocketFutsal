@@ -253,6 +253,22 @@ slammed (the Captain Tsubasa feel).
   long kick lands up to 10 px past its aim. So: two presses meet fire (FIRE_MEET_YOU 8)
   and slam (SLAM_CHARGE 8; the chime moved there), and aim stays 16 px inside the lines
   (AIM_IN). The CPU's thresholds are unchanged.
+- **Deep by the button, a slam zone, the ball's spin** (2026-11-22, from the playtest:
+  "near impossible to get the lob shots before they landed in the zone", "it always
+  seems to shoot the balls short... A shots the deepest where B shots should aim to
+  curve mid field", "the ball always rotates the same direction"):
+  - Your A lands 64-80 px past the net by the meter (UP 16 deeper, to 96; DOWN 24
+    shorter); B 48-56, mid-court. The CPU's depths are unchanged.
+  - Charged for a slam (two presses), you leap at a lob or a pop-up coming down from
+    up to 28 px across and 20 in depth (SLAM_LEAP_X, SLAM_LEAP_FWD; a strike reaches
+    16 and 4-8), moving up to 12 px, and strike it the next frame (a leap and a strike
+    in one frame was a match's busiest frame).
+  - Shots landed long: arc() sped up a slow shot with >> on a negative, which rounds
+    away from zero, so your shots (going up the court) went a tenth faster than their
+    time in the air allowed: serves 20 px long. Sped up as a size now, the time cut by
+    103/128 a step and z0 / t from a table: within 6 px, no division.
+  - The ball's frames roll its face down the screen (toward you); going up it, they
+    play backwards.
 - **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts

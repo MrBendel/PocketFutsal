@@ -322,6 +322,23 @@ test('a lob coming down to you: a flashing marker where to meet it; queued, you 
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
+test('charged for a slam (two presses), you leap at a lob coming down well outside your reach', () => {
+  const leap = (charge) => {
+    const emu = quietRally();
+    incoming(emu, 104, 196, 0, -6);  // 24 px across, 6 behind you, coming down
+    set16(emu, 'ball_z', 30 * 16);
+    emu.write8(emu.symbols.addr('ball_lob'), 1);
+    readied(emu, SHOT_POWER, charge);
+    emu.idle(3);
+    return emu;
+  };
+  const yes = leap(8);
+  assert.equal(at(yes, 'pl_shots', YOU), 1, 'leapt and struck it');
+  assert.equal(at(yes, 'pl_last_move', YOU), MOVE_BICYCLE, 'a slam: a jumping bicycle kick');
+  assert.equal(yes.v('ball_power'), 1, 'on fire');
+  assert.equal(at(leap(4), 'pl_shots', YOU), 0, 'one press: no leap');
+});
+
 test('a slam by the button: A red, B blue (bending), both gold (faster; only a full meter meets it clean)', () => {
   const slam = (first, second) => {
     const emu = quietRally();
@@ -528,6 +545,20 @@ test('UP plays it deep, DOWN short; LEFT and RIGHT near the sidelines', () => {
   const [, deep] = land(['UP']), [, mid] = land([]), [, short] = land(['DOWN']);
   assert.ok(deep < mid - 12 && mid < short, `deep ${deep}, as charged ${mid}, short ${short}`);
   assert.ok(land(['LEFT'])[0] < 40 && land(['RIGHT'])[0] > 120, 'near the sidelines');
+});
+
+test('A plays it deep, deeper the more charged; B curves to mid-court', () => {
+  const land = (shot, charge) => {
+    const emu = quietRally();
+    ballAt(emu, 82, 184);
+    readied(emu, shot, charge);
+    emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 160, 'it landing');
+    return HALFWAY - px(emu.v('ball_y', 'i16'));  // px past the net
+  };
+  const a8 = land(SHOT_POWER, 8), a24 = land(SHOT_POWER, 24), b8 = land(SHOT_CURVE, 8);
+  assert.ok(a8 >= 60 && a8 <= 80, `A, two presses: deep, ${a8} px past the net`);
+  assert.ok(a24 > a8 + 4 && a24 <= 100, `A, six presses: deeper, ${a24}`);
+  assert.ok(b8 >= 40 && b8 <= 64, `B: mid-court, ${b8}`);
 });
 
 test('aim is a direction from where you are: neutral goes half across, away from the CPU; LEFT / RIGHT angle all the way', () => {

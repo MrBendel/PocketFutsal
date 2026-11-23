@@ -126,6 +126,8 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (the CPU's)
 #define FIRE_MEET_YOU 8   // yours: two presses (playtests: people press two or three times before it arrives)
 #define SLAM_CHARGE 8     // your charge for a slam off a pop-up or a lob: two presses (the CPU's: half a meter)
+#define SLAM_LEAP_X 28    // px across: your slam's reach, charged, at a lob or a pop-up coming down (a strike's 16)
+#define SLAM_LEAP_FWD 20  // px either way in depth (a strike's 4 behind, 8 in front); 12 px of it a leap
 #define AIM_IN 16         // px: aimed this far inside the lines (a long shot lands up to 10 px past its aim)
 #define SCUFF 4           // a strike with less charge than this is scuffed into the net
 #define KICK_FRAMES 14    // a strike's pose; no touches meanwhile
@@ -189,6 +191,7 @@ uint8_t meet_out[2];  // the ball's landing out: that side lets it go
 uint8_t ball_flight;    // counts each change in the ball's flight (a touch, a bounce, the net)
 uint8_t flight_frame;   // the frame it last changed on
 int16_t ball_hx, ball_hwy;  // the ball's centre as last drawn: hardware x, hardware y + camera (for effects)
+uint8_t you_leap;  // you leapt at a slam last frame: strike it now
 uint8_t meet_slam[2];   // meet_* is the slam spot: a lob or a pop-up, met coming down
 uint8_t meet_flight[2]; // the flight each side's meet_* was traced for
 uint8_t predict_frame;  // the frame a trace last ran on
@@ -331,6 +334,7 @@ static void unready(uint8_t i) {
     pl_charge[i] = pl_hold[i] = pl_taps[i] = 0;
     pl_aim[i] = 1;
     pl_depth[i] = 1;
+    if (i == SIDE_YOU) you_leap = 0;
 }
 
 static void ball_plain(void) {
@@ -494,7 +498,7 @@ static void draw(void) {
     place(OAM_BALL, sx, sy - bz);
     ball_hx = sx + 4;
     ball_hwy = sy - bz + 4 + cam_y;
-    vfx_draw(cam_y);
+    if (flight_frame != (uint8_t)frame_count) vfx_draw(cam_y);  // (not a strike's busy frame: a slam's burst shows a frame on)
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
@@ -683,29 +687,40 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
 // air, its shadow under it, and clears the net if it's meant to.
 // If it's to go over (clear), it must be NET_H + 3 px up as it gets to the net,
 // t_n frames on, so a fast flat strike is lifted, and lands deeper (or long).
-static int16_t arc_t;  // arc()'s time in the air, frames
+int16_t arc_t;  // arc()'s time in the air, frames
 uint8_t arc_clear;     // the arc just struck is to clear the net: net_clear() next frame
 // A curve's push for its time in the air t (by t / 4): 384 * CURVE_OFS / t^2, 1 to 60.
 static const uint8_t curve_push[] = {
     17, 17, 17, 17, 17, 17, 17, 17, 15, 12, 10, 8, 7, 6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2,
     2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
+// 512 / t for t / 4 (the middle of each step; 12 at least).
+static const uint8_t inv_t[] = {43, 43, 43, 38, 29, 24, 20, 17, 15, 14, 12, 11, 10, 10, 9, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5};
 static void arc(int16_t land, uint8_t clear) {
     int16_t vy = abs16(ball_vy);
     if (!vy) vy = 1;
     int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 400);
     // Too slow to get there in ARC_FLAT frames (ARC_MAX a drop shot): it goes
-    // faster instead of ballooning up out of sight: a quarter faster at a time (no
-    // division), each about 4/5 of the time.
+    // faster instead of ballooning up out of sight: a quarter faster at a time, so
+    // 4/5 of the time (103/128 of it, no division: tuned for a serve to land where aimed). Sped up as a size, then signed:
+    // >> on a negative rounds it up, and sped your shots (going up the court) a
+    // tenth more than the CPU's, so they landed long (the playtest's serves, 20 px).
     uint8_t most = ball_drop ? ARC_MAX : ARC_FLAT;
-    while (t > most) {
-        ball_vx += ball_vx >> 2;
-        ball_vy += ball_vy >> 2;
-        t -= (t >> 2) - (t >> 4);
+    if (t > most) {
+        int16_t vx = abs16(ball_vx);
+        do {
+            vx += vx >> 2;
+            vy += vy >> 2;
+            t -= (t >> 2) - (t >> 4) + (t >> 7);
+        } while (t > most);
+        ball_vx = ball_vx < 0 ? -vx : vx;
+        ball_vy = ball_vy < 0 ? -vy : vy;
     }
     arc_t = t;
     ball_vz = (3 * (t + 1)) >> 3;
-    if (ball_z) ball_vz -= ball_z / t;  // (a division only off the floor)
+    // Off the floor, less by z0 / t: z0 times 512 / t from a table (by t / 4) over
+    // 512, no division (a strike's frame is the busiest).
+    if (ball_z > 0) ball_vz -= (int16_t)(((uint16_t)ball_z * inv_t[t > 103 ? 25 : t >> 2]) >> 9);
     arc_clear = clear;  // the net: checked next frame (net_clear), off the strike's busy one
 }
 
@@ -738,15 +753,19 @@ static void aim_point(uint8_t i) {
         aim = cpu_aim;
         depth = cpu_depth;
     }
-    int16_t d = 24 + c + (c >> 1);  // past the net: 24 .. 72
-    if (depth == 2) d += 24;
-    else if (!depth) d = d > 40 ? d - 24 : 16;
-    else if (i == SIDE_YOU) {
-        // Neither UP nor DOWN: away from the CPU in depth too: short of it back at
-        // its baseline, past it up near the net (charged deep is where it stands).
-        int16_t back = HALFWAY - PX(pl_y[SIDE_CPU]);  // px past the net it stands
-        if (back > 60) { if (d > 40) d = 40; }
-        else if (d < back + 24) d = back + 24;
+    int16_t d;
+    if (i == SIDE_YOU) {
+        // Yours (playtest: "it should always aim to shoot deep, deeper if there's more
+        // power... B shots should curve mid field"): A deep, 64 .. 80 past the net by
+        // the meter; B mid-court, 48 .. 56. UP 16 deeper (to 96: the baseline's 112,
+        // AIM_IN inside it), DOWN 24 shorter.
+        d = pl_shot[i] == SHOT_CURVE ? 48 + (c >> 2) : 64 + (c >> 1);
+        if (depth == 2) d += 16;
+        else if (!depth) d -= 24;
+    } else {
+        d = 24 + c + (c >> 1);  // the CPU's, past the net: 24 .. 72
+        if (depth == 2) d += 24;
+        else if (!depth) d = d > 40 ? d - 24 : 16;
     }
     if (pl_shot[i] == SHOT_LOB) {
         // Over their head, and deep: 24 px behind them, at least 60 past the net, so
@@ -1046,9 +1065,28 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     if (pl_shot[i]) {
         // Your own control, still going up: wait for it to come down (charging).
         if (ball_pop && last_touch == i && ball_vz > 0) return;
+        // Leapt last frame (below): the slam now, a frame on (a strike and a leap in
+        // one frame were the busiest frame of a match).
+        if (i == SIDE_YOU && you_leap) {
+            you_leap = 0;
+            if ((ball_lob || ball_pop) && rel_z < REACH_Z + 8) {
+                meet(i, MOVE_HEADER);
+                return;
+            }
+        }
         uint8_t move = in_half(i) ? in_reach() : MOVE_NONE;
         if (move) {
             meet(i, move);
+            return;
+        }
+        // Your slam, charged: a leap at a lob or a pop-up coming down near you (the
+        // ring's a zone, not a spot: playtest, "near impossible to get there").
+        if (i == SIDE_YOU && (ball_lob || ball_pop) && ball_vz < 0 && pl_charge[i] >= SLAM_CHARGE && in_half(i) &&
+            rel_z >= 4 && rel_z < REACH_Z + 8 && ax <= SLAM_LEAP_X && abs16(rel_fwd) <= SLAM_LEAP_FWD) {
+            pl_x[i] += TO_SUB(clamp16(rel_x, -12, 12));
+            pl_y[i] -= TO_SUB(clamp16(rel_fwd, -12, 12));
+            keep_in(i);
+            you_leap = 1;
             return;
         }
         // Right over you, too high yet: wait for it.
