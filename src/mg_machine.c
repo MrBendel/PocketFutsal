@@ -49,21 +49,23 @@
 #define T_FLASH (MG_SPR_TILES + 20)
 // OAM (lower numbers draw on top).
 #define OAM_FLASH (OAM_MG_FREE + 0)
-#define OAM_MACHINE (OAM_MG_FREE + 1)  // 3
-#define OAM_AIM (OAM_MG_FREE + 4)
-#define OAM_DUMMIES (OAM_MG_FREE + 5)  // 3 dummies * 2 sprites = 6 (19..24)
-#define OAM_TRAIL (OAM_MG_FREE + 11)   // 4: shared Futnet red/blue/gold shot trail (25..28)
-#define OAM_LAST (OAM_MG_FREE + 14)
+#define OAM_MACHINE (OAM_MG_FREE + 1)    // 3
+#define OAM_AIM (OAM_MG_FREE + 4)        // return aim marker on far half
+#define OAM_PASS_MARK (OAM_MG_FREE + 5)  // incoming pass landing indicator on near half
+#define OAM_DUMMIES (OAM_MG_FREE + 6)    // 3 dummies * 2 sprites = 6 (20..25)
+#define OAM_TRAIL (OAM_MG_FREE + 12)     // 4: shared Futnet red/blue/gold shot trail (26..29)
+#define OAM_LAST (OAM_MG_FREE + 15)
 // Keep SPR_PAL_TRAIL_POWER (red) & SPR_PAL_TRAIL_CURVE (blue) for real shot trails!
 #define PAL_MACHINE SPR_PAL_CPU
 #define PAL_DUMMY SPR_PAL_CPU
 #define PAL_DUMMY_GOLD SPR_PAL_POWER
 
 #define DUMMY_MAX 3
-#define DUMMY_HIT_X 13
-#define DUMMY_HIT_Y 14
-#define DUMMY_HIT_Z 24
-#define DUMMY_DOWN_FRAMES 48
+#define DUMMY_HIDDEN 0xFF                // hidden until the ball is shot to you!
+#define DUMMY_HIT_X 16
+#define DUMMY_HIT_Y 16
+#define DUMMY_HIT_Z 26
+#define DUMMY_DOWN_FRAMES 44
 #define PTS_DUMMY 2
 
 // --- tuning ---
@@ -281,58 +283,70 @@ static void trace(void) {
     trace_y = PX(y);
 }
 
-// --- pop-up defender dummies ---
-static void place_dummy(uint8_t k) {
-    // Each dummy occupies its own lane (0=left, 1=center, 2=right) at a varied depth.
-    static const int16_t lane_x[3] = {AIM_X_L, CENTER_X, AIM_X_R};
-    static const int16_t row_y[3] = {AIM_Y_DEEP + 12, AIM_Y_MID + 4, AIM_Y_SHORT - 4};
-    mg_machine_dx[k] = lane_x[k] + spread(10);
-    mg_machine_dy[k] = row_y[roll(3)];
-    mg_machine_dst[k] = 0;
-    if (k == mg_machine_gold) {
-        mg_machine_tx = mg_machine_dx[k];
-        mg_machine_ty = mg_machine_dy[k];
-    }
+// --- pop-up target players (appear randomly AFTER the ball is shot to you!) ---
+static void hide_dummies(void) {
+    for (uint8_t k = 0; k < DUMMY_MAX; k++) mg_machine_dst[k] = DUMMY_HIDDEN;
 }
 
-static void reset_dummies(void) {
-    mg_machine_gold = roll(DUMMY_MAX);
-    for (uint8_t k = 0; k < DUMMY_MAX; k++) place_dummy(k);
+static void popup_targets(void) {
+    // Primary gold target pops up at a random spot across the far half (reaction & aim!).
+    mg_machine_gold = 0;
+    mg_machine_dx[0] = 28 + roll(104);  // 28 .. 131
+    mg_machine_dy[0] = 26 + roll(56);   // 26 .. 81
+    mg_machine_dst[0] = 0;
+    mg_machine_tx = mg_machine_dx[0];
+    mg_machine_ty = mg_machine_dy[0];
+    // Add 1-2 extra red pop-up targets on other lanes at higher levels (or 1 from level 1).
+    uint8_t extras = mg_machine_level >= 3 ? 2 : 1;
+    for (uint8_t k = 1; k < DUMMY_MAX; k++) {
+        if (k <= extras) {
+            int16_t rx, ry;
+            uint8_t tries = 0;
+            do {
+                rx = 28 + roll(104);
+                ry = 26 + roll(56);
+                tries++;
+            } while (tries < 6 && abs16(rx - mg_machine_dx[0]) < 28);
+            mg_machine_dx[k] = rx;
+            mg_machine_dy[k] = ry;
+            mg_machine_dst[k] = 0;
+        } else {
+            mg_machine_dst[k] = DUMMY_HIDDEN;
+        }
+    }
 }
 
 // --- the machine ---
-// Direct soccer passes: low arc, snappy pace, no tennis lobs!
+// Direct, crisp driven soccer passes that zip all the way into your stride!
 static void plan_shot(void) {
     uint8_t lv = mg_machine_level;
-    int16_t wide = 24 + lv * 6;
+    int16_t wide = 26 + lv * 5;
     if (wide > 56) wide = 56;
-    uint8_t t = 58 - (lv << 1);  // crisp pass: 58 .. 38 frames
+    // Crisp pass speed: 44 .. 28 frames from launcher to your stride (54..80 SUB/frame!).
+    uint8_t t = 44 - (lv > 8 ? 16 : (lv << 1));
     uint8_t kind = lv >= 2 ? roll(4) : 1;
-    int16_t ly = 152 + roll(36 + lv * 2);
+    int16_t ly = 166 + roll(36);  // right in your active zone (166..201)
     if (kind == 0) {
-        t += 12;  // driven half-volley pass (still low, not a tennis lob!)
-        ly = 178 + roll(22);
+        t += 6;   // driven half-volley pass
+        ly = 178 + roll(24);
     } else if (kind == 3 && lv >= 4) {
-        t -= 8;   // fizzing ground pass
-        ly = 148 + roll(28);
+        t -= 4;   // fizzing ground pass
+        ly = 162 + roll(30);
     }
-    t += roll(8);
     mg_machine_shot_t = t;
-    mg_machine_shot_x = clamp16(CENTER_X + spread((uint8_t)wide), COURT_X0 + 12, COURT_X1 - 12);
-    mg_machine_shot_y = clamp16(ly, HALFWAY + 24, COURT_NEAR - 16);
+    mg_machine_shot_x = clamp16(CENTER_X + spread((uint8_t)wide), COURT_X0 + 14, COURT_X1 - 14);
+    mg_machine_shot_y = clamp16(ly, 158, COURT_NEAR - 18);
     mg_machine_mx_to = lv >= 3 ? MX_MIN + roll(MX_MAX - MX_MIN) : CENTER_X;
     int16_t d = mg_machine_shot_x - mg_machine_mx_to;
     mg_machine_aim = d < -14 ? 0 : d > 14 ? 2 : 1;
-    // Pop any knocked-over dummies back up in fresh spots!
-    for (uint8_t k = 0; k < DUMMY_MAX; k++) {
-        if (mg_machine_dst[k]) place_dummy(k);
-    }
+    // Keep targets hidden during telegraph so they pop up AFTER the ball is shot!
+    hide_dummies();
 }
 
 static void begin_tell(void) {
     plan_shot();
     mg_machine_state = MS_TELL;
-    int16_t tell = 38 - 2 * mg_machine_level;  // 38 .. 18 frames warning
+    int16_t tell = 40 - 2 * mg_machine_level;  // 40 .. 20 frames warning with field indicator
     int16_t roll_far = abs16(mg_machine_mx_to - mg_machine_mx);
     if (tell < roll_far) tell = roll_far;
     mg_machine_timer = (uint8_t)tell;
@@ -343,24 +357,28 @@ static void fire(void) {
     uint8_t t = mg_machine_shot_t;
     mg_machine_bx = TO_SUB(mg_machine_mx);
     mg_machine_by = TO_SUB(MACHINE_Y);
-    mg_machine_bz = TO_SUB(3);  // low driven pass out of the launcher
+    mg_machine_bz = TO_SUB(4);  // crisp driven pass out of the launcher
     mg_machine_fall = 0;
     mg_machine_bvx = TO_SUB(mg_machine_shot_x - mg_machine_mx) / t;
     mg_machine_bvy = TO_SUB(mg_machine_shot_y - MACHINE_Y) / t;
-    // Low soccer-pass arc: skims cleanly along the grass or hops waist-high.
-    mg_machine_bvz = (roll(3) == 0 && mg_machine_level >= 2) ? 12 : 6;
+    // Ensure real soccer pass velocity so it always reaches past the player cleanly.
+    if (mg_machine_bvy < 52) mg_machine_bvy = 52;
+    // Low driven pass arc: skims cleanly or hops once waist-high into your stride.
+    mg_machine_bvz = (roll(3) == 0 && mg_machine_level >= 2) ? 14 : 9;
     mg_machine_ball = BS_IN;
     mg_machine_bounces = 0;
     mg_machine_state = MS_FLIGHT;
     mg_machine_recoil = 12;
     mg_machine_result = R_NONE;
+    // Reaction & aim training: targets pop up randomly RIGHT as the ball is shot to you!
+    popup_targets();
     sfx_play(SFX_KICK);
 }
 
 static void machine_update(void) {
     if (mg_machine_recoil) mg_machine_recoil--;
     for (uint8_t k = 0; k < DUMMY_MAX; k++) {
-        if (mg_machine_dst[k] > 1) mg_machine_dst[k]--;
+        if (mg_machine_dst[k] != DUMMY_HIDDEN && mg_machine_dst[k] > 1) mg_machine_dst[k]--;
     }
     if (mg_machine_state == MS_WAIT) {
         if (mg_machine_timer) mg_machine_timer--;
@@ -449,8 +467,9 @@ static void ball_update(void) {
         if (mg_machine_bz <= 0) {
             int16_t up = (-mg_machine_bvz * 5) >> 3;
             mg_machine_bz = 0;
-            mg_machine_bvx -= mg_machine_bvx >> 3;
-            mg_machine_bvy -= mg_machine_bvy >> 3;
+            // Light turf friction on bounce so driven passes keep their pace into your stride!
+            mg_machine_bvx -= mg_machine_bvx >> 4;
+            mg_machine_bvy -= mg_machine_bvy >> 4;
             mg_machine_bvz = up > BOUNCE_DEAD ? up : 0;
             mg_machine_bounces++;
             if (mg_machine_ball == BS_OUT) {
@@ -462,8 +481,8 @@ static void ball_update(void) {
                 if (ly < HALFWAY && !in_far_half(lx, ly)) decide(R_OUT);
             }
         }
-    } else if (!(frame_count & 1)) {
-        // Rolling on the turf.
+    } else if (!(frame_count & 3)) {
+        // Light turf rolling friction (1/4 frame) so passes glide smoothly all the way to you.
         if (mg_machine_bvx > 0) mg_machine_bvx--;
         else if (mg_machine_bvx < 0) mg_machine_bvx++;
         if (mg_machine_bvy > 0) mg_machine_bvy--;
@@ -668,9 +687,13 @@ static void draw(void) {
     } else {
         move_sprite(OAM_FLASH, 0, 0);
     }
-    // Pop-up defender dummies: 3 across the far half (1 gold +3, 2 red +2).
+    // Pop-up defender targets (hidden until the ball is shot to you!).
     for (uint8_t k = 0; k < DUMMY_MAX; k++) {
         uint8_t o = OAM_DUMMIES + (k << 1);
+        if (mg_machine_dst[k] == DUMMY_HIDDEN) {
+            mg_hide(o, o + 1);
+            continue;
+        }
         uint8_t down = mg_machine_dst[k] != 0;
         uint8_t dtile = down ? T_DUMMY_DOWN : T_DUMMY_UP;
         uint8_t dpal = k == mg_machine_gold ? PAL_DUMMY_GOLD : PAL_DUMMY;
@@ -680,7 +703,15 @@ static void draw(void) {
         mg_sprite(o, dtile, dpal, dx_s, dy_s);
         mg_sprite(o + 1, dtile + 2, dpal, dx_s + 8, dy_s);
     }
-    // While a ball comes at you, a marker where the d-pad / queued aim sends your return.
+    // Pass target indicator on YOUR half during telegraph & incoming pass (run here!).
+    if (mg_run == MG_RUN_LIVE && (mg_machine_state == MS_TELL || mg_machine_ball == BS_IN)) {
+        uint8_t mpal = ((uint8_t)frame_count & 4) ? SPR_PAL_POWER : SPR_PAL_UI;
+        mg_sprite(OAM_PASS_MARK, MG_T_AIM, mpal,
+                  proj_x(mg_machine_shot_x, mg_machine_shot_y) - 4, proj_sy(mg_machine_shot_y) - 4);
+    } else {
+        move_sprite(OAM_PASS_MARK, 0, 0);
+    }
+    // While a ball comes at you, a marker on the FAR half where your return aims.
     if (mg_machine_ball == BS_IN && mg_run == MG_RUN_LIVE) {
         uint8_t aim = (joy & J_LEFT) ? 0 : (joy & J_RIGHT) ? 2 : pl_shot[SIDE_YOU] ? pl_aim[SIDE_YOU] : 1;
         uint8_t dep = (joy & J_UP) ? 2 : (joy & J_DOWN) ? 0 : pl_shot[SIDE_YOU] ? pl_depth[SIDE_YOU] : 1;
@@ -726,7 +757,9 @@ void mg_machine_enter(void) BANKED {
     mg_machine_swing = mg_machine_move_t = 0;
     mg_machine_move = MOVE_NONE;
     mg_machine_note = mg_machine_end = 0;
-    reset_dummies();
+    mg_machine_tx = CENTER_X;
+    mg_machine_ty = AIM_Y_MID;
+    hide_dummies();  // targets pop up randomly after the ball is fired!
     // REFLEX: quicker to the ball, a longer reach.
     uint8_t rf = stat_lv[STAT_REFLEX];
     mg_machine_speed = SPEED_BASE + (rf >> 1);

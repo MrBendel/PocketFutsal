@@ -7,6 +7,7 @@ import {
 } from './helpers.mjs';
 import {
   startMinigame, goLive, openGame, phaseSettled, toResults, MG, MG_PH, MG_RUN, STAT,
+  OAM_MG_FREE,
 } from './mg_helpers.mjs';
 
 // Must match src/mg_machine.c.
@@ -42,18 +43,40 @@ function placePlayer(emu, x, y) {
   emu.write8(emu.symbols.addr('mg_machine_move_t'), 0);
 }
 
-test('machine telegraphs and fires a ball over the net into your half', () => {
+test('machine telegraphs pass spot, fires fast pass, and pops up targets on fire', () => {
   const e = startLive(4242);
-  // Opening live screen with training court, HUD, and machine waiting.
+  // Opening live screen with training court, HUD, and machine waiting (targets hidden).
   matchGolden(e, 'mg-machine-start');
   e.until((u) => u.v('mg_machine_state') === MS_TELL, 80, 'machine tell');
+  // Targets stay hidden during telegraph; pass indicator shows where the pass will land.
+  for (let k = 0; k < 3; k++) {
+    assert.equal(e.read8(e.symbols.addr('mg_machine_dst') + k), 0xFF, `dummy ${k} hidden during tell`);
+  }
+  assert.ok(e.v('mg_machine_shot_y', 'i16') >= 158, 'pass aimed into player half');
+  e.idle(1);
+  const markY = e.read8(0xFE00 + (OAM_MG_FREE + 5) * 4);
+  assert.ok(markY > 0 && markY < 160, `pass indicator sprite visible during tell (OAM y=${markY})`);
+
   e.until((u) => u.v('mg_machine_state') === MS_FLIGHT, 80, 'machine fire');
   assert.equal(e.v('mg_machine_ball'), BS_IN);
-  assert.ok(e.v('mg_machine_bvy', 'i16') > 0, 'fired ball travels toward the player');
+  assert.ok(e.v('mg_machine_bvy', 'i16') >= 52, 'fired pass has crisp velocity toward player');
   assert.ok(e.v('mg_machine_recoil') > 0, 'machine recoils on firing');
-  // Step 2 frames so muzzle flash + flying ball are clearly visible.
+  // Targets pop up right as the pass is fired (reaction + aim training).
+  assert.equal(e.read8(e.symbols.addr('mg_machine_dst')), 0, 'gold target popped up on fire');
+  assert.equal(e.read8(e.symbols.addr('mg_machine_dst') + 1), 0, 'second target popped up on fire');
+
+  // Step 2 frames so muzzle flash, flying pass, pass indicator, and popped targets are visible.
   e.idle(2);
   matchGolden(e, 'mg-machine-firing');
+
+  // Let the pass travel unreturned and verify it reaches deep into the player zone (>= 200 px).
+  let maxY = 0;
+  for (let f = 0; f < 90 && e.v('mg_machine_ball') === BS_IN; f++) {
+    e.idle(1);
+    const by = px(e.v('mg_machine_by', 'i16'));
+    if (by > maxY) maxY = by;
+  }
+  assert.ok(maxY >= 200, `unreturned pass reached y=${maxY} (expected >= 200)`);
 });
 
 test('striking an incoming ball scores +1 in court and +3 in the gold ring', () => {
