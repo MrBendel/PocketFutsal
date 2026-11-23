@@ -23,9 +23,12 @@ rebounding walls outside the goal mouths. WATCH runs four AI players; PLAY gives
 you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
 in a futsal match; START pauses.
 
-With possession, A shoots and B passes. Without possession, A slide tackles and
+With possession, A shoots; tap B for a quick pass, or hold B for at least a
+fifth of a second and release for a high lob. Holding a lob slows the carrier
+and flashes their crouch when ready. Without possession, A slide tackles and
 B bursts; both defensive actions have a cooldown. When your teammate carries,
-B calls for a pass. D-pad moves and left/right aims shots. AI positioning and
+tap B for a quick return, or hold/release B to call a lob into your forward run.
+D-pad moves and left/right aims shots. AI positioning and
 match balance still need playtesting.
 
 The 2v2 gameplay pass adds acceleration, braking and momentum when reversing.
@@ -48,9 +51,18 @@ Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court
 pixels into that direction to receive in space. Try a one-two: **B to pass, run
 into space, B to call for the return, then A to finish**. You can call while your
 first pass is still airborne: your teammate returns it on receiving. The call
-expires after 48 frames or when an opponent takes possession.
+expires after 48 frames (80 for a lob) or when an opponent takes possession.
 AI defenders have a brief reaction delay
 and commit to tackles, so changing direction can create an opening.
+
+A high lob marks its landing zone with a gold ellipse. Get into the zone; as
+the ball descends the ellipse pulses orange. Press A to jump for an aerial
+finish, with a bicycle kick when the delivery is behind you. The jump winds
+up before contact, keeps the ground shadow fixed and recovers afterward.
+It only shoots if the descending ball actually reaches you in the air.
+A recent defensive burst does not block this jump, so you can sprint into
+position. Try **tap B, run forward, hold/release B for the lob return, then A
+in the pulsing zone**. AI receivers can attempt aerial finishes too.
 
 Both modes use dedicated left/right side-running sprites; all four futsal
 characters retain their individual profile heads. The animated sprite review
