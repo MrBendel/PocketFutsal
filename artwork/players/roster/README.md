@@ -29,8 +29,10 @@ Side idle and two side-running strides share bank 0 tiles 214..241 (28 for
 the whole roster): four upper bodies and three common lower bodies. This
 avoids Club Court's signed background tiles at 128..213. Right-facing art
 mirrors in hardware for leftward motion. The
-original kicking profile heads are preserved pixel-for-pixel on connected,
-narrow bodies with alternating bent legs and counter-swinging arms.
+original kicking heads are preserved pixel-for-pixel on connected,
+three-quarter bodies. The broader shoulders, two-leg idle stance and compact
+running gait come from the approved front-facing sprite set; these are a slight
+turn toward movement, rather than a full profile silhouette.
 Horizontal movement selects these frames; vertical movement selects front/back.
 The last view persists at rest, and actions keep their own poses. A small
 direction threshold prevents diagonal movement from flickering between views.

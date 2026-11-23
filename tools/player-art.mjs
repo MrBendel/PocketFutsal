@@ -75,48 +75,17 @@ export function character(id) {
  }
  const slide=tackle.map(r=>r.join(''));
 
- // Right-facing idle/contact and two opposing strides. Keep the approved
- // profile head at its original resolution; draw a connected neck, narrow
- // torso, counter-swinging arms and bent knees underneath it.
- const sideBodies=[[
-  '.......31133....',
-  '......322223....',
-  '......322223....',
-  '......323113....',
-  '......322333....',
-  '.......3333.....',
-  '.......3113.....',
-  '.......3223.....',
-  '.......3113.....',
-  '......333333....',
-  '................',
- ],[
-  '.......31133....',
-  '......322223....',
-  '......322223....',
-  '....3113223113..',
-  '.......333333...',
-  '.....3311333....',
-  '....311333113...',
-  '...3323...3223..',
-  '..33333....3113.',
-  '...........33333',
-  '................',
- ],[
-  '.......31133....',
-  '......322223....',
-  '......322223....',
-  '.....311223333..',
-  '.....3333333....',
-  '.......333113...',
-  '......3113323...',
-  '......3223.3333.',
-  '.....3113.......',
-  '....33333.......',
-  '................',
- ]];
- const side=sideBodies.map(rows=>[
-  ...src[3].slice(0,13).map(r=>r.join('')),...rows,
+ // A slight three-quarter turn, using the approved front-running gait.
+ // Keep the broad shoulders, two-leg idle stance and compact bent strides.
+ // The original kicking head already shows both eyes with a slight turn.
+ const gait=read('spiky').frames.slice(0,3).map(f=>f.rows);
+ const turnedTorso=[
+  '....322111233...',
+  '...33222222233..',
+  '..3132222223113.',
+ ];
+ const side=gait.map(p=>[
+  ...src[3].slice(0,13).map(r=>r.join('')),...turnedTorso,...p.slice(16),
  ]);
 
  const transitions=views.map(view=>{

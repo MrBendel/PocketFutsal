@@ -17,6 +17,7 @@ test('side cycles preserve each approved profile head and fit the sprite budget'
    assert.deepEqual(pose.slice(0,13),c.basic[3].slice(0,13),'head pixels remain intact');
    assert.deepEqual(pose.slice(0,16),c.side[0].slice(0,16),'upper tiles are shared across the cycle');
    assert.deepEqual(pose.slice(16),character('spiky').side[c.side.indexOf(pose)].slice(16),'lower tiles are shared across characters');
+   assert.deepEqual(pose.slice(16),character('spiky').basic[c.side.indexOf(pose)].slice(16),'turned frames keep the approved running gait');
    assert.ok(pose[12].includes('1')&&pose[13].includes('1'),'jaw and neck connect');
   }
  }
