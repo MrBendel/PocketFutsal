@@ -50,9 +50,15 @@
                     // the ball's extra spin tiles (20-27), before the bursts' (32 on)
 // Its tiles (an 8x16 sprite: the ring, then blank): 1 bright, 3 inside, as
 // tools/tile-art.mjs's ASCII would be ('....1111', '..113333', '.13.....', '13......').
-static const uint8_t ring_tiles[32] = {
+static const uint8_t ring_tiles[64] = {
     0x0f, 0x00, 0x3f, 0x0f, 0x60, 0x20, 0xc0, 0x40, 0xc0, 0x40, 0x60, 0x20, 0x3f, 0x0f, 0x0f, 0x00,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    // S_DOT (30): a 4x2 dash at the top, '2112' twice (orange, yellow in the middle).
+    0x60, 0x90, 0x60, 0x90,
 };
+#define S_DOT 30     // the slam zone's dots (an 8x16 sprite: the dash, then blank)
+#define OAM_DOTS 29  // 8: the slam zone, a ring of dots closing on the spot as the ball comes down
+#define DOTS 8
 #define F_STAND 0
 #define F_RUN_A 1
 #define F_RUN_B 2
@@ -380,6 +386,33 @@ static void draw_trail(int16_t sx, int16_t wy) {
 
 static uint8_t coming(uint8_t i);  // (the rules, below)
 
+// The slam zone (playtest: "something bigger that acts like a target to say get
+// here now"): 8 dots round the spot, as far out as your leap reaches (SLAM_LEAP_X
+// across, half that deep) while the ball's far, closing on the spot as it comes
+// (by its depth: 64 px out, the ring's closing; there, it's time). (hx, hy): the
+// dash's corner for the spot.
+uint8_t dots_on;
+static void dots_off(void) {
+    for (uint8_t k = 0; k < DOTS; k++) move_sprite(OAM_DOTS + k, 0, 0);
+    dots_on = 0;
+}
+static void slam_dots(int16_t hx, int16_t hy) {
+    int16_t h = abs16(PX(ball_y) - meet_y[SIDE_YOU]) >> 1;
+    if (h > 32) h = 32;                 // far: all the way out
+    h += h << 2;                        // x5: (5h / 8) 0 .. 20 across, half deep
+    int16_t dx = 8 + (h >> 3), dy = 4 + (h >> 4);
+    int16_t ex = (dx >> 1) + (dx >> 3) + (dx >> 4), ey = (dy >> 1) + (dy >> 3) + (dy >> 4);  // x 11/16 (the diagonals)
+    place(OAM_DOTS, hx + dx, hy);
+    place(OAM_DOTS + 1, hx - dx, hy);
+    place(OAM_DOTS + 2, hx, hy + dy);
+    place(OAM_DOTS + 3, hx, hy - dy);
+    place(OAM_DOTS + 4, hx + ex, hy + ey);
+    place(OAM_DOTS + 5, hx - ex, hy + ey);
+    place(OAM_DOTS + 6, hx + ex, hy - ey);
+    place(OAM_DOTS + 7, hx - ex, hy - ey);
+    dots_on = 1;
+}
+
 static void draw(void) {
     // The camera: after the ball, a pixel or two a frame.
     int16_t by = PX(ball_y), bz = PX(ball_z);
@@ -452,9 +485,12 @@ static void draw(void) {
         set_sprite_tile(OAM_SLAM_R, S_RING);
         set_sprite_prop(OAM_SLAM_R, pal | S_FLIPX);
         place(OAM_SLAM_R, rx + 8, ry);
+        if (meet_slam[SIDE_YOU] && (ball_lob || ball_pop)) slam_dots(rx + 6, ry + 3);
+        else if (dots_on) dots_off();
     } else {
         move_sprite(OAM_SLAM, 0, 0);
         move_sprite(OAM_SLAM_R, 0, 0);
+        if (dots_on) dots_off();
     }
     // Your strike queued: a marker where it's aimed to land.
     // (Every other frame, and not a strike's: it's another aim_point.)
@@ -1113,7 +1149,13 @@ void play_enter(void) BANKED {
     banked_bkg_data((uint8_t)T_METER, HUD_TILE_COUNT, hud_tiles, BANK(hud));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
     vfx_load();
-    set_sprite_data(S_RING, 2, ring_tiles);
+    set_sprite_data(S_RING, 4, ring_tiles);
+    for (uint8_t k = 0; k < DOTS; k++) {  // set once: a frame only moves them
+        set_sprite_tile(OAM_DOTS + k, S_DOT);
+        set_sprite_prop(OAM_DOTS + k, SPR_PAL_POWER);
+        move_sprite(OAM_DOTS + k, 0, 0);
+    }
+    dots_on = 0;
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     proj_init();
