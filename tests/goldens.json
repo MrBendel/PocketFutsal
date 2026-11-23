@@ -12,9 +12,9 @@
   "menu-training": "27cd2bc9",
   "training-hub": "945e8db4",
   "minigame-results": "4b3a4c05",
-  "mg-machine-start": "55f21a73",
-  "mg-machine-firing": "5055aa00",
-  "mg-machine-return": "50c361ce",
+  "mg-machine-start": "bde63048",
+  "mg-machine-firing": "32df04bd",
+  "mg-machine-return": "dc5d7c6a",
   "wall-live": "f7c39dca",
   "wall-hit": "909878bb",
   "wall-charge": "f99857ea",
@@ -27,5 +27,6 @@
   "training-hub-scrolled": "b9ef06ca",
   "slalom-live": "581f03ac",
   "slalom-clear": "af371e7b",
-  "slalom-hit": "ca96b473"
+  "slalom-hit": "ca96b473",
+  "slam-zone": "53fef69b"
 }
