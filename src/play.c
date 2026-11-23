@@ -34,6 +34,7 @@
 #include "play_hud.h"
 #include "vfx.h"
 #include "proj.h"
+#include "trace.h"
 #include "hud.h"
 #include "sprites.h"
 #include "players.h"
@@ -44,6 +45,13 @@
 #define S_SHADOW 4
 #define S_AIM 6     // the aim marker
 #define S_TRAIL 8   // a trail's dots, largest first: S_TRAIL, +2, +4, +6
+#define S_RING 28   // the slam spot: a 16x8 ring's left half (the right, flipped); past
+                    // the ball's extra spin tiles (20-27), before the bursts' (32 on)
+// Its tiles (an 8x16 sprite: the ring, then blank): 1 bright, 3 inside, as
+// tools/tile-art.mjs's ASCII would be ('....1111', '..113333', '.13.....', '13......').
+static const uint8_t ring_tiles[32] = {
+    0x0f, 0x00, 0x3f, 0x0f, 0x60, 0x20, 0xc0, 0x40, 0xc0, 0x40, 0x60, 0x20, 0x3f, 0x0f, 0x0f, 0x00,
+};
 #define F_STAND 0
 #define F_RUN_A 1
 #define F_RUN_B 2
@@ -65,7 +73,8 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_PLAYER 1  // 4 each, by side
 #define OAM_SHADOW 9
 #define OAM_AIM 10    // where your queued strike will land
-#define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing)
+#define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing): a ring,
+#define OAM_SLAM_R 28 // its right half
 #define OAM_PLAYER_SHADOW 15  // two columns per player, below the body
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
@@ -86,7 +95,6 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define HOLD_MAX 90       // frames at a full meter before the CPU gives up the strike
 #define YOU_TAP 4         // your meter: each press adds this (it fills only by pressing, and stays)
 #define REACH_X 16        // court px either side a strike reaches (a body width)
-#define REACH_Z 36        // px: a header reaches this high (a jump); a bicycle kick 40
 #define SLIDE_Z 24        // px: a slide gets a ball this high (a diving header)
 #define REACH_FWD 8       // in front
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
@@ -109,10 +117,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define HEADER_SPEED 24   // + a quarter of the charge: flat, not a loop up
 #define CHIP_LIFT 28      // a lob: about 32 px up, 74 frames in the air
 #define POP_LIFT 32       // a pop-up: about 43 px up, 84 frames
-#define BOUNCE_MIN 15     // a first bounce gets up at least this: about 9 px, 40 frames
-#define LOB_BOUNCE 20     // a lob sits up where it lands: about 16 px, 54 frames, slowed to a quarter
 #define DROP_HOP 16       // a drop shot's: about 11 px, 43 frames
-#define SLAM_Z 26         // px: a lob or a pop-up is met this high coming down (a header)
 #define ARC_MAX 100       // frames: the longest a drop shot is in the air (about 60 px up)
 #define ARC_FLAT 60       // frames: the longest anything else arcs (about 22 px up): a weak kick doesn't loop
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
@@ -223,7 +228,14 @@ uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 #define SEEN_HEADER 9
 #define SEEN_BICYCLE 10
 #define SEEN_SCUFF 11     // a strike with next to no charge: mishit, short of the net
+#define SEEN_GO 12        // the CPU's struck it to you and nothing's queued: press!
 #define SEEN_FRAMES 60
+uint8_t go_cue;       // the ball's coming to you, nothing queued: you blink, GO! on the HUD
+// Under pressure the CPU mishits: how far it ran for your shot (from where it stood
+// as you struck it) and how fast the shot came, past PRESSURE_FREE, out of 64.
+#define PRESSURE_FREE 30
+int16_t cpu_from_x, cpu_from_y;
+uint8_t cpu_rattled;  // the CPU's mishits so far (a pop-up, or scuffed)
 uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
 uint8_t shot_seen_t;  // frames left showing it
 uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
@@ -452,6 +464,7 @@ static void draw(void) {
             if (pl_vx[i]) flip = pl_vx[i] < 0;
         }
         uint8_t pal = i == SIDE_YOU ? SPR_PAL_YOU : SPR_PAL_CPU;
+        if (i == SIDE_YOU && go_cue && ((uint8_t)frame_count & 4)) pal = SPR_PAL_FLASH;  // press!
         if (pl_shot[i]) {
             // Charging: flashing through white and fire, a step every 8 frames, 4
             // from half a meter, 2 full. (A counter, not frame_count % 3: SDCC's
@@ -487,10 +500,18 @@ static void draw(void) {
     // to meet it (the slam spot; off a drop shot's bounce).
     if (meet_flight[SIDE_YOU] == ball_flight && !goal_timer && coming(SIDE_YOU) &&
         ((meet_slam[SIDE_YOU] && (ball_lob || ball_pop)) || ((ball_drop || ball_dropped) && !meet_out[SIDE_YOU]))) {
-        set_sprite_tile(OAM_SLAM, S_AIM);
-        set_sprite_prop(OAM_SLAM, ((uint8_t)frame_count & 4) ? SPR_PAL_POWER : SPR_PAL_UI);
-        place(OAM_SLAM, proj_x(meet_x[SIDE_YOU], meet_y[SIDE_YOU]) + 4, (int16_t)proj_y[PROJ_I(meet_y[SIDE_YOU])] - cam_y + 12);
-    } else move_sprite(OAM_SLAM, 0, 0);
+        uint8_t pal = ((uint8_t)frame_count & 4) ? SPR_PAL_POWER : SPR_PAL_UI;
+        int16_t rx = proj_x(meet_x[SIDE_YOU], meet_y[SIDE_YOU]), ry = (int16_t)proj_y[PROJ_I(meet_y[SIDE_YOU])] - cam_y + 12;
+        set_sprite_tile(OAM_SLAM, S_RING);
+        set_sprite_prop(OAM_SLAM, pal);
+        place(OAM_SLAM, rx, ry);
+        set_sprite_tile(OAM_SLAM_R, S_RING);
+        set_sprite_prop(OAM_SLAM_R, pal | S_FLIPX);
+        place(OAM_SLAM_R, rx + 8, ry);
+    } else {
+        move_sprite(OAM_SLAM, 0, 0);
+        move_sprite(OAM_SLAM_R, 0, 0);
+    }
     // Your strike queued: a marker where it's aimed to land.
     // (Every other frame, and not a strike's: it's another aim_point.)
     if (pl_shot[SIDE_YOU] && !goal_timer && (phase == PHASE_RALLY || server == SIDE_YOU)) {
@@ -550,6 +571,7 @@ static int16_t other_y(uint8_t i, int16_t from_halfway) {
 // the same button again, it's a tap: more charge.
 static void ready(uint8_t i, uint8_t b) {
     uint8_t s = pl_shot[i];
+    if (i == SIDE_YOU) sfx_play(SFX_TICK);  // every press: a tick (half and full: their own)
     if (!s) {
         unready(i);
         pl_shot[i] = b ? SHOT_CURVE : SHOT_POWER;
@@ -584,7 +606,9 @@ static void ready(uint8_t i, uint8_t b) {
     // You: each press, as many as you like. The CPU: a few taps on top of its wait.
     if (pl_charge[i] == CHARGE_MAX || (i != SIDE_YOU && pl_taps[i] >= TAP_MAX)) return;
     pl_taps[i]++;
+    uint8_t was = pl_charge[i];
     pl_charge[i] += i == SIDE_YOU ? YOU_TAP : TAP_CHARGE;
+    if (i == SIDE_YOU && was < CHARGE_MAX / 2 && pl_charge[i] >= CHARGE_MAX / 2) sfx_play(SFX_HALF);
     if (pl_charge[i] >= CHARGE_MAX) {
         pl_charge[i] = CHARGE_MAX;
         if (i == SIDE_YOU) sfx_play(SFX_CHARGE);
@@ -594,7 +618,6 @@ static void ready(uint8_t i, uint8_t b) {
 // --- strikes ---
 static void point(uint8_t side, uint8_t reason);  // the ball's rules, below
 static uint8_t in_court(int16_t px, int16_t py);
-static void predict(uint8_t i);
 static void want_predict(uint8_t i);
 
 // Set the ball going toward (dx, dy) px away at speed (SUB a frame, |vx| + |vy|,
@@ -634,6 +657,10 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
     new_flight();
     if (phase != PHASE_RALLY) ball_serve = 1;  // the serve: it must go over
     last_touch = i;
+    if (i == SIDE_YOU) {  // where the CPU stood as you struck it (its run, if it mishits)
+        cpu_from_x = PX(pl_x[SIDE_CPU]);
+        cpu_from_y = PX(pl_y[SIDE_CPU]);
+    }
     phase = PHASE_RALLY;
     if (++touches > 2 && !goal_timer) point(i ^ 1, POINT_TOUCHES);
     if (move != MOVE_SLIDE) {
@@ -882,9 +909,30 @@ static void knock_down(uint8_t i) {
 
 // Planted and in reach: a clean strike, unless it's on fire and the meter isn't
 // three eighths full, when it's all they can do to pop it up.
+// The CPU, meeting your shot, may mishit it under pressure: the further it ran and
+// the faster it came, the likelier: out of 64, a quarter of the run (px) plus half
+// the speed, past PRESSURE_FREE. (It runs about 74 px for a shot at the median, at
+// 28: none; a wide fast one, 100 px at 40, about a quarter.) Mostly it pops up (a
+// slam for you); a quarter of the time, scuffed into its own half.
 static void meet(uint8_t i, uint8_t move) {
-    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : FIRE_MEET)) pop_up(i, move, KICK_FRAMES);
-    else strike(i, move);
+    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : FIRE_MEET)) {
+        pop_up(i, move, KICK_FRAMES);
+        return;
+    }
+    if (i == SIDE_CPU && last_touch == SIDE_YOU) {
+        int16_t p = ((abs16(PX(pl_x[i]) - cpu_from_x) + abs16(PX(pl_y[i]) - cpu_from_y)) >> 2) +
+                    (ball_speed() >> 1) - PRESSURE_FREE;
+        uint8_t r = rand() & 63;
+        if (p > (int16_t)r) {
+            cpu_rattled++;
+            if (r >= (p >> 2)) {
+                pop_up(i, move, KICK_FRAMES);
+                return;
+            }
+            pl_charge[i] = 0;  // scuffed
+        }
+    }
+    strike(i, move);
 }
 
 static void slide(uint8_t i, int8_t vx, int8_t vy) {
@@ -1035,85 +1083,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     }
 }
 
-// --- where to meet it ---
-// Where side i should meet the ball: its flight traced on (gravity, a bounce, a
-// lob sitting up, not the curve) to where it first lands, then 8 frames more,
-// rising off the bounce; or where it gets to i's baseline first. Landing out (and
-// not yet bounced in), i lets it go: meet_out[i]. 12 frames a step (gravity over 12
-// frames: vz down 9, z up 12 vz - 58), up to 16 steps; run by want_predict.
-static void predict(uint8_t i) {
-    int16_t x = ball_x, y = ball_y, z = ball_z, vz = ball_vz;
-    int16_t vx4 = (ball_vx << 3) + (ball_vx << 2), vy4 = (ball_vy << 3) + (ball_vy << 2);
-    int16_t line = pl_y[i];  // your depth: meet it here if you can
-    uint8_t down = ball_landings, out = 0, cross = 0;
-    uint8_t up = ball_lob || ball_pop;  // a lob or a pop-up: met at the slam spot instead
-    meet_flight[i] = ball_flight;
-    // Still in the air, coming: it flies straight until it lands, so where (and how
-    // high) it crosses your line is exact, t = (line - y) / vy frames on. Low enough
-    // to play there, that's where to meet it.
-    if (!up && (ball_z || ball_vz) && (i == SIDE_YOU ? ball_vy > 0 && ball_y < line : ball_vy < 0 && ball_y > line)) {
-        int16_t t = (line - ball_y) / ball_vy;
-        int16_t zt = t < 180 ? ball_z + ball_vz * t - ((t * (t + 1)) >> 3) * 3 : 0;
-        if (zt > 0 && zt < TO_SUB(REACH_Z - 2)) {
-            x = ball_x + ball_vx * t;
-            y = line;
-            cross = 1;
-        }
-    }
-    for (uint8_t k = 0; k < 16 && !cross; k++) {
-        int16_t x0 = x, y0 = y, z0 = z;
-        x += vx4;
-        y += vy4;
-        // Crossing your line at a height you can play it (the step's middle):
-        // meet it there, on its path.
-        if (!up && (i == SIDE_YOU ? y0 < line && y >= line : y0 > line && y <= line) &&
-            ((z0 + (z > 0 ? z : 0)) >> 1) < TO_SUB(REACH_Z - 2)) {
-            x = x0 + ((x - x0) >> 1);
-            y = line;
-            cross = 1;
-            break;
-        }
-        if (z || vz) {
-            z += (vz << 3) + (vz << 2) - 58;
-            vz -= 9;
-            // A lob or a pop-up coming down through SLAM_Z over your half: meet it
-            // there (the step's share of the way down to it), to slam it.
-            if (up && !down && z0 >= TO_SUB(SLAM_Z) && z < TO_SUB(SLAM_Z) &&
-                (i == SIDE_YOU ? y >= TO_SUB(HALFWAY) : y < TO_SUB(HALFWAY))) {
-                int16_t f = ((z0 - TO_SUB(SLAM_Z)) << 4) / (z0 - z);  // sixteenths of the step
-                x = x0 + (((x - x0) * f) >> 4);
-                y = y0 + (((y - y0) * f) >> 4);
-                cross = 1;
-                break;
-            }
-            if (z <= 0) {
-                z = 0;
-                vz = (-vz * 3) >> 2;
-                if (!down) {
-                    down = 1;
-                    if (!in_court(PX(x), PX(y))) {
-                        out = 1;
-                        break;
-                    }
-                    if (ball_lob) vx4 >>= 2, vy4 >>= 2, vz = LOB_BOUNCE;
-                    else {
-                        if (vz < BOUNCE_MIN) vz = BOUNCE_MIN;
-                        vx4 -= vx4 >> 2;
-                        vy4 -= vy4 >> 2;
-                    }
-                }
-            }
-        }
-        if (down) break;  // a step (12 frames) past the bounce: rising off it
-        if (i == SIDE_CPU ? y <= TO_SUB(COURT_FAR + 4) : y >= TO_SUB(COURT_NEAR - 4)) break;
-    }
-    meet_out[i] = out;
-    meet_slam[i] = cross && up;
-    meet_x[i] = clamp16(PX(x), COURT_X0 + 4, COURT_X1 - 4);
-    // Off a bounce, stand just behind where it'll be (it's in front of you then).
-    if (!cross) y += i == SIDE_YOU ? TO_SUB(6) : -TO_SUB(6);
-    meet_y[i] = i == SIDE_CPU ? clamp16(PX(y), COURT_FAR + 4, HALFWAY - 6) : clamp16(PX(y), HALFWAY + 6, COURT_NEAR - 4);
-}
+// --- where to meet it: predict() (trace.c) ---
 
 // Trace it again when its flight has changed (not on the very frame: that's a
 // strike's, busy already), now and then anyway (a placed ball, the curve), each
@@ -1349,6 +1319,7 @@ void play_enter(void) BANKED {
     banked_bkg_data((uint8_t)T_METER, HUD_TILE_COUNT, hud_tiles, BANK(hud));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
     vfx_load();
+    set_sprite_data(S_RING, 2, ring_tiles);
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     proj_init();
@@ -1460,6 +1431,8 @@ void play_update(void) BANKED {
     // The flight traces, last thing: after anything struck this frame (then none,
     // it's busy already), one side a frame.
     want_predict((uint8_t)frame_count & 1);
+    go_cue = last_touch == SIDE_CPU && !pl_shot[SIDE_YOU] && !pl_move_timer[SIDE_YOU] && phase == PHASE_RALLY &&
+             !goal_timer && coming(SIDE_YOU);
     // The meter and your shot's label: not on a strike's frame (it's busy, and both
     // change then): the next.
     if (flight_frame != (uint8_t)frame_count) {

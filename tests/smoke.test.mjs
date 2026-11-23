@@ -732,6 +732,39 @@ test('between shots you jog back home; a volley right at the net stays low and l
   assert.equal(emu.v('goal_timer'), 0, 'in');
 });
 
+test('cues: the ball coming and nothing queued, you blink and the HUD says GO!; each press ticks, half and full chime', () => {
+  const emu = quietRally();
+  incoming(emu, 80, 40, 20, 30);
+  emu.idle(3);
+  assert.equal(emu.v('go_cue'), 1, 'press!');
+  assert.equal(emu.v('shot_shown'), 12, 'GO! on the HUD');
+  emu.tap('A');
+  assert.equal(emu.v('go_cue'), 0, 'queued: no more cue');
+  assert.equal(emu.v('sfx_last'), 10, 'a tick');
+  emu.tap('A').tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX / 2);
+  assert.equal(emu.v('sfx_last'), 11, 'half: a slam is ready');
+});
+
+test('the CPU mishits only under pressure: a long run for a fast shot', () => {
+  const meet = (fromX) => {
+    const emu = quietRally();
+    placePlayer(emu, CPU, 80, 40);
+    emu.write8(emu.symbols.addr('pl_shot') + CPU, SHOT_POWER);
+    emu.write8(emu.symbols.addr('pl_charge') + CPU, 20);
+    ballAt(emu, 80, 70, 2, 0, -40);
+    emu.write8(emu.symbols.addr('last_touch'), YOU);
+    emu.write8(emu.symbols.addr('holder'), CPU);
+    set16(emu, 'cpu_from_x', fromX);
+    set16(emu, 'cpu_from_y', 40);
+    const r0 = emu.v('cpu_rattled');
+    emu.until((e) => at(e, 'pl_shots', CPU) > 0, 40, 'the CPU meeting it');
+    return emu.v('cpu_rattled') - r0;
+  };
+  assert.equal(meet(80), 0, 'where it stood: clean');
+  assert.equal(meet(-2000), 1, 'a long run: rattled (popped up or scuffed)');
+});
+
 test('START pauses and resumes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -30);

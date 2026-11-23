@@ -92,6 +92,7 @@ the title switches between one set and the best of three.
 | A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and, with half a meter, jump and bicycle-kick it: a **slam**. A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
 | A or B again while ready | Tap for more power: the meter fills only as you press, and stays |
 | SELECT while ready | Call the strike off |
+| You blink, **GO!** on the HUD | The CPU's struck it to you and nothing's queued: press A or B now |
 | LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short; neutral, away from the CPU: short of it at the back, past it up close |
 | START | Pause |

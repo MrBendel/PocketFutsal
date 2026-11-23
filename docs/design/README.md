@@ -192,6 +192,18 @@ slammed (the Captain Tsubasa feel).
   readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
   the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
   weak one is sped up instead of looping up like a pop-up; drop shots, 100.
+- **The CPU under pressure** (2026-11-22, from "how can we improve playability": points
+  went on and on, a player who didn't aim getting about 70 touches a point): the CPU,
+  meeting your shot, may mishit it. Out of 64: a quarter of how far it ran for it (from
+  where it stood as you struck it) plus half the shot's speed, past 30. It runs about
+  74 px for a shot at the median, at speed 28: no chance; a wide fast one (100 px, 40)
+  about a quarter. Mostly it pops up (a slam for you); a quarter of the time it's scuffed
+  into its own half. Aiming bots now win their points in about 15 s, 11-8 or 9-6.
+- **Cues** (the same playtest): the CPU's struck it to you and nothing's queued, your
+  player blinks white and the HUD says **GO!** (a fire shot met unready knocks you down:
+  the commonest lost point left). Each press of A or B ticks; half a meter (a slam
+  ready) and full have their own chimes (SFX_TICK, SFX_HALF, SFX_CHARGE). The slam spot
+  is a 16x8 ring (two sprites, S_RING at tile 28, after the ball's spin tiles).
 - **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
