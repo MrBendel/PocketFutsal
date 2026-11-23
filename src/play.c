@@ -446,8 +446,7 @@ static void draw(void) {
         }
         // Side art follows real momentum, including the coast through a turn.
         // Existing action frames take priority over the locomotion view.
-        if (abs16(pl_vx[i]) > abs16(pl_vy[i]) + 3) pl_side[i] = 1;
-        else if (abs16(pl_vy[i]) > abs16(pl_vx[i]) + 3) pl_side[i] = 0;
+        pl_side[i] = gfx_running_side(pl_side[i], pl_vx[i], pl_vy[i]);
         if (!goal_timer && !special && (f == F_STAND || f == F_RUN_A || f == F_RUN_B) && pl_side[i]) {
             uint8_t pose = (pl_vx[i] || pl_vy[i]) ? ((frame_count & 4) ? 0 : (frame_count & 8) ? 2 : 1) : 0;
             tile = 224 + (pose << 3);

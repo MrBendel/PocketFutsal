@@ -242,3 +242,11 @@ void gfx_side(uint8_t first,uint8_t character,uint8_t pose,uint8_t x,uint8_t y,u
     if(flip)pal|=S_FLIPX;
     move_metasprite_ex(flip?side_left_ptr[index]:side_right_ptr[index],214,pal,first,x,(uint8_t)(y-7));
 }
+// Keep the locomotion view calculation outside the full Futnet ROM bank.
+uint8_t gfx_running_side(uint8_t previous,int8_t vx,int8_t vy){
+    uint8_t mx=vx<0?-vx:vx,my=vy<0?-vy:vy;
+    int8_t delta=mx-my;
+    if(delta>3)return 1;
+    if(delta<-3)return 0;
+    return previous;
+}
