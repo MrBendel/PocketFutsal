@@ -54,6 +54,12 @@ first pass is still airborne: your teammate returns it on receiving. The call
 expires after 48 frames (80 for a lob) or when an opponent takes possession.
 AI defenders have a brief reaction delay
 and commit to tackles, so changing direction can create an opening.
+The perception schedule gets a seeded phase at each kickoff instead of always
+giving the same player slots the same opening. At most one AI makes a full
+tactical decision per frame; all four players still move every frame. This
+breaks the repeated red counterattack without changing either team's stats.
+Run `node tools/futsal-balance.mjs 16` for a reproducible Watch-mode audit of
+wins, goals, shot opportunities, possession and the full-match frame budget.
 
 A high lob marks its landing zone with a gold ellipse. Get into the zone; as
 the ball descends the ellipse pulses orange. Press A to jump for an aerial
