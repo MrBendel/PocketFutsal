@@ -46,14 +46,18 @@ A hard cut can leave it exposed or loose, and opponents can intercept the ball
 without touching the carrier. Pass/shot inputs wait briefly for kicking reach;
 steer back onto the ball to play it. AI carriers also recover their next touch.
 
-Teammates run ahead into the opposite lane and continue their run after passing.
+Teammates offer a wide diagonal outlet about 24 court pixels ahead, hold their
+lane through central dribbles, and continue their run after passing.
 Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court
 pixels into that direction to receive in space. Try a one-two: **B to pass, run
 into space, B to call for the return, then A to finish**. You can call while your
 first pass is still airborne: your teammate returns it on receiving. The call
 expires after 48 frames (80 for a lob) or when an opponent takes possession.
-AI defenders have a brief reaction delay
-and commit to tackles, so changing direction can create an opening.
+Only one defender presses at a time. Their partner covers the other attacker
+from the goal side and keeps a separate lane when attackers bunch up. The press
+changes hands only when the partner is clearly closer, so a small juke does not
+send both defenders after the ball. Defenders have a brief reaction delay and
+commit to tackles, so changing direction can create an opening.
 The perception schedule gets a seeded phase at each kickoff instead of always
 giving the same player slots the same opening. At most one AI makes a full
 tactical decision per frame; all four players still move every frame. This

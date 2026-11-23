@@ -766,8 +766,8 @@ static void slide(uint8_t i, int8_t vx, int8_t vy) {
     pl_slide_vy[i] = vy;
     pl_face[i] = vx < 0;
     pl_move[i] = MOVE_SLIDE;
-    pl_move_timer[i] = SLIDE_FRAMES;
-    unready(i);
+    pl_move_timer[i] = SLIDE_FRAMES;  // the strike stays readied: slide and return
+    if (i == SIDE_YOU) you_leap = 0;
     dust(i);
     sfx_play(SFX_CATCH);
 }
@@ -801,18 +801,25 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     if (pl_move_timer[i]) {
         pl_vx[i] = pl_vy[i] = 0;  // mid-move: stopped (it starts again from still)
         pl_move_timer[i]--;
-        if (pl_move[i] != MOVE_SLIDE || pl_move_timer[i] < SLIDE_FRAMES - SLIDE_LUNGE) return;
-        // The slide: along the court, reaching for it.
+        if (pl_move[i] != MOVE_SLIDE) return;
+        if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_LUNGE) {
+            if (pl_shot[i]) unready(i);  // the lunge over, not there: missed
+            return;
+        }
+        // The slide: along the court, reaching for it, the strike still readied.
         pl_x[i] += pl_slide_vx[i];
         pl_y[i] += pl_slide_vy[i];
         keep_in(i);
         relate(i);
         if (in_half(i) && abs16(rel_x) <= REACH_X && rel_fwd >= -REACH_BACK - 2 && rel_fwd <= REACH_FWD && rel_z < SLIDE_Z) {
-            if (ball_power) {
+            // Got there: slide and return it, the strike by its height (on fire,
+            // without the meter to meet it: down you go).
+            if (ball_power && pl_charge[i] < (i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
                 knock_down(i);
                 return;
             }
-            pop_up(i, MOVE_SLIDE, 0);
+            meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
+            pl_move[i] = MOVE_SLIDE;
             pl_move_timer[i] = SLIDE_REST;  // got there: up sooner
         }
         return;
@@ -888,14 +895,16 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         if (ax <= REACH_X && rel_fwd >= -14 && rel_fwd <= REACH_FWD && rel_z >= 16) return;
         uint8_t loose = loose_here(i);
         if (!loose && !coming(i)) return;  // queued: it waits for the ball to come
-        // The game runs you to where to meet it, at running speed (with the same
-        // momentum), easing in as you get there, anywhere in your half. Going out,
-        // it leaves it.
+        // Queued, you're locked where you stood (playtest: "position after the kick
+        // to where the ball's landing, power up, locked; near it you return, a bit
+        // further you slide and return, too far you miss"): only a loose ball in
+        // your half walks you to it. The CPU is still run to where to meet it (at
+        // running speed, easing in; going out, it leaves it).
         int16_t tx = loose ? PX(ball_x) : meet_x[i];
         int16_t ty = loose ? PX(ball_y) + (i == SIDE_YOU ? 6 : -6) : meet_y[i];  // loose: just behind it
         int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
-        // (Only on a trace of this flight: an old one would send you the wrong way.)
-        if (loose || (meet_flight[i] == ball_flight && !meet_out[i])) {
+        // (Only on a trace of this flight: an old one would send it the wrong way.)
+        if (loose || (i == SIDE_CPU && meet_flight[i] == ball_flight && !meet_out[i])) {
             int8_t sp = pl_top[i];
             pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // a quarter of the way (SUB) a frame, near
             pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
@@ -1256,22 +1265,14 @@ void play_update(void) BANKED {
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;
     // Between shots (nothing queued, the d-pad let go, the ball going away), you jog
     // back to the middle, HOME_YOU deep, as the CPU goes home: a rally doesn't creep
-    // you up to the net, where everything goes over your head.
-    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY) {
-        if (!coming(SIDE_YOU)) {
-            int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
-            pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
-            pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
-            pl_auto[SIDE_YOU] = 1;
-        } else if (meet_flight[SIDE_YOU] == ball_flight && !meet_out[SIDE_YOU] && !pl_move_timer[SIDE_YOU]) {
-            // Coming to you, nothing queued, the d-pad let go: you make for where to
-            // meet it already (a press then only readies the strike: tuning loop,
-            // a late press had you lunging at it).
-            int16_t hx = meet_x[SIDE_YOU] - PX(pl_x[SIDE_YOU]), hy = meet_y[SIDE_YOU] - PX(pl_y[SIDE_YOU]);
-            pl_wx[SIDE_YOU] = (int8_t)clamp16(hx << 2, -SPEED_YOU, SPEED_YOU);
-            pl_wy[SIDE_YOU] = (int8_t)clamp16(hy << 2, -SPEED_YOU, SPEED_YOU);
-            pl_auto[SIDE_YOU] = 1;
-        }
+    // you up to the net, where everything goes over your head. (Coming to you,
+    // nothing queued, you stay put: the game running you there, the overnight
+    // loop's idea, played like an autopilot, a control touch that never went over.)
+    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY && !coming(SIDE_YOU)) {
+        int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
+        pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
+        pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
+        pl_auto[SIDE_YOU] = 1;
     }
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
