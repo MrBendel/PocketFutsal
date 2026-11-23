@@ -760,19 +760,18 @@ test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a 
   assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
 });
 
-test('the ball coming to you, nothing queued, the d-pad let go: you make for where to meet it', () => {
+test('the ball coming to you, nothing pressed: you stay put (no autopilot); a press runs you to it', () => {
   const emu = quietRally();
   placePlayer(emu, YOU, 40, 190);
   incoming(emu, 110, 90, 30, 20);  // across the court from you, coming
   emu.idle(30);
-  const x = px(at(emu, 'pl_x', YOU, 'i16'));
-  assert.equal(at(emu, 'pl_shot', YOU), 0, 'nothing queued');
-  assert.ok(x > 70, `running across to it: x ${x} (from 40, it meets at ${at(emu, 'meet_x', YOU, 'i16')})`);
-  const held = quietRally();
-  placePlayer(held, YOU, 40, 190);
-  incoming(held, 110, 90, 30, 20);
-  held.hold('LEFT', 30);
-  assert.ok(px(at(held, 'pl_x', YOU, 'i16')) < 40, 'the d-pad still takes you where you like');
+  assert.equal(px(at(emu, 'pl_x', YOU, 'i16')), 40, 'nothing pressed, you stay where you are');
+  const pressed = quietRally();
+  placePlayer(pressed, YOU, 40, 190);
+  incoming(pressed, 110, 90, 30, 20);
+  pressed.hold('A', 1);
+  pressed.idle(29);
+  assert.ok(px(at(pressed, 'pl_x', YOU, 'i16')) > 70, 'a press and you make for it');
 });
 
 test('run to the ball, you still skid turning round (side to side costs you)', () => {
@@ -780,7 +779,8 @@ test('run to the ball, you still skid turning round (side to side costs you)', (
   const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
   placePlayer(emu, YOU, 24, 190);
   incoming(emu, 150, 116, 20, 44);  // high, a long way across
-  emu.idle(12);
+  emu.hold('A', 1);  // queued: the game runs you to it
+  emu.idle(11);
   assert.ok(vx() >= 16, `running right for it: ${vx()}`);
   set16(emu, 'ball_x', 20 * 16);  // it's over on the left now: a new flight
   emu.write8(emu.symbols.addr('ball_flight'), emu.v('ball_flight') + 1);

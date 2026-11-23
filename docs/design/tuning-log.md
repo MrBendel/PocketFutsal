@@ -103,3 +103,19 @@ Tried: a press mid-move readies the next strike. Unqueued knockdowns 27 to 3, bu
 to 57; wins 60%. Not kept: slide, pop-up, slam is the game's own sequence.
 
 Stopped: nothing kept two rounds running; what's left is a design call.
+
+### 2026-11-23 morning: the run to the ball undone (playtest)
+
+Played by hand: "almost seems like the player is on autopilot... automatically moves
+to the ball and kicks but it never goes over the net". Iteration 1 ran you to every
+ball coming your way, nothing pressed, and a ball reaching you unready is a control
+touch (a first touch up in front of you, to play with a second): with nothing
+pressed after it, it dropped on your side. A match pressing only the serve: 11
+control touches, 11 points lost to the bounce.
+
+Changed: nothing pressed, you stay put (the d-pad moves you; a press runs you to it,
+as before the loop). The skid turning round stays.
+
+After (four matches, the late-pressing bot): wins 15% (8-44), points median 15.6 s,
+4 over 45 s, slams 5 a match: late presses lose again, by design for now; the power
+meter and an easier CPU are the next ideas.

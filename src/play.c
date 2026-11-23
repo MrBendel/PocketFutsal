@@ -1256,22 +1256,14 @@ void play_update(void) BANKED {
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;
     // Between shots (nothing queued, the d-pad let go, the ball going away), you jog
     // back to the middle, HOME_YOU deep, as the CPU goes home: a rally doesn't creep
-    // you up to the net, where everything goes over your head.
-    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY) {
-        if (!coming(SIDE_YOU)) {
-            int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
-            pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
-            pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
-            pl_auto[SIDE_YOU] = 1;
-        } else if (meet_flight[SIDE_YOU] == ball_flight && !meet_out[SIDE_YOU] && !pl_move_timer[SIDE_YOU]) {
-            // Coming to you, nothing queued, the d-pad let go: you make for where to
-            // meet it already (a press then only readies the strike: tuning loop,
-            // a late press had you lunging at it).
-            int16_t hx = meet_x[SIDE_YOU] - PX(pl_x[SIDE_YOU]), hy = meet_y[SIDE_YOU] - PX(pl_y[SIDE_YOU]);
-            pl_wx[SIDE_YOU] = (int8_t)clamp16(hx << 2, -SPEED_YOU, SPEED_YOU);
-            pl_wy[SIDE_YOU] = (int8_t)clamp16(hy << 2, -SPEED_YOU, SPEED_YOU);
-            pl_auto[SIDE_YOU] = 1;
-        }
+    // you up to the net, where everything goes over your head. (Coming to you,
+    // nothing queued, you stay put: the game running you there, the overnight
+    // loop's idea, played like an autopilot, a control touch that never went over.)
+    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY && !coming(SIDE_YOU)) {
+        int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
+        pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
+        pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
+        pl_auto[SIDE_YOU] = 1;
     }
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
