@@ -60,3 +60,25 @@ keeps firm 1.
 After: wins 53% (39-35), in the target. Pop-ups 84 (from 17: more late arrivals
 after a turn), knocked down by fire 18 (from 13). Points median 23.4 s, 90th
 percentile 61.9 s, 15 over 45 s; slams 62 a match: still the open gaps.
+
+### 2026-11-22 23:20: long rallies (nothing kept)
+
+Measured: points median 23.4 s, 90th percentile 61.9 s, 15 of 74 over 45 s. Slams
+62 a match, and after one of yours the CPU returned it cleanly 7 times in 10 (it won
+you the point 30 times in 250).
+
+Tried, each reverted (4 seeds):
+- The CPU needs a full meter to meet your slam clean: wins 96%. Every popped-up
+  return was another slam for you.
+- ... three quarters of a meter (24): wins 67%, points no shorter (slam, pop-up,
+  slam chains).
+- Your slam aimed away from the CPU in depth (40 or 92 past the net, not 64): wins
+  47%, points longer: it volleys them out of the air.
+- The CPU rattled sooner (PRESSURE_FREE 30 to 22): points median 19.8 s, 8 over
+  45 s, but wins 70%; at 26, no clear change.
+- Slams faster (54, not 48): wins 43%, points as long.
+
+The measure was too noisy at four matches (about 10 points of win rate either way),
+so it's eight from here (seeds 1, 4242, 777, 99, 3, 11, 22, 33). Baseline on eight:
+wins 56% (75-58), points median 25.6 s, 90th percentile 70 s, 32 of 133 over 45 s;
+slams 64 a match.
