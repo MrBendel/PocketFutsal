@@ -22,8 +22,11 @@
 #include <string.h>
 #include <rand.h>
 #include "gfx.h"
+#include "state.h"
 #include "input.h"
 #include "sfx.h"
+#include "game.h"
+#include "futnet_core.h"
 #include "minigame.h"
 #include "progress.h"
 #include "mg_wall_bg.h"
@@ -31,7 +34,6 @@
 
 // --- the court, in world px (x across, 0..160 at the near end; d in depth from
 // the wall's foot) and SUB = 16ths. Heights z in px above the floor (unscaled).
-#define SUB 16
 #define GRAV 2            // SUB a frame each frame
 #define D_MAX 126         // the tables' depth
 #define PL_D_MIN 60       // you stay behind the strike line (depth 56)
@@ -85,6 +87,7 @@
 #define OAM_AIM OAM_MG_FREE        // the aim marker on the wall, while charging
 #define OAM_POP (OAM_MG_FREE + 1)  // "+3": 2
 #define OAM_MISS (OAM_MG_FREE + 3) // "MISS": 4
+#define OAM_TRAIL (OAM_MG_FREE + 7) // 4: shared Futnet red/blue shot trail
 
 // The perspective (tools/art/mg_wall.mjs gy, sc), every 2 px of depth.
 static const uint8_t gy_tab[64] = {
@@ -235,7 +238,9 @@ static void strike(void) {
     uint8_t col = (joy & J_LEFT) ? 0 : (joy & J_RIGHT) ? 2 : 1;
     uint8_t row = (joy & J_UP) ? 0 : 1;
     uint8_t lv = stat_lv[STAT_POWER];
-    uint8_t power = mg_wall_charge >= CHARGE_FULL;
+    uint8_t kind = pl_shot[SIDE_YOU] ? pl_shot[SIDE_YOU] : SHOT_POWER;
+    uint8_t curve = (kind == SHOT_CURVE);
+    uint8_t power = mg_wall_charge >= CHARGE_FULL || pl_charge[SIDE_YOU] >= CHARGE_MAX;
     uint8_t t = power ? T_POWER - (lv >> 3) : T_DRIVE - (mg_wall_charge >> 2);
     uint8_t err = mg_wall_err;
     int16_t dx = (mg_wall_bx - mg_wall_px) >> 4;
@@ -246,14 +251,29 @@ static void strike(void) {
     if (t < 16) t = 16;
     mg_wall_aim_col = col;
     mg_wall_aim_row = row;
-    mg_wall_vx = (int16_t)((tx - (mg_wall_bx >> 4)) * RCP(t)) >> 7;
+    fc_ball_plain();
+    if (curve) {
+        // Curve shot (B): launches wide of the target and bends back into the panel!
+        int8_t side = col == 0 ? -1 : col == 2 ? 1 : (mg_wall_px < TO_SUB(80) ? 1 : -1);
+        int16_t wide_tx = tx - side * 26;
+        mg_wall_vx = (int16_t)((wide_tx - (mg_wall_bx >> 4)) * RCP(t)) >> 7;
+        ball_curve = side > 0 ? 12 : -12;
+        ball_curve_t = t;
+    } else {
+        mg_wall_vx = (int16_t)((tx - (mg_wall_bx >> 4)) * RCP(t)) >> 7;
+    }
     mg_wall_vd = -((int16_t)((mg_wall_bd >> 4) * RCP(t)) >> 7);
     // z after t frames (vz first, then z): z0 + vz t - GRAV t (t + 1) / 2 = tz
     mg_wall_vz = ((int16_t)((tz - (mg_wall_bz >> 4)) * RCP(t)) >> 7) + t + 1;
     mg_wall_ball = BALL_OUT;
     mg_wall_fire = power;
+    ball_power = power;
+    ball_trail = curve ? TRAIL_CURVE : TRAIL_POWER;
+    trail_len = power ? FC_TRAIL_MAX : mg_wall_charge >= (CHARGE_FULL >> 1) ? 3 : 2;
+    trail_n = 0;
     mg_wall_charge = 0;
     mg_wall_charging = 0;
+    fc_unready(SIDE_YOU);
     mg_wall_kick = KICK_FRAMES;
     sfx_play(power ? SFX_POWER : SFX_KICK);
 }
@@ -265,6 +285,9 @@ static void miss(void) {
     mg_wall_miss = 40;
     mg_wall_charging = 0;
     mg_wall_charge = 0;
+    fc_unready(SIDE_YOU);
+    ball_trail = 0;
+    ball_curve_t = 0;
     sfx_play(SFX_PARRY);
 }
 
@@ -300,10 +323,17 @@ static void wall_hit(void) {
     mg_wall_vz = mg_wall_vz < 0 ? (-mg_wall_vz * 3) >> 3 : mg_wall_vz >> 1;
     mg_wall_ball = BALL_BACK;
     mg_wall_bounces = 0;
+    ball_trail = 0;
+    ball_curve_t = 0;
 }
 
 static void ball_move(void) {
     if (mg_wall_ball == BALL_HELD) return;
+    if (mg_wall_ball == BALL_OUT && ball_curve_t) {
+        ball_vx = mg_wall_vx;
+        fc_curve_step();
+        mg_wall_vx = ball_vx;
+    }
     mg_wall_bx += mg_wall_vx;
     mg_wall_bd += mg_wall_vd;
     mg_wall_vz -= GRAV;
@@ -344,20 +374,22 @@ static uint8_t in_reach(void) {
            (mg_wall_bz >> 4) <= REACH_Z;
 }
 
-// --- you ---
+// --- you (shared Futnet movement, charge-up, power/curve strikes) ---
 static void you_move(void) {
-    int16_t sp = mg_wall_charging ? PL_SPEED >> 1 : PL_SPEED;
-    uint8_t moving = 0;
-    if (mg_wall_kick) return;
-    if (joy & J_LEFT) mg_wall_px -= sp, moving = 1;
-    if (joy & J_RIGHT) mg_wall_px += sp, moving = 1;
-    if (joy & J_UP) mg_wall_pd -= sp, moving = 1;
-    if (joy & J_DOWN) mg_wall_pd += sp, moving = 1;
-    if (mg_wall_px < (PL_X_MIN << 4)) mg_wall_px = PL_X_MIN << 4;
-    if (mg_wall_px > (PL_X_MAX << 4)) mg_wall_px = PL_X_MAX << 4;
-    if (mg_wall_pd < (PL_D_MIN << 4)) mg_wall_pd = PL_D_MIN << 4;
-    if (mg_wall_pd > (PL_D_MAX << 4)) mg_wall_pd = PL_D_MAX << 4;
-    if (moving) mg_wall_walk++;
+    pl_x[SIDE_YOU] = mg_wall_px;
+    pl_y[SIDE_YOU] = mg_wall_pd;
+    if (mg_wall_kick) {
+        pl_vx[SIDE_YOU] = pl_vy[SIDE_YOU] = 0;
+        return;
+    }
+    int8_t sp = mg_wall_charging ? (PL_SPEED >> 1) : PL_SPEED;
+    int8_t tx = (joy & J_RIGHT) ? sp : (joy & J_LEFT) ? -sp : 0;
+    int8_t ty = (joy & J_DOWN) ? sp : (joy & J_UP) ? -sp : 0;
+    fc_step_move(SIDE_YOU, tx, ty, 1,
+                 PL_X_MIN << 4, PL_X_MAX << 4, PL_D_MIN << 4, PL_D_MAX << 4);
+    mg_wall_px = pl_x[SIDE_YOU];
+    mg_wall_pd = pl_y[SIDE_YOU];
+    if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) mg_wall_walk++;
     else mg_wall_walk = 0;
 }
 
@@ -366,18 +398,23 @@ static void you_strike(void) {
         mg_wall_kick--;
         return;
     }
-    if (joy_pressed & J_A) {
+    if (joy_pressed & (J_A | J_B)) {
+        uint8_t b = (joy_pressed & J_B) != 0;
+        fc_ready(SIDE_YOU, b, 0);
         if (in_reach()) {
             strike();
             return;
         }
         mg_wall_charging = 1;
-        mg_wall_charge = 0;
+        // Tap boosts charge too (like Futnet), while holding keeps filling smoothly!
+        uint8_t tap_c = pl_charge[SIDE_YOU] << 1;
+        if (tap_c > mg_wall_charge) mg_wall_charge = tap_c > CHARGE_FULL ? CHARGE_FULL : tap_c;
     }
     if (!mg_wall_charging) return;
-    if (!(joy & J_A)) {  // let go before it came: no strike
+    if (!(joy & (J_A | J_B))) {  // let go before it came: no strike
         mg_wall_charging = 0;
         mg_wall_charge = 0;
+        fc_unready(SIDE_YOU);
         return;
     }
     if (mg_wall_charge < CHARGE_FULL) {
@@ -388,6 +425,8 @@ static void you_strike(void) {
         }
         mg_wall_charge = c;
     }
+    // Keep Futnet's pl_charge synced (0..32) so fc_charge_pal flashes white -> fire!
+    pl_charge[SIDE_YOU] = mg_wall_charge >> 1;
     if (in_reach()) strike();
 }
 
@@ -420,28 +459,36 @@ static void panels_update(void) {
 static void draw(void) {
     uint8_t i = didx(mg_wall_pd);
     int16_t sx = proj_x(mg_wall_px, i), feet = gy_tab[i];
-    uint8_t frame = MG_F_STAND, flip = 0, pal = SPR_PAL_YOU;
+    uint8_t frame = MG_F_STAND, flip = pl_face[SIDE_YOU];
     if (mg_wall_kick) {
         int16_t bz = mg_wall_bz >> 4;
         frame = bz > 18 ? MG_F_HEADER : bz > 6 ? MG_F_VOLLEY : MG_F_KICK;
         flip = mg_wall_bx < mg_wall_px;
     } else if (mg_wall_charging) {
         frame = MG_F_READY;
-        if (mg_wall_charge >= CHARGE_FULL && ((uint8_t)mg_timer & 4)) pal = SPR_PAL_FLASH;
     } else if (mg_wall_walk) {
         frame = (mg_wall_walk & 8) ? MG_F_RUN_B : MG_F_RUN_A;
-        flip = (joy & J_LEFT) != 0;
     }
-    mg_player(0, MG_FRAME(MG_VIEW_BACK, frame), sx, feet, pal, flip);
+    uint8_t tile = MG_FRAME(MG_VIEW_BACK, frame);
+    pl_side[SIDE_YOU] = gfx_running_side(pl_side[SIDE_YOU], pl_vx[SIDE_YOU], pl_vy[SIDE_YOU]);
+    if (!mg_wall_kick && !mg_wall_charging && pl_side[SIDE_YOU]) {
+        uint8_t pose = (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) ? ((frame_count & 4) ? 0 : (frame_count & 8) ? 2 : 1) : 0;
+        tile = 224 + (pose << 3);
+        if (pl_vx[SIDE_YOU]) flip = pl_vx[SIDE_YOU] < 0;
+    }
+    uint8_t pal = fc_charge_pal(SIDE_YOU, SPR_PAL_YOU);
+    mg_player(0, tile, sx, feet, pal, flip);
 
     if (mg_wall_ball == BALL_HELD) {
         mg_hide(OAM_MG_BALL, OAM_MG_SHADOW);
+        mg_hide(OAM_TRAIL, OAM_TRAIL + 3);
     } else {
         uint8_t j = didx(mg_wall_bd);
         int16_t bx = proj_x(mg_wall_bx, j);
         int16_t z = (int16_t)((mg_wall_bz >> 4) * s_tab[j]) >> 7;
         mg_ball(bx, gy_tab[j], z, mg_wall_ball == BALL_DEAD || mg_wall_bz == 0,
                 mg_wall_fire ? SPR_PAL_POWER : SPR_PAL_BALL);
+        fc_trail_draw(OAM_TRAIL, bx + 4, gy_tab[j] + 8 - z, 0);
     }
 
     // The aim marker on the panel you'd strike at, while charging.
@@ -512,6 +559,13 @@ void mg_wall_enter(void) BANKED {
     mg_wall_vx = mg_wall_vd = mg_wall_vz = 0;
     mg_wall_bounces = mg_wall_fire = 0;
     mg_wall_charge = mg_wall_charging = mg_wall_kick = mg_wall_walk = 0;
+    fc_unready(SIDE_YOU);
+    fc_ball_plain();
+    pl_vx[SIDE_YOU] = pl_vy[SIDE_YOU] = 0;
+    pl_accel[SIDE_YOU] = FC_ACCEL;
+    pl_grip[SIDE_YOU] = FC_GRIP;
+    pl_skid[SIDE_YOU] = pl_side[SIDE_YOU] = pl_flash[SIDE_YOU] = 0;
+    pl_face[SIDE_YOU] = 0;
     mg_wall_aim_col = 1;
     mg_wall_aim_row = 1;
     mg_wall_points = 0;

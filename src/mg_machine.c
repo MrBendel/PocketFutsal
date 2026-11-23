@@ -20,16 +20,14 @@
 #include "input.h"
 #include "sfx.h"
 #include "game.h"
+#include "futnet_core.h"
+#include "proj.h"
+#include "player_anim.h"
 #include "minigame.h"
 #include "progress.h"
 #include "mg_machine_bg.h"
 #include "mg_machine_spr.h"
 
-// The perspective tables are the match's (play.c fills them in play_enter); this
-// game fills them the same way in its enter, rather than keep 512 bytes of its own.
-#define PROJ_OFS 16
-extern uint8_t proj_y[256];
-extern uint8_t proj_s[256];
 #define PROJ_I(fy) ((uint8_t)((fy) + PROJ_OFS))
 
 // --- the scene ---
@@ -53,10 +51,11 @@ extern uint8_t proj_s[256];
 #define OAM_MACHINE (OAM_MG_FREE + 1)  // 3
 #define OAM_AIM (OAM_MG_FREE + 4)
 #define OAM_RING (OAM_MG_FREE + 5)     // 3
-#define OAM_LAST (OAM_MG_FREE + 7)
-// Sprite palettes: the machine and the ring take the trails' (unused here).
-#define PAL_MACHINE SPR_PAL_TRAIL_POWER
-#define PAL_RING SPR_PAL_TRAIL_CURVE
+#define OAM_TRAIL (OAM_MG_FREE + 8)    // 4: shared Futnet red/blue/gold shot trail
+#define OAM_LAST (OAM_MG_FREE + 11)
+// Keep SPR_PAL_TRAIL_POWER (red) & SPR_PAL_TRAIL_CURVE (blue) for real shot trails!
+#define PAL_MACHINE SPR_PAL_CPU
+#define PAL_RING SPR_PAL_POWER
 
 // --- tuning ---
 #define SPEED_BASE 21      // your run, SUB a frame, + REFLEX level / 2
@@ -190,18 +189,6 @@ static int8_t approach(int8_t v, int8_t t) {
         if (v < t) v = t;
     }
     return v;
-}
-static int32_t floordiv(int32_t a, int32_t b) {
-    return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
-// The match's perspective (play.c proj_init, tools/tile-art.mjs projY / projS).
-static void proj_init(void) {
-    for (int16_t i = 0; i < 256; i++) {
-        int32_t fy = i - PROJ_OFS;
-        int32_t row = COURT_SY + floordiv((int32_t)PROJ_K0 * 448 * fy + (int32_t)(PROJ_K1 - PROJ_K0) * fy * fy, 114688L);
-        proj_y[i] = (uint8_t)row;
-        proj_s[i] = (uint8_t)(PROJ_S0 + floordiv((int32_t)(128 - PROJ_S0) * fy, COURT_NEAR));
-    }
 }
 static int16_t proj_x(int16_t fx, int16_t fy) {
     return CENTER_X + (((fx - CENTER_X) * (int16_t)proj_s[PROJ_I(fy)]) >> 7);
@@ -394,6 +381,20 @@ static void decide(uint8_t r) {
 // --- the ball ---
 static void ball_update(void) {
     if (mg_machine_ball == BS_NONE) return;
+    if (mg_machine_ball == BS_OUT) {
+        if (arc_clear) {
+            arc_clear = 0;
+            ball_x = mg_machine_bx; ball_y = mg_machine_by; ball_z = mg_machine_bz;
+            ball_vx = mg_machine_bvx; ball_vy = mg_machine_bvy; ball_vz = mg_machine_bvz;
+            fc_net_clear();
+            mg_machine_bvz = ball_vz;
+        }
+        if (ball_curve_t) {
+            ball_vx = mg_machine_bvx;
+            fc_curve_step();
+            mg_machine_bvx = ball_vx;
+        }
+    }
     int16_t x = mg_machine_bx + mg_machine_bvx, y = mg_machine_by + mg_machine_bvy;
     // Your return, across the net: over it, or into it.
     if (mg_machine_ball == BS_OUT && PX(y) < HALFWAY && PX(mg_machine_by) >= HALFWAY) {
@@ -401,6 +402,8 @@ static void ball_update(void) {
             y = mg_machine_by;
             mg_machine_bvy = -(mg_machine_bvy >> 2);
             mg_machine_bvx >>= 1;
+            ball_curve_t = 0;
+            ball_trail = 0;
             decide(R_NET);
         } else {
             mg_machine_bounces = 0;
@@ -419,6 +422,9 @@ static void ball_update(void) {
             mg_machine_bvy -= mg_machine_bvy >> 2;
             mg_machine_bvz = up > BOUNCE_DEAD ? up : 0;
             mg_machine_bounces++;
+            ball_trail = 0;
+            ball_power = 0;
+            ball_curve_t = 0;
             int16_t lx = PX(x), ly = PX(y);
             if (mg_machine_ball == BS_IN) {
                 if (first && !in_near_half(lx, ly)) decide(R_LONG);
@@ -446,14 +452,14 @@ static void ball_update(void) {
     if (mg_machine_ball == BS_DEAD && mg_machine_dead && !--mg_machine_dead) mg_machine_ball = BS_NONE;
 }
 
-// --- you ---
-// Strike it back: aimed by the d-pad at one of the nine spots, scattered by how
-// cleanly it was met (off the middle of your reach, behind you, a header) less
-// your CONTROL; a bad enough contact may go into the net.
+// --- you (shared Futnet movement, charge-up, power/curve/lob/drop strikes) ---
 static void strike(uint8_t move, int16_t rel_x, int16_t rel_fwd) {
-    int16_t bx = PX(mg_machine_bx), by = PX(mg_machine_by);
-    int16_t ax = joy & J_LEFT ? AIM_X_L : joy & J_RIGHT ? AIM_X_R : CENTER_X;
-    int16_t ay = joy & J_UP ? AIM_Y_DEEP : joy & J_DOWN ? AIM_Y_SHORT : AIM_Y_MID;
+    uint8_t aim = (joy & J_LEFT) ? 0 : (joy & J_RIGHT) ? 2 : pl_aim[SIDE_YOU];
+    uint8_t dep = (joy & J_UP) ? 2 : (joy & J_DOWN) ? 0 : pl_depth[SIDE_YOU];
+    int16_t ax = aim == 0 ? AIM_X_L : aim == 2 ? AIM_X_R : CENTER_X;
+    int16_t ay = dep == 2 ? AIM_Y_DEEP : dep == 0 ? AIM_Y_SHORT : AIM_Y_MID;
+    if (pl_shot[SIDE_YOU] == SHOT_LOB) ay = AIM_Y_DEEP;
+    else if (pl_shot[SIDE_YOU] == SHOT_DROP) ay = AIM_Y_SHORT;
     uint8_t ctl = (stat_lv[STAT_CONTROL] - 1) >> 1;  // 0 .. 9
     int16_t bad = (abs16(rel_x) << 1) + (rel_fwd < 0 ? -rel_fwd * 3 : 0) + (move == MOVE_HEADER ? 6 : 0);
     int16_t rx = 6 + bad - ctl, ry = 4 + (bad >> 1) - (ctl >> 1);
@@ -462,22 +468,26 @@ static void strike(uint8_t move, int16_t rel_x, int16_t rel_fwd) {
     mg_machine_bad = (uint8_t)bad;
     mg_machine_land_x = ax + spread((uint8_t)rx);
     mg_machine_land_y = ay + spread((uint8_t)ry);
-    // Mishit into the net: only off a poor contact, less likely with CONTROL.
     int16_t netc = bad > 18 ? ((bad - 18) << 2) - (ctl << 1) : 0;
     mg_machine_netted = netc > 0 && rand() < (uint8_t)netc;
-    // The pace (frames in the air): a kick drives it, a volley a little softer, a
-    // header loops it.
-    uint8_t t = move == MOVE_KICK ? RET_KICK_T : move == MOVE_VOLLEY ? RET_VOLLEY_T : RET_HEADER_T;
-    mg_machine_bvx = TO_SUB(mg_machine_land_x - bx) / t;
-    mg_machine_bvy = TO_SUB(mg_machine_land_y - by) / t;
+    // Hand off to Futnet's shared strike engine (power, curve, lob, drop, trails, SFX).
+    pl_x[SIDE_YOU] = mg_machine_px;
+    pl_y[SIDE_YOU] = mg_machine_py;
+    ball_x = mg_machine_bx;
+    ball_y = mg_machine_by;
+    ball_z = mg_machine_bz;
+    move = fc_strike_ball(SIDE_YOU, move, mg_machine_land_x, mg_machine_land_y,
+                          aim, mg_machine_netted, 0, 0);
+    mg_machine_bvx = ball_vx;
+    mg_machine_bvy = ball_vy;
+    mg_machine_bvz = ball_vz;
     mg_machine_fall = 0;
-    arc(t, mg_machine_netted);
     mg_machine_ball = BS_OUT;
     mg_machine_bounces = 0;
     mg_machine_move = move;
     mg_machine_move_t = STRIKE_FRAMES + (move == MOVE_HEADER ? 4 : 0);
     mg_machine_face = rel_x < 0;
-    sfx_play(SFX_KICK);
+    fc_unready(SIDE_YOU);
 }
 
 // The machine's ball in reach: strike it (the height picks the strike).
@@ -492,56 +502,110 @@ static uint8_t try_strike(void) {
 }
 
 static void player_update(void) {
+    fc_combo_tick(SIDE_YOU);
+    // Sync watchable mg_machine_px/py <-> shared pl_x/pl_y in case tests write mg_machine_px directly.
+    pl_x[SIDE_YOU] = mg_machine_px;
+    pl_y[SIDE_YOU] = mg_machine_py;
+    pl_vx[SIDE_YOU] = mg_machine_pvx;
+    pl_vy[SIDE_YOU] = mg_machine_pvy;
+    pl_face[SIDE_YOU] = mg_machine_face;
+    pl_top[SIDE_YOU] = (int8_t)mg_machine_speed;
+
     if (mg_machine_move_t) {
         mg_machine_move_t--;
         mg_machine_pvx = mg_machine_pvy = 0;
+        pl_vx[SIDE_YOU] = pl_vy[SIDE_YOU] = 0;
         return;
     }
+
+    // Queue / tap-charge with Futnet's exact A (power) / B (curve) / B->A (lob) / A->B (drop).
+    if (joy_pressed & J_A) {
+        fc_ready(SIDE_YOU, 0, 0);
+        mg_machine_swing = SWING_BUF;
+    } else if (joy_pressed & J_B) {
+        fc_ready(SIDE_YOU, 1, 0);
+        mg_machine_swing = SWING_BUF;
+    }
+    if (joy_pressed & J_SELECT) fc_unready(SIDE_YOU);
+    if (pl_shot[SIDE_YOU]) {
+        if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
+        else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
+        if (joy & J_UP) pl_depth[SIDE_YOU] = 2;
+        else if (joy & J_DOWN) pl_depth[SIDE_YOU] = 0;
+    }
+
     int8_t sp = (int8_t)mg_machine_speed;
-    int8_t tx = joy & J_RIGHT ? sp : joy & J_LEFT ? -sp : 0;
-    int8_t ty = joy & J_DOWN ? sp : joy & J_UP ? -sp : 0;
-    mg_machine_pvx = approach(mg_machine_pvx, tx);
-    mg_machine_pvy = approach(mg_machine_pvy, ty);
-    mg_machine_px = clamp16(mg_machine_px + mg_machine_pvx, TO_SUB(PL_X_MIN), TO_SUB(PL_X_MAX));
-    mg_machine_py = clamp16(mg_machine_py + mg_machine_pvy, TO_SUB(PL_Y_MIN), TO_SUB(PL_Y_MAX));
-    if (tx) mg_machine_face = tx < 0;
-    if ((joy_pressed & J_A) && !mg_machine_swing) mg_machine_swing = SWING_BUF;
-    if (mg_machine_swing) {
+    int8_t tx = 0, ty = 0;
+    uint8_t firm = 0;
+    if (pl_shot[SIDE_YOU] && mg_machine_ball == BS_IN) {
+        // Queued while ball is incoming: D-pad only aims, game auto-runs you to the ball!
+        int16_t dx = PX(mg_machine_bx) - PX(mg_machine_px);
+        int16_t dy = (PX(mg_machine_by) + 6) - PX(mg_machine_py);
+        tx = (int8_t)clamp16(dx << 2, -sp, sp);
+        ty = (int8_t)clamp16(dy << 2, -sp, sp);
+        firm = 1;
+    } else if (!pl_shot[SIDE_YOU]) {
+        tx = joy & J_RIGHT ? sp : joy & J_LEFT ? -sp : 0;
+        ty = joy & J_DOWN ? sp : joy & J_UP ? -sp : 0;
+    }
+    fc_step_move(SIDE_YOU, tx, ty, firm,
+                 TO_SUB(PL_X_MIN), TO_SUB(PL_X_MAX), TO_SUB(PL_Y_MIN), TO_SUB(PL_Y_MAX));
+    mg_machine_px = pl_x[SIDE_YOU];
+    mg_machine_py = pl_y[SIDE_YOU];
+    mg_machine_pvx = pl_vx[SIDE_YOU];
+    mg_machine_pvy = pl_vy[SIDE_YOU];
+    mg_machine_face = pl_face[SIDE_YOU];
+
+    if (pl_shot[SIDE_YOU]) {
         if (try_strike()) {
             mg_machine_swing = 0;
-        } else if (!--mg_machine_swing) {
-            // Nothing there: a swing at the air.
-            mg_machine_move = MOVE_KICK;
-            mg_machine_move_t = WHIFF_FRAMES;
-            sfx_play(SFX_TOUCH);
         }
+    } else if (mg_machine_swing) {
+        mg_machine_swing--;
     }
 }
 
 // --- drawing ---
 static void draw(void) {
-    // You.
-    uint8_t f = MG_F_STAND;
-    int16_t lift = 0;
+    // You: shared Futnet poses, side-running, and 3-stage charge-up flash!
+    uint8_t f = MG_F_STAND, lie = 0, special = 0;
+    int8_t lift = 0;
     if (mg_machine_move_t) {
-        if (mg_machine_move == MOVE_HEADER) f = MG_F_HEADER, lift = 4;
+        if (mg_machine_move == MOVE_HEADER || mg_machine_move == MOVE_BICYCLE) special = 1;
         else f = mg_machine_move == MOVE_VOLLEY ? MG_F_VOLLEY : MG_F_KICK;
     } else if (mg_run == MG_RUN_OVER && mg_machine_misses >= MISSES_MAX) {
         f = MG_F_LOSE;
-    } else if (mg_machine_swing) {
+    } else if (pl_shot[SIDE_YOU]) {
         f = MG_F_READY;
     } else if (mg_machine_pvx || mg_machine_pvy) {
         f = (frame_count & 8) ? MG_F_RUN_A : MG_F_RUN_B;
     }
+    uint8_t ptile = MG_FRAME(MG_VIEW_BACK, f);
+    uint8_t pflip = mg_machine_face;
+    if (special) {
+        ptile = player_move_pose(mg_machine_move, mg_machine_move_t, 0, &lie, &lift);
+    } else {
+        pl_side[SIDE_YOU] = gfx_running_side(pl_side[SIDE_YOU], mg_machine_pvx, mg_machine_pvy);
+        if ((f == MG_F_STAND || f == MG_F_RUN_A || f == MG_F_RUN_B) && pl_side[SIDE_YOU]) {
+            uint8_t pose = (mg_machine_pvx || mg_machine_pvy) ? ((frame_count & 4) ? 0 : (frame_count & 8) ? 2 : 1) : 0;
+            ptile = 224 + (pose << 3);
+            if (mg_machine_pvx) pflip = mg_machine_pvx < 0;
+        }
+    }
+    uint8_t ppal = fc_charge_pal(SIDE_YOU, SPR_PAL_YOU);
     int16_t py = PX(mg_machine_py);
-    mg_player(0, MG_FRAME(MG_VIEW_BACK, f), proj_x(PX(mg_machine_px), py), proj_sy(py) - lift, SPR_PAL_YOU, mg_machine_face);
-    // The ball and its shadow.
+    mg_player(0, ptile, proj_x(PX(mg_machine_px), py), proj_sy(py) - lift, ppal, pflip);
+
+    // The ball, its shadow, and its red/blue shot trail.
     if (mg_machine_ball == BS_NONE) {
         mg_hide(OAM_MG_BALL, OAM_MG_SHADOW);
+        mg_hide(OAM_TRAIL, OAM_TRAIL + 3);
     } else {
-        int16_t by = PX(mg_machine_by);
-        mg_ball(proj_x(PX(mg_machine_bx), by), proj_sy(by), PX(mg_machine_bz), mg_machine_bvx || mg_machine_bvy,
-                SPR_PAL_BALL);
+        int16_t by = PX(mg_machine_by), bz = PX(mg_machine_bz);
+        int16_t bx_s = proj_x(PX(mg_machine_bx), by), by_s = proj_sy(by);
+        mg_ball(bx_s, by_s, bz, mg_machine_bvx || mg_machine_bvy,
+                ball_power ? SPR_PAL_POWER : SPR_PAL_BALL);
+        fc_trail_draw(OAM_TRAIL, bx_s + 4, by_s + 8 - bz, 0);
     }
     // The machine: turned the way it'll fire, flashing as it's about to, kicking
     // back as it fires, a burst of fire at its mouth.
@@ -569,10 +633,12 @@ static void draw(void) {
         int16_t rx = proj_x(mg_machine_tx, mg_machine_ty) - 12, ry = proj_sy(mg_machine_ty) - 6;
         for (uint8_t c = 0; c < 3; c++) mg_sprite(OAM_RING + c, T_RING + (c << 1), PAL_RING, rx + (c << 3), ry);
     }
-    // While a ball comes at you, a marker where the d-pad aims your return.
+    // While a ball comes at you, a marker where the d-pad / queued aim sends your return.
     if (mg_machine_ball == BS_IN && mg_run == MG_RUN_LIVE) {
-        int16_t ax = joy & J_LEFT ? AIM_X_L : joy & J_RIGHT ? AIM_X_R : CENTER_X;
-        int16_t ay = joy & J_UP ? AIM_Y_DEEP : joy & J_DOWN ? AIM_Y_SHORT : AIM_Y_MID;
+        uint8_t aim = (joy & J_LEFT) ? 0 : (joy & J_RIGHT) ? 2 : pl_shot[SIDE_YOU] ? pl_aim[SIDE_YOU] : 1;
+        uint8_t dep = (joy & J_UP) ? 2 : (joy & J_DOWN) ? 0 : pl_shot[SIDE_YOU] ? pl_depth[SIDE_YOU] : 1;
+        int16_t ax = aim == 0 ? AIM_X_L : aim == 2 ? AIM_X_R : CENTER_X;
+        int16_t ay = dep == 2 ? AIM_Y_DEEP : dep == 0 ? AIM_Y_SHORT : AIM_Y_MID;
         mg_sprite(OAM_AIM, MG_T_AIM, SPR_PAL_UI, proj_x(ax, ay) - 4, proj_sy(ay) - 4);
     } else {
         move_sprite(OAM_AIM, 0, 0);
@@ -587,9 +653,14 @@ void mg_machine_enter(void) BANKED {
     memcpy(pal_base_bg, bg_pals, sizeof(bg_pals));
     mg_load_spr(mg_machine_spr_tiles, MG_MACHINE_SPR_TILE_COUNT, BANK(mg_machine_spr));
     memcpy(&pal_base_obj[PAL_MACHINE << 2], machine_pal, sizeof(machine_pal));
-    memcpy(&pal_base_obj[PAL_RING << 2], ring_pal, sizeof(ring_pal));
     memcpy(&pal_base_obj[SPR_PAL_UI << 2], marks_pal, sizeof(marks_pal));
     proj_init();
+    fc_unready(SIDE_YOU);
+    fc_ball_plain();
+    pl_accel[SIDE_YOU] = FC_ACCEL;
+    pl_grip[SIDE_YOU] = FC_GRIP;
+    pl_skid[SIDE_YOU] = pl_side[SIDE_YOU] = pl_flash[SIDE_YOU] = 0;
+    arc_clear = 0;
 
     mg_machine_points = mg_machine_returns = mg_machine_targets = 0;
     mg_machine_misses = mg_machine_level = 0;
