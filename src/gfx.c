@@ -279,3 +279,12 @@ void gfx_ball_step(int16_t vx,int16_t vy){
 uint8_t gfx_ball_tile(void){
     return gfx_ball_phase<2?gfx_ball_phase<<1:gfx_ball_first+((gfx_ball_phase-2)<<1);
 }
+// Reuse each character's own kick tiles, rotated through hardware flips.
+// The blank half of the lower pair moves above the sprite, preserving the
+// approved 16x24 silhouette without uploading tiles during an aerial move.
+static const metasprite_t bicycle_right[]={{0,0,6,0},{16,0,4,0},{-16,8,2,0},{16,0,0,0},METASPR_TERM};
+static const metasprite_t bicycle_left[]={{0,0,2,0},{16,0,0,0},{-16,8,6,0},{16,0,4,0},METASPR_TERM};
+void gfx_bicycle(uint8_t first,uint8_t tile,uint8_t x,int16_t y,uint8_t pal,uint8_t flip){
+    pal|=S_FLIPY;if(!flip)pal|=S_FLIPX;
+    move_metasprite_ex(flip?bicycle_left:bicycle_right,tile,pal,first,x,(uint8_t)(y-15));
+}

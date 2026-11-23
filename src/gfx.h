@@ -153,6 +153,7 @@ uint8_t gfx_running_side(uint8_t previous,int8_t vx,int8_t vy);
 void gfx_ball_init(uint8_t extra_first);
 void gfx_ball_step(int16_t vx,int16_t vy);
 uint8_t gfx_ball_tile(void);
+void gfx_bicycle(uint8_t first,uint8_t tile,uint8_t x,int16_t y,uint8_t pal,uint8_t flip);
 void banked_sprite_data(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);
 // The same into the Color's second VRAM bank (sprites whose flags have S_BANK).
 void banked_sprite_data_vbk1(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);

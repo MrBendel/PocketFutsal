@@ -344,3 +344,7 @@ export const SPRITE_TILES = [
 ];
 
 export const FUTSAL_PITCH = buildPitch(true);
+// Two 8x16 pairs form a gold landing ellipse. The blank lower halves keep it
+// on the ground; futsal loads these into its final free slots below tile 128.
+const zoneLeft=['......11','...11133','.1133...','113.....','113.....','.1133...','...11133','......11'];
+export const FUTSAL_ZONE=[zoneLeft,blank,zoneLeft.map(r=>[...r].reverse().join('')),blank];

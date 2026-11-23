@@ -33,7 +33,7 @@ import {BALL_EXTRA} from './ball-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { FUTSAL_PITCH, PITCH, HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
+import { FUTSAL_PITCH, FUTSAL_ZONE, PITCH, HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
 import * as MG_MACHINE from './art/mg_machine.mjs';
 import * as MG_WALL from './art/mg_wall.mjs';
 import * as MG_JUGGLE from './art/mg_juggle.mjs';
@@ -56,6 +56,7 @@ export const ASSETS = [
   // 20x21 map (tile indices from mapBase on) and the tiles' palettes.
   { name: 'pitch', bank: true, ascii: PITCH.tiles, map: PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
   { name: 'futsal_pitch', bank: true, ascii: FUTSAL_PITCH.tiles, map: FUTSAL_PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
+  { name: 'futsal_zone', bank: true, ascii: FUTSAL_ZONE, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).

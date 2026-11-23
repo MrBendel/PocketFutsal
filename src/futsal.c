@@ -19,8 +19,13 @@
 #include "action_crop.h"
 #include "action_bandana.h"
 #include "side_roster.h"
+#include "futsal_zone.h"
+#include "futsal_fx.h"
 #if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
 #error Futsal court overlaps side sprite atlas
+#endif
+#if 214 + SIDE_ROSTER_TILE_COUNT > 242
+#error Futsal side sprite atlas overlaps contact effects
 #endif
 
 
@@ -38,6 +43,10 @@ uint16_t fs_completed_passes;
 uint8_t fs_return_call;
 uint8_t fs_ball_fall,fs_kicked;
 uint8_t fs_touch_timer,fs_pending_kick,fs_pending_timer;
+uint8_t fs_pass_charge,fs_pass_source,fs_return_lob,fs_lob,fs_air_shot;
+int8_t fs_pass_dx,fs_pass_dy;
+uint8_t fs_aerial[4],fs_air_hit[4],fs_air_kind[4],fs_zone_ready;
+uint16_t fs_lob_count,fs_aerial_count;
 int8_t fs_pending_dx,fs_pending_dy;
 uint16_t fs_dribble_touches;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
@@ -87,10 +96,12 @@ static void kickoff(uint8_t side) {
     fs_return_call=0;
     fs_ball_fall=0;
     fs_touch_timer=fs_pending_kick=fs_pending_timer=0;
+    fs_pass_charge=fs_return_lob=fs_lob=fs_air_shot=fs_zone_ready=0;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
         fs_side[i]=0;
+        fs_aerial[i]=fs_air_hit[i]=fs_air_kind[i]=0;
         fs_vx[i]=fs_vy[i]=fs_slide_vx[i]=fs_slide_vy[i]=0;
         fs_dribble_x[i]=0; fs_dribble_y[i]=team(i)?1:-1;
         fs_think[i]=i<<1; fs_ai_tx[i]=fs_pl_x[i]; fs_ai_ty[i]=fs_pl_y[i];
@@ -103,6 +114,11 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     static uint8_t speed;
     tx=clamp(tx,14*16,146*16); ty=clamp(ty,0,224*16);
     dx=tx-fs_ball_x;dy=ty-fs_ball_y;
+    if(fs_lob){
+        fs_ball_vx=dx<0?-((-dx)>>6):dx>>6;
+        fs_ball_vy=dy<0?-((-dy)>>6):dy>>6;
+        t=64;fs_ball_z=0;fs_ball_vz=48;
+    }else{
     dx=dx<0?-((-dx)>>4):dx>>4;dy=dy<0?-((-dy)>>4):dy>>4;
     sum=ab(dx)+ab(dy);if(!sum)sum=1;
     speed=fs_is_shot?128:64;
@@ -113,8 +129,11 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     // Futnet, long deliveries get more air time and short exchanges stay low.
     t=fs_is_shot?(sum+4)>>3:(sum+2)>>2;
     t=clamp(t,4,96);
-    fs_target_x=tx;fs_target_y=ty;fs_flight_left=t;
-    fs_ball_z=0;fs_ball_vz=(3*(t+1))>>3;fs_ball_fall=0;
+    fs_ball_vz=(3*(t+1))>>3;
+    if(fs_air_shot)fs_ball_vz-=fs_ball_z/t;else fs_ball_z=0;
+    }
+    fs_target_x=tx;fs_target_y=ty;fs_flight_left=t;fs_ball_fall=0;
+    fs_air_shot=0;
     fs_kicked=1;
     if(dx)fs_flip[i]=dx<0;if(dy)fs_view[i]=dy<0;
     fs_power_trail=fs_trail_n=0;
@@ -123,26 +142,67 @@ static void kick(uint8_t i, int16_t tx, int16_t ty) {
     fs_touch_timer=0;
     sfx_play(SFX_TOUCH);
 }
-static void pass(uint8_t i, int8_t dx, int8_t dy) {
+static void pass(uint8_t i, int8_t dx, int8_t dy,uint8_t lob) {
     static uint8_t mate;
     static int16_t tx,ty;
     mate=i^1;
-    fs_receiver=mate; fs_is_shot=0;
+    fs_receiver=mate;fs_is_shot=0;fs_lob=lob;
     // A direction sends the receiver into space; neutral leads their current run.
     tx=fs_pl_x[mate];ty=fs_pl_y[mate];
     if(dx||dy){tx+=dx*24*16;ty+=dy*24*16;}
     else {tx+=fs_vx[mate]*32;ty+=fs_vy[mate]*32;}
+    // A called lob gives the fixed human player a forward finishing zone.
+    if(lob&&i==1&&!fs_spectator)ty-=16*16;
     kick(i,tx,clamp(ty,16*16,208*16));
     // React to the delivery immediately rather than following a stale support run.
     fs_ai_tx[mate]=fs_target_x;fs_ai_ty[mate]=fs_target_y;
-    if(i==1)fs_return_call=0;
+    if(i==1)fs_return_call=fs_return_lob=0;
     fs_pass_count++;
+    if(lob)fs_lob_count++;
 }
 static void shoot(uint8_t i, int8_t aim) {
     int16_t x=80+aim*16;
     if(!aim)x=(rand()&1)?60:100;
-    fs_receiver=NOBODY; fs_is_shot=1;
+    fs_receiver=NOBODY;fs_is_shot=1;fs_lob=0;
     kick(i,x*16,team(i)?224*16:0);fs_power_trail=48;fs_shot_count++;
+    futsal_fx_start(fs_ball_x,fs_ball_y,fs_ball_z,fs_aerial[i]!=0);
+}
+static uint8_t aerial_try(uint8_t i){
+    if(!fs_zone_ready||fs_owner!=NOBODY||fs_aerial[i]||fs_tackling[i]||distance(i,fs_target_x,fs_target_y)>20*16)return 0;
+    fs_aerial[i]=fs_action[i]=28;fs_cooldown[i]=44;fs_air_hit[i]=0;
+    fs_air_kind[i]=team(i)?fs_ball_y<fs_pl_y[i]-4*16:fs_ball_y>fs_pl_y[i]+4*16;
+    fs_vx[i]=fs_vy[i]=0;fs_burst[i]=0;
+    return 1;
+}
+static void aerial_update(uint8_t i){
+    uint8_t t=--fs_aerial[i];
+    if(t<=20&&t>=10&&!fs_air_hit[i]&&!fs_kicked&&fs_owner==NOBODY&&fs_ball_vz<0&&fs_ball_z>=8*16&&fs_ball_z<=44*16&&distance(i,fs_ball_x,fs_ball_y)<20*16){
+        fs_air_hit[i]=1;fs_air_shot=1;
+        if(fs_receiver==i)fs_completed_passes++;
+        shoot(i,(!fs_spectator&&!i)?((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0):0);
+        fs_aerial_count++;
+    }
+}
+static void pass_input(int8_t dx,int8_t dy){
+    if(joy_pressed&J_B){
+        if(fs_owner==0||fs_owner==1||(fs_owner==NOBODY&&fs_receiver==1)){
+            fs_pass_charge=1;fs_pass_source=fs_owner==0?0:1;
+            fs_pass_dx=dx;fs_pass_dy=dy;fs_pending_kick=0;
+        }else if(!fs_cooldown[0]){fs_burst[0]=16;fs_cooldown[0]=60;}
+    }else if(fs_pass_charge&&(joy&J_B)){
+        if(fs_pass_charge<30)fs_pass_charge++;
+        if(dx||dy){fs_pass_dx=dx;fs_pass_dy=dy;}
+    }
+    if(fs_pass_charge&&fs_pass_source==0&&fs_owner!=0)fs_pass_charge=0;
+    if(fs_pass_charge&&fs_owner!=NOBODY&&team(fs_owner))fs_pass_charge=0;
+    if(fs_pass_charge&&!(joy&J_B)){
+        uint8_t lob=fs_pass_charge>=12;
+        if(!fs_pass_source){
+            fs_pending_kick=lob?3:1;fs_pending_timer=20;
+            fs_pending_dx=fs_pass_dx;fs_pending_dy=fs_pass_dy;
+        }else{fs_return_call=lob?80:48;fs_return_lob=lob;}
+        fs_pass_charge=0;
+    }
 }
 static void tackle(uint8_t i) {
     fs_tackling[i]=18;fs_action[i]=18;fs_cooldown[i]=65;fs_burst[i]=10;
@@ -165,6 +225,7 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     vx=fs_vx[i];vy=fs_vy[i];want_x=want_y=0;
     slide=fs_tackling[i];burst=fs_burst[i];
     speed=fs_owner==i?22:24;if(burst)speed=44;
+    if(!fs_spectator&&!i&&fs_pass_charge&&fs_pass_source==0)speed=12;
     if(slide>14||(slide&&slide<=4))speed=8;
     if((dx>12||dx<-12)&&(dy>12||dy<-12))speed-=speed>>2;
     if(dx>12)want_x=speed;else if(dx<-12)want_x=-speed;
@@ -198,11 +259,13 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
 static void ai(uint8_t i){
     uint8_t mate=i^1, own=fs_owner!=NOBODY&&team(fs_owner)==team(i);
     int16_t goal=team(i)?224*16:0,tx=fs_ball_x,ty=fs_ball_y;
-    if(!fs_spectator&&i==1&&fs_owner==i&&((joy_pressed&J_B)||fs_return_call)&&distance(i,fs_ball_x,fs_ball_y)<=12*16){
-        pass(i,0,0);return;
+    if(!fs_spectator&&i==1&&fs_owner==i&&fs_return_call&&distance(i,fs_ball_x,fs_ball_y)<=12*16){
+        pass(i,0,0,fs_return_lob);return;
     }
+    if(!fs_spectator&&i==1&&fs_owner==i&&fs_pass_charge&&fs_pass_source==1){step_player(i,fs_ball_x,fs_ball_y);return;}
     if(fs_think[i]||fs_kicked){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_think[i]=7;
+    if(fs_lob&&fs_receiver==i&&aerial_try(i))return;
     fs_role[i]=0;
     if(fs_owner==i){
         fs_role[i]=1;
@@ -218,7 +281,7 @@ static void ai(uint8_t i){
         int16_t forward=team(i)?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
         if(distance(i,fs_ball_x,fs_ball_y)>12*16){tx=fs_ball_x;ty=fs_ball_y;}
         else if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16)shoot(i,0);
-        else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i,0,0);
+        else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i,0,0,(fs_pass_count&3)==3);
         else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16)shoot(i,0);
     }else if(own){
         fs_role[i]=2;
@@ -280,10 +343,12 @@ static void ball_update(void) {
     fs_ball_x+=fs_ball_vx; fs_ball_y+=fs_ball_vy;
     if(fs_flight_left)fs_flight_left--;
     if(fs_ball_z>0||fs_ball_vz){
-        if(++fs_ball_fall&3)fs_ball_vz--;
+        if(fs_lob)fs_ball_vz-=(++fs_ball_fall&1)?1:2;
+        else if(++fs_ball_fall&3)fs_ball_vz--;
         fs_ball_z+=fs_ball_vz;
         if(fs_ball_z<=0){
             fs_ball_z=0;fs_ball_vz=(-fs_ball_vz*3)>>2;
+            fs_lob=0;
             if(fs_ball_vz<5)fs_ball_vz=0;
             fs_ball_vx-=fs_ball_vx/4;fs_ball_vy-=fs_ball_vy/4;
         }
@@ -313,10 +378,10 @@ static void ball_update(void) {
     for(uint8_t k=0;k<4;k++) {
         uint8_t i=(k+(fs_sim_ticks&3))&3;
         if(fs_pickup_lock && fs_last_kicker==i) continue;
-        if(fs_action[i]>10) continue;
+        if(fs_action[i]>10||fs_aerial[i]) continue;
         if(distance(i,fs_ball_x,fs_ball_y)<(fs_is_shot&&ab(fs_ball_vx)+ab(fs_ball_vy)>48?5*16:14*16)) {
             if(fs_receiver==i)fs_completed_passes++;
-            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_touch_timer=0;
+            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_touch_timer=0;fs_lob=0;
             // A trap kills the delivery's speed without moving its position.
             fs_ball_vx=fs_ball_vy=0;fs_ball_vz=0;fs_ball_z=0;break;
         }
@@ -343,6 +408,18 @@ static void draw(void) {
         y=(uint16_t)fs_pl_y[i]>>4;x=sx((uint16_t)fs_pl_x[i]>>4,y);sy=fs_projection_y[y]-fs_cam_y;
         if(!i){marker_x=x+4;marker_y=sy-18;}
         gfx_player_shadow(22+(i<<1),x,sy);
+        if(fs_aerial[i]){
+            uint8_t t=fs_aerial[i];
+            tile=(i<<6)+(fs_view[i]<<5)+24;pal=S_BANK|i;
+            if(t>24||t<5){tile=28+i*24+(fs_view[i]<<3);pal=i;}
+            else if(t<=20&&t>=10&&fs_air_kind[i]){gfx_bicycle(n,tile,x,sy-12,pal,fs_flip[i]);continue;}
+            else sy-=t>=10?10:5;
+            gfx_actor(n,tile,0,x,sy,pal,fs_flip[i]);continue;
+        }
+        if(!i&&fs_pass_charge&&fs_pass_source==0&&fs_pass_charge>4){
+            pal=fs_pass_charge>=12&&(fs_sim_ticks&4)?SPR_PAL_POWER:0;
+            gfx_actor(n,28+(fs_view[i]<<3),0,x,sy,pal,fs_flip[i]);continue;
+        }
         if(fs_tackling[i]>4 && fs_tackling[i]<=14) {
             uint8_t base=20+i*24, flip=!fs_flip[i];
             gfx_actor(n,base,1,x,sy,i,flip);
@@ -379,11 +456,22 @@ static void draw(void) {
     }
     move_sprite(30,ball_sx,(uint8_t)(ball_wy-fs_cam_y+1));
     place(17,marker_x,marker_y);
+    if(fs_lob&&fs_owner==NOBODY&&!fs_goal_timer){
+        uint8_t zy=(uint16_t)fs_target_y>>4,zx=sx((uint16_t)fs_target_x>>4,zy);
+        uint8_t pal=fs_zone_ready&&(fs_sim_ticks&4)?SPR_PAL_POWER:SPR_PAL_UI;
+        set_sprite_prop(31,pal);set_sprite_prop(32,pal);
+        move_sprite(31,zx,fs_projection_y[zy]-fs_cam_y+12);
+        move_sprite(32,zx+8,fs_projection_y[zy]-fs_cam_y+12);
+    }else{move_sprite(31,0,0);move_sprite(32,0,0);}
+    if(fs_fx_timer||fs_fx_frame!=255)futsal_fx_draw(fs_cam_y);
 }
 void futsal_enter(void) BANKED {
     uint8_t buf[FUTSAL_PITCH_MAP_W*FUTSAL_PITCH_MAP_H];
     palettes_futsal();
     gfx_ball_init(116);
+    futsal_fx_load();
+    banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
+    set_sprite_tile(31,124);set_sprite_tile(32,126);
     for(uint8_t k=0;k<4;k++){set_sprite_tile(18+k,8+(k<<1));set_sprite_prop(18+k,4);move_sprite(18+k,0,0);}
     set_sprite_tile(30,4);set_sprite_prop(30,SPR_PAL_UI);
     set_sprite_tile(17,6);set_sprite_prop(17,SPR_PAL_UI);
@@ -408,6 +496,7 @@ void futsal_enter(void) BANKED {
     initrand(game_seed); score[0]=score[1]=sets[0]=sets[1]=0;
     match_sets=1; winner=NOBODY; fs_paused=fs_goal_timer=fs_hud_pending=0;
     fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=fs_dribble_touches=0;
+    fs_lob_count=fs_aerial_count=0;
     move_win(7,HUD_WY); SHOW_WIN; gfx_sprite_split(HUD_WY);
     kickoff(0); hud(); draw();
 }
@@ -417,7 +506,7 @@ void futsal_update(void) BANKED {
     // Text VRAM writes get their own event frame instead of sharing a busy
     // physics/AI/actor frame. Match time and player momentum stay frozen here.
     if(fs_hud_pending) { fs_hud_pending=0; hud(); return; }
-    if(joy_pressed&J_SELECT) { fs_spectator=!fs_spectator; hud(); return; }
+    if(joy_pressed&J_SELECT) { fs_spectator=!fs_spectator;fs_pass_charge=fs_pending_kick=fs_return_call=0;hud();return; }
     if(fs_goal_timer) {
         if(!--fs_goal_timer) {
             if(score[0]>=5 || score[1]>=5) { winner=score[0]>=5?0:1; state_change(STATE_GAME_OVER); return; }
@@ -427,6 +516,7 @@ void futsal_update(void) BANKED {
     }
     fs_sim_ticks++;
     fs_kicked=0;
+    fs_zone_ready=fs_lob&&fs_ball_vz<0&&fs_flight_left<=28&&fs_ball_z>=10*16;
     if(fs_pending_timer)fs_pending_timer--;else fs_pending_kick=0;
     if(fs_return_call)fs_return_call--;
     if(fs_owner!=NOBODY&&team(fs_owner))fs_return_call=0;
@@ -437,26 +527,26 @@ void futsal_update(void) BANKED {
         fs_moving[i]=0;
         if(fs_tackling[i]) fs_tackling[i]--;
         if(fs_cooldown[i]) fs_cooldown[i]--; if(fs_action[i]) fs_action[i]--; if(fs_burst[i]) fs_burst[i]--;
+        if(fs_aerial[i]){aerial_update(i);continue;}
         if(i || fs_spectator) ai(i);
         else {
             int8_t dx=((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0),dy=((joy&J_DOWN)!=0)-((joy&J_UP)!=0);
+            pass_input(dx,dy);
             if(fs_owner==0) {
-                if(joy_pressed&(J_A|J_B)){
-                    fs_pending_kick=(joy_pressed&J_A)?2:1;fs_pending_timer=20;
+                if(joy_pressed&J_A){
+                    fs_pending_kick=2;fs_pending_timer=20;fs_pass_charge=0;
                     fs_pending_dx=dx;fs_pending_dy=dy;
                 }
                 if(fs_pending_kick&&distance(0,fs_ball_x,fs_ball_y)<=12*16){
-                    if(fs_pending_kick==2)shoot(0,fs_pending_dx);else pass(0,fs_pending_dx,fs_pending_dy);
+                    if(fs_pending_kick==2)shoot(0,fs_pending_dx);else pass(0,fs_pending_dx,fs_pending_dy,fs_pending_kick==3);
                     fs_pending_kick=0;
                 }
             }
             else {
                 fs_pending_kick=0;
-                if((joy_pressed&J_A) && !fs_cooldown[0]) tackle(0);
-                if((joy_pressed&J_B)&&(fs_owner==1||(fs_owner==NOBODY&&fs_receiver==1)))fs_return_call=48;
-                else if((joy_pressed&J_B) && !fs_cooldown[0] && (fs_owner==NOBODY || team(fs_owner)!=0)) { fs_burst[0]=16; fs_cooldown[0]=60; }
+                if(joy_pressed&J_A){if(fs_lob)aerial_try(0);else if(!fs_cooldown[0])tackle(0);}
             }
-            if(!fs_kicked)step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
+            if(!fs_kicked&&!fs_aerial[0])step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
         }
     }
     ball_update();gfx_ball_step(fs_ball_vx,fs_ball_vy);if(!fs_hud_pending)draw();
