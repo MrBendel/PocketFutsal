@@ -147,6 +147,8 @@ void fade_in(void) BANKED;
 // (SWITCH_ROM would swap its own code out from under the CPU), so it calls these:
 // they live in bank 0, switch to `bank`, copy, and switch back.
 void banked_memcpy(void *dst, const void *src, uint16_t n, uint8_t bank);
+// Packed futsal side cycle: four character heads plus three shared lower bodies.
+void gfx_side(uint8_t first,uint8_t character,uint8_t pose,uint8_t x,uint8_t y,uint8_t flip);
 void banked_sprite_data(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);
 // The same into the Color's second VRAM bank (sprites whose flags have S_BANK).
 void banked_sprite_data_vbk1(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);

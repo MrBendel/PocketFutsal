@@ -1,6 +1,8 @@
 import {test} from 'node:test';
 import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
+import {sideAtlas} from '../tools/player-art.mjs';
+import {asciiTile,FUTSAL_PITCH} from '../tools/tile-art.mjs';
 const PLAY=3;
 function startGame(unused,seed=4242) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
@@ -53,7 +55,13 @@ test('slide steals possession and burst has a cooldown; several seeds finish',()
  put(e,'fs_owner',255); put(e,'fs_cooldown',0); e.tap('B'); assert.ok(e.v('fs_burst')>0); assert.ok(e.v('fs_cooldown')>0);
  for(const seed of [7,123]) {
   const sim=startGame(undefined,seed);
-  sim.until(e=>e.v('game_state')===GAME_OVER,18000,'AI match completion');
+  let worst=0;
+  for(let f=0;f<18000&&sim.v('game_state')===PLAY;f++){
+   sim.idle();
+   if(sim.v('game_state')===PLAY&&!sim.v('in_transition'))worst=Math.max(worst,sim.lastFrameCycles);
+  }
+  settle(sim,GAME_OVER,'AI match completion');
+  assert.ok(worst<65664,`seed ${seed} full-match budget: ${worst} cycles`);
  }
 });
 test('menu exposes both modes and futsal returns to the menu',()=>{
@@ -282,4 +290,43 @@ test('the dribbled ball follows the actual momentum vector through a turn',()=>{
  assert.ok(vx>0&&vy<0&&vx!==-vy,'turn retains an intermediate direction');
  assert.equal(e.v('fs_ball_x','i16')-at(e,'fs_pl_x',0,'i16'),vx*5);
  assert.equal(e.v('fs_ball_y','i16')-at(e,'fs_pl_y',0,'i16'),vy*5);
+});
+
+function humanActor(e){
+ for(let n=0;n<17;n++)if((e.read8(0xfe03+n*4)&7)===0)return n;
+ assert.fail('blue player sprite missing');
+}
+test('all four side cycles are resident in VRAM without replacing front/back or slides',()=>{
+ const e=startGame();
+ const expected=Buffer.from(sideAtlas().flatMap(t=>asciiTile(t))),vram=e.snapshot().vram;
+ assert.deepEqual(Buffer.from(vram.subarray(214*16,242*16)),expected);
+ for(let n=0;n<FUTSAL_PITCH.tiles.length;n++){
+  const tile=80+n,offset=0x1000+(tile<128?tile:tile-256)*16;
+  assert.deepEqual(Buffer.from(vram.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])),'court tile survives sprite uploads');
+ }
+});
+
+test('horizontal running uses mirrored side strides, keeps side idle and yields to actions',()=>{
+ const e=humanSpace(),poses=new Set();
+ e.hold('RIGHT',8);
+ for(let f=0;f<16;f++){
+  e.hold('RIGHT');
+  const n=humanActor(e),tile=e.read8(0xfe02+n*4),pal=e.read8(0xfe03+n*4);
+  assert.equal(pal&8,0,'side art uses its bank-zero allocation');
+  assert.equal(pal&32,0,'right-facing art is not mirrored');
+  assert.equal(tile,214,'spiky profile head is shared across strides');
+  poses.add(e.read8(0xfe02+(n+1)*4));
+ }
+ assert.equal(poses.size,3,'two strides and the passing-foot pose');
+ e.idle(12).tap('START').idle(3);
+ assert.equal(e.read8(0xfe02+humanActor(e)*4),214,'side view is retained after braking');
+ assert.equal(e.read8(0xfe02+(humanActor(e)+1)*4),230,'idle legs after braking');
+ e.tap('START').hold('LEFT',14).tap('START').idle(3);
+ assert.equal(e.read8(0xfe03+humanActor(e)*4)&32,32,'leftward motion mirrors the side cycle');
+ e.shot('futsal-side-left');
+ e.tap('START').tap('A').tap('START').idle(3);
+ assert.equal(e.read8(0xfe03+humanActor(e)*4)&8,8,'kick keeps the existing action art');
+ e.tap('START').hold('UP',24).tap('START').idle(3);
+ assert.equal(e.v('fs_side'),0,'vertical movement returns to front/back');
+ assert.equal(e.read8(0xfe03+humanActor(e)*4)&8,8);
 });

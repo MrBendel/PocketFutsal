@@ -75,6 +75,50 @@ export function character(id) {
  }
  const slide=tackle.map(r=>r.join(''));
 
+ // Right-facing idle/contact and two opposing strides. Keep the approved
+ // profile head at its original resolution; draw a connected neck, narrow
+ // torso, counter-swinging arms and bent knees underneath it.
+ const sideBodies=[[
+  '.......31133....',
+  '......322223....',
+  '......322223....',
+  '......323113....',
+  '......322333....',
+  '.......3333.....',
+  '.......3113.....',
+  '.......3223.....',
+  '.......3113.....',
+  '......333333....',
+  '................',
+ ],[
+  '.......31133....',
+  '......322223....',
+  '......322223....',
+  '....3113223113..',
+  '.......333333...',
+  '.....3311333....',
+  '....311333113...',
+  '...3323...3223..',
+  '..33333....3113.',
+  '...........33333',
+  '................',
+ ],[
+  '.......31133....',
+  '......322223....',
+  '......322223....',
+  '.....311223333..',
+  '.....3333333....',
+  '.......333113...',
+  '......3113323...',
+  '......3223.3333.',
+  '.....3113.......',
+  '....33333.......',
+  '................',
+ ]];
+ const side=sideBodies.map(rows=>[
+  ...src[3].slice(0,13).map(r=>r.join('')),...rows,
+ ]);
+
  const transitions=views.map(view=>{
   const ready=view[3].map(r=>[...r]),kick=view[4];
   // A compact sideways tuck bridges upright and inverted silhouettes.
@@ -88,12 +132,21 @@ export function character(id) {
   }
   return [tuck,land,rise].map(p=>p.map(r=>r.join('')));
  });
- return {id,palette:data.palette,views,slide,down,transitions,basic:data.frames.map(f=>f.rows)};
+ return {id,palette:data.palette,views,slide,down,side,transitions,basic:data.frames.map(f=>f.rows)};
 }
 const empty=Array(8).fill('........');
 const cut=(p,x,y)=>p.slice(y,y+8).map(r=>r.slice(x,x+8));
 export function upright(p) {return [cut(p,0,0),cut(p,0,8),cut(p,0,16),empty,cut(p,8,0),cut(p,8,8),cut(p,8,16),empty];}
-export function fullTiles(id) {const c=character(id);return [...c.views[1].flatMap(upright),...c.views[0].flatMap(upright),...Array.from({length:3},(_,col)=>[cut(c.slide,col*8,0),cut(c.slide,col*8,8)]).flat(),empty,empty,...[0,1,2].flatMap(pose=>[...upright(c.transitions[1][pose]),...upright(c.transitions[0][pose])]),...Array.from({length:3},(_,col)=>[cut(c.down,col*8,0),cut(c.down,col*8,8)]).flat(),empty,empty];}
+export function fullTiles(id) {const c=character(id);return [...c.views[1].flatMap(upright),...c.views[0].flatMap(upright),...Array.from({length:3},(_,col)=>[cut(c.slide,col*8,0),cut(c.slide,col*8,8)]).flat(),empty,empty,...[0,1,2].flatMap(pose=>[...upright(c.transitions[1][pose]),...upright(c.transitions[0][pose])]),...Array.from({length:3},(_,col)=>[cut(c.down,col*8,0),cut(c.down,col*8,8)]).flat(),empty,empty,...c.side.flatMap(upright)];}
 export function basicTiles(id) {return character(id).basic.flatMap(upright);}
+export function sideTiles(id) {return character(id).side.flatMap(upright);}
+// The top 16px are unchanged across the cycle. The bottom 8px are shared by
+// every character (their palette supplies skin/team colors). 28 tiles total.
+export function sideAtlas() {
+ const roster=CHARACTERS.map(character);
+ return [...roster.flatMap(c=>[
+  cut(c.side[0],0,0),cut(c.side[0],0,8),cut(c.side[0],8,0),cut(c.side[0],8,8),
+ ]),...roster[0].side.flatMap(p=>[cut(p,0,16),empty,cut(p,8,16),empty])];
+}
 
 export function actionTiles(id) {const c=character(id);return [...Array.from({length:3},(_,col)=>[cut(c.slide,col*8,0),cut(c.slide,col*8,8)]).flat(),empty,empty,...upright(c.views[0][3]),...upright(c.views[1][3])];}

@@ -47,6 +47,10 @@ expires after 48 frames or when an opponent takes possession.
 AI defenders have a brief reaction delay
 and commit to tackles, so changing direction can create an opening.
 
+Both modes use dedicated left/right side-running sprites; all four futsal
+characters retain their individual profile heads. The animated sprite review
+is at `artwork/players/roster/side-review.html`.
+
 The original futnet mode and its tests remain active. Futsal logic and watchable
 state live in `src/futsal.c` and `src/futsal.h`, with `fs_` prefixes for its state.
 Both modes share the graphics, sprite assets, build and emulator tooling.

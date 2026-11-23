@@ -222,3 +222,23 @@ void gfx_actor(uint8_t first,uint8_t tile,uint8_t wide,int16_t x,int16_t y,uint8
     else{pose=flip?actor_left:actor_right;y-=7;}
     move_metasprite_ex(pose,tile,pal,first,(uint8_t)x,(uint8_t)y);
 }
+
+// Shared lower bodies keep all twelve side poses in 28 tiles, outside the
+// signed background tile range occupied by Club Court (bank 0: 128..213).
+#define SIDE_R(h,b) {{0,0,h,0},{16,0,b,0},{-16,8,h+2,0},{16,0,b+2,0},METASPR_TERM}
+#define SIDE_L(h,b) {{0,0,h+2,0},{16,0,b+2,0},{-16,8,h,0},{16,0,b,0},METASPR_TERM}
+#define SIDE_DEFINE(id,h) \
+static const metasprite_t sr##id##a[]=SIDE_R(h,16),sr##id##b[]=SIDE_R(h,20),sr##id##c[]=SIDE_R(h,24); \
+static const metasprite_t sl##id##a[]=SIDE_L(h,16),sl##id##b[]=SIDE_L(h,20),sl##id##c[]=SIDE_L(h,24);
+SIDE_DEFINE(0,0)
+SIDE_DEFINE(1,4)
+SIDE_DEFINE(2,8)
+SIDE_DEFINE(3,12)
+#define SIDE_PTR_ROW(M,id) M##id##a,M##id##b,M##id##c
+static const metasprite_t *const side_right_ptr[]={SIDE_PTR_ROW(sr,0),SIDE_PTR_ROW(sr,1),SIDE_PTR_ROW(sr,2),SIDE_PTR_ROW(sr,3)};
+static const metasprite_t *const side_left_ptr[]={SIDE_PTR_ROW(sl,0),SIDE_PTR_ROW(sl,1),SIDE_PTR_ROW(sl,2),SIDE_PTR_ROW(sl,3)};
+void gfx_side(uint8_t first,uint8_t character,uint8_t pose,uint8_t x,uint8_t y,uint8_t flip){
+    uint8_t index=character*3+pose,pal=character;
+    if(flip)pal|=S_FLIPX;
+    move_metasprite_ex(flip?side_left_ptr[index]:side_right_ptr[index],214,pal,first,x,(uint8_t)(y-7));
+}

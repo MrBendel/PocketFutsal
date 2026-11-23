@@ -18,13 +18,24 @@ ball physics are introduced by the artwork.
 
 Futnet loads the spiky character's full move set: the original 168-tile layout
 plus 48 tiles for sideways tucks, landings and get-up poses, plus a separate
-8-tile knockdown (224 total).
+8-tile knockdown and 24 tiles for side idle/run A/run B (248 total).
 2v2 loads all four characters' eight basic front/back idle/run/kick frames into
 VRAM bank 1 (64 tiles each, exactly 256 total). Per-character poses and palettes
 are selected without uploading tiles during play. Heading/bicycle artwork is
 available for all four; those ball-height moves currently belong to futnet.
 2v2 also loads each character's wide slide and front/back crouch into VRAM
 bank 0, tiles 20..115. Tackles now crouch, extend into a slide, then stand up.
+Side idle and two side-running strides share bank 0 tiles 214..241 (28 for
+the whole roster): four upper bodies and three common lower bodies. This
+avoids Club Court's signed background tiles at 128..213. Right-facing art
+mirrors in hardware for leftward motion. The
+original kicking profile heads are preserved pixel-for-pixel on connected,
+narrow bodies with alternating bent legs and counter-swinging arms.
+Horizontal movement selects these frames; vertical movement selects front/back.
+The last view persists at rest, and actions keep their own poses. A small
+direction threshold prevents diagonal movement from flickering between views.
+Open side-review.html for animated left/right cycles at native and enlarged
+sizes, or side-running-1x.png / side-running-6x.png for all three poses.
 
 Regenerate a base study with:
 node tools/export-player-study.mjs artwork/players/roster/cap

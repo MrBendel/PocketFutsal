@@ -18,6 +18,10 @@
 #include "action_cap.h"
 #include "action_crop.h"
 #include "action_bandana.h"
+#include "side_roster.h"
+#if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
+#error Futsal court overlaps side sprite atlas
+#endif
 
 
 
@@ -36,6 +40,7 @@ uint8_t fs_ball_fall,fs_kicked;
 uint8_t fs_cooldown[4], fs_action[4], fs_burst[4], fs_held_ticks, fs_pickup_lock, fs_last_kicker;
 uint8_t fs_tackling[4];
 uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
+uint8_t fs_side[4];
 uint8_t fs_role[4]; // 0 chase, 1 carry, 2 support, 3 cover
 uint8_t fs_ball_oam, fs_hud_pending;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
@@ -81,6 +86,7 @@ static void kickoff(uint8_t side) {
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
+        fs_side[i]=0;
         fs_vx[i]=fs_vy[i]=fs_slide_vx[i]=fs_slide_vy[i]=0;
         fs_dribble_x[i]=0; fs_dribble_y[i]=team(i)?1:-1;
         fs_think[i]=i<<1; fs_ai_tx[i]=fs_pl_x[i]; fs_ai_ty[i]=fs_pl_y[i];
@@ -148,8 +154,8 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     // Serial scratch: static locals avoid hundreds of SDCC stack spills in
     // this four-times-per-frame path (no interrupts call the simulation).
     static int16_t x,y,dx,dy;
-    static int8_t vx,vy,want_x,want_y,speed;
-    static uint8_t slide,burst,ax,ay;
+    static int8_t vx,vy,want_x,want_y,speed,side_delta;
+    static uint8_t slide,burst,ax,ay,mx,my;
     x=fs_pl_x[i];y=fs_pl_y[i];dx=tx-x;dy=ty-y;
     vx=fs_vx[i];vy=fs_vy[i];want_x=want_y=0;
     slide=fs_tackling[i];burst=fs_burst[i];
@@ -176,6 +182,10 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
         }
     }
     fs_moving[i]=vx||vy;
+    mx=vx<0?-vx:vx;my=vy<0?-vy:vy;
+    // A little hysteresis avoids flickering views on nearly diagonal runs.
+    side_delta=mx-my;
+    if(side_delta>3)fs_side[i]=1;else if(side_delta<-3)fs_side[i]=0;
     if(vx<-3)fs_flip[i]=1;else if(vx>3)fs_flip[i]=0;
     if(vy<-3)fs_view[i]=1;else if(vy>3)fs_view[i]=0;
     if(vx||vy){fs_dribble_x[i]=vx<0?-1:vx>0?1:0;fs_dribble_y[i]=vy<0?-1:vy>0?1:0;}
@@ -303,6 +313,11 @@ static void draw(void) {
             gfx_actor(n,base,1,x,sy,i,flip);
             continue;
         }
+        if(!fs_action[i]&&fs_side[i]){
+            pose=fs_moving[i]?((fs_sim_ticks&4)?0:(fs_sim_ticks&8)?2:1):0;
+            fs_pose[i]=pose;
+            gfx_side(n,i,pose,x,(uint8_t)sy,fs_flip[i]);continue;
+        }
         pose=fs_action[i]?3:(fs_moving[i]?(((fs_sim_ticks>>3)&1)?1:2):0);
         fs_pose[i]=pose;
         tile=(i<<6)+(fs_view[i]<<5)+(pose<<3);
@@ -343,6 +358,7 @@ void futsal_enter(void) BANKED {
     banked_sprite_data(44,ACTION_CAP_TILE_COUNT,action_cap_tiles,BANK(action_cap));
     banked_sprite_data(68,ACTION_CROP_TILE_COUNT,action_crop_tiles,BANK(action_crop));
     banked_sprite_data(92,ACTION_BANDANA_TILE_COUNT,action_bandana_tiles,BANK(action_bandana));
+    banked_sprite_data(214,SIDE_ROSTER_TILE_COUNT,side_roster_tiles,BANK(side_roster));
     banked_sprite_data_vbk1(0,FUTSAL_SPIKY_TILE_COUNT,futsal_spiky_tiles,BANK(futsal_spiky));
     banked_sprite_data_vbk1(64,FUTSAL_CAP_TILE_COUNT,futsal_cap_tiles,BANK(futsal_cap));
     banked_sprite_data_vbk1(128,FUTSAL_CROP_TILE_COUNT,futsal_crop_tiles,BANK(futsal_crop));

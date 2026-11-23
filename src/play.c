@@ -157,6 +157,7 @@ uint8_t pl_skid[2];               // frames turning round so far
 uint8_t pl_auto[2];          // the game's running player i to the ball this frame:
 int8_t pl_wx[2], pl_wy[2];   // at this velocity (applied next frame, through the momentum)
 uint8_t pl_face[2];
+uint8_t pl_side[2];
 uint8_t pl_shot[2];
 uint8_t pl_charge[2];
 uint8_t pl_hold[2];
@@ -374,6 +375,7 @@ static void serve_setup(uint8_t side) {
     }
     pl_face[SIDE_YOU] = 0;
     pl_face[SIDE_CPU] = 1;
+    pl_side[0] = pl_side[1] = 0;
     ball_z = ball_vx = ball_vy = ball_vz = 0;
     ball_plain();
     last_touch = holder = side;
@@ -467,6 +469,15 @@ static void draw(void) {
         if (special) {
             tile = player_move_pose(m, pl_move_timer[i], i == SIDE_CPU, &lie, &lift);
             if (m == MOVE_SLIDE && lie) flip = !flip;
+        }
+        // Side art follows real momentum, including the coast through a turn.
+        // Existing action frames take priority over the locomotion view.
+        if (abs16(pl_vx[i]) > abs16(pl_vy[i]) + 3) pl_side[i] = 1;
+        else if (abs16(pl_vy[i]) > abs16(pl_vx[i]) + 3) pl_side[i] = 0;
+        if (!goal_timer && !special && (f == F_STAND || f == F_RUN_A || f == F_RUN_B) && pl_side[i]) {
+            uint8_t pose = (pl_vx[i] || pl_vy[i]) ? ((frame_count & 4) ? 0 : (frame_count & 8) ? 2 : 1) : 0;
+            tile = 224 + (pose << 3);
+            if (pl_vx[i]) flip = pl_vx[i] < 0;
         }
         uint8_t pal = i == SIDE_YOU ? SPR_PAL_YOU : SPR_PAL_CPU;
         if (pl_shot[i]) {

@@ -28,7 +28,7 @@
 //
 // Called by build.mjs; generated files are only rewritten when a source PNG is newer.
 import fs from 'node:fs';
-import { fullTiles, basicTiles, actionTiles, CHARACTERS } from './player-art.mjs';
+import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './player-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +55,7 @@ export const ASSETS = [
   { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
   ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),
   ...CHARACTERS.map(id => ({ name: `action_${id}`, bank: true, ascii: actionTiles(id), src: `artwork/players/roster/${id}/player.json` })),
+  { name: 'side_roster', bank: true, ascii: sideAtlas(), src: 'tools/player-art.mjs', deps: CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`) },
 ];
 
 /** "player walk down", 4 -> ["player walk down (1).png", ..., "player walk down (4).png"] */
@@ -322,7 +323,7 @@ export function buildAssets({ quiet = false } = {}) {
     out.push(c);
     const sources = a.kind === 'sprite'
       ? spriteSources(a)
-      : [path.join(ROOT, a.src)];
+      : [path.join(ROOT, a.src), ...(a.deps || []).map(f=>path.join(ROOT,f))];
     const genTime = fs.existsSync(c) && fs.existsSync(h) ? fs.statSync(c).mtimeMs : 0;
     if (genTime > Math.max(self, ...sources.map((f) => fs.statSync(f).mtimeMs))) continue;
     if (a.kind === 'sprite') {
