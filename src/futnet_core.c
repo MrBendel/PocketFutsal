@@ -87,7 +87,7 @@ int16_t fc_min_x, fc_max_x, fc_min_y, fc_max_y;
         uint8_t _d = accel; \
         turn |= _turn; \
         if (_turn || (_v > 0 && _t < _v) || (_v < 0 && _t > _v)) { \
-            if (firm) _d = FC_BRAKE; \
+            if (firm == 1 || (firm && !_turn)) _d = FC_BRAKE; /* 2: firm, but a turn skids */ \
             else if (!_turn || skid < FC_SKID_FRAMES) _d = grip; \
         } \
         if (_v < _t) { _v += _d; if (_v > _t) _v = _t; } \

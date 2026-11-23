@@ -8,6 +8,12 @@
   let go, you now head for where you'll meet a ball coming to you, the way you jog
   home between shots. A press only readies the strike. The d-pad still overrides.
   This is a feel change worth checking by hand.
+- **2. Side to side costs you, run or steered** (kept; asked for in the chat). The
+  game's run to the ball stopped firmly and turned on the spot; yours now skids
+  turning round (9 frames at the coasting rate) like your own running. Speed, push
+  and grip are per player (pl_top, pl_accel, pl_grip): a SPEED stat in training
+  (progress.h has POWER, CONTROL, AIM, REFLEX) would set them; that's Codex's save
+  and menus, so it's left for that session.
 
 ## How it's measured
 
@@ -39,3 +45,18 @@ Changed: with nothing queued, the d-pad let go and the ball coming to you, you r
 After: wins 65% (42-23). Pop-ups 17 (from 105). Knocked down by fire 13 (from 17).
 Points median 23.5 s, 90th percentile 65.3 s, 15 over 45 s (from 3): rallies now
 last, and slams are very common (62 a match, from 15): next to tune.
+
+### 2026-11-22 23:10: side to side costs you when the game runs you too
+
+Asked for in the chat ("going side to side has a little cost"). Your own running
+already ramped up (about 8 frames), coasted (22) and skidded turning round (9); the
+game's run to the ball braked hard and turned on the spot, and since iteration 1
+it runs you most of the time.
+
+Changed: fc_step_move's firm 2 (yours, run for): it still stops firmly where it
+means to, but a turn skids at the coasting rate for FC_SKID_FRAMES first. The CPU
+keeps firm 1.
+
+After: wins 53% (39-35), in the target. Pop-ups 84 (from 17: more late arrivals
+after a turn), knocked down by fire 18 (from 13). Points median 23.4 s, 90th
+percentile 61.9 s, 15 over 45 s; slams 62 a match: still the open gaps.

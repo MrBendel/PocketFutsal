@@ -775,6 +775,21 @@ test('the ball coming to you, nothing queued, the d-pad let go: you make for whe
   assert.ok(px(at(held, 'pl_x', YOU, 'i16')) < 40, 'the d-pad still takes you where you like');
 });
 
+test('run to the ball, you still skid turning round (side to side costs you)', () => {
+  const emu = quietRally();
+  const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
+  placePlayer(emu, YOU, 24, 190);
+  incoming(emu, 150, 116, 20, 44);  // high, a long way across
+  emu.idle(12);
+  assert.ok(vx() >= 16, `running right for it: ${vx()}`);
+  set16(emu, 'ball_x', 20 * 16);  // it's over on the left now: a new flight
+  emu.write8(emu.symbols.addr('ball_flight'), emu.v('ball_flight') + 1);
+  emu.idle(5);
+  assert.ok(vx() > 8, `skidding, not turned on the spot: ${vx()}`);
+  emu.idle(20);
+  assert.ok(vx() < -8, `then off the other way: ${vx()}`);
+});
+
 test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
   let emu = quietRally();
   placePlayer(emu, YOU, 40, 124);  // up at the net

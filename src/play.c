@@ -830,7 +830,9 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         tx = pl_wx[i];
         ty = pl_wy[i];
         pl_auto[i] = 0;
-        firm = 1;
+        // Run for: it stops firmly where it means to, but yours still skids turning
+        // round (firm 2), as when you steer: side to side costs you.
+        firm = i == SIDE_YOU ? 2 : 1;
     }
     fc_min_x = TO_SUB(OUT_X0 + 8);
     fc_max_x = TO_SUB(OUT_X1 - 8);
