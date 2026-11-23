@@ -741,8 +741,10 @@ test('the CPU plays: it returns your serve and can win a point', () => {
 
 test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 20, 0, 0, 12);  // far off, coming slowly, high (going away, you'd jog home)
+  ballAt(emu, 140, 20, 0, 24, 12);  // far off, coming, high, and going out wide: no run home or to it
   set16(emu, 'ball_vz', 60);
+  emu.idle(2);
+  assert.equal(at(emu, 'meet_out', YOU), 1, 'landing out: you let it go');
   const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
   emu.hold('RIGHT', 4);
   assert.ok(vx() > 6 && vx() < 22, `speeding up: ${vx()}`);
@@ -756,6 +758,21 @@ test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a 
   assert.ok(vx() > 10, `turning: skidding ${vx()}`);
   emu.hold('LEFT', 12);
   assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
+});
+
+test('the ball coming to you, nothing queued, the d-pad let go: you make for where to meet it', () => {
+  const emu = quietRally();
+  placePlayer(emu, YOU, 40, 190);
+  incoming(emu, 110, 90, 30, 20);  // across the court from you, coming
+  emu.idle(30);
+  const x = px(at(emu, 'pl_x', YOU, 'i16'));
+  assert.equal(at(emu, 'pl_shot', YOU), 0, 'nothing queued');
+  assert.ok(x > 70, `running across to it: x ${x} (from 40, it meets at ${at(emu, 'meet_x', YOU, 'i16')})`);
+  const held = quietRally();
+  placePlayer(held, YOU, 40, 190);
+  incoming(held, 110, 90, 30, 20);
+  held.hold('LEFT', 30);
+  assert.ok(px(at(held, 'pl_x', YOU, 'i16')) < 40, 'the d-pad still takes you where you like');
 });
 
 test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
