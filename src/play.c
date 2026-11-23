@@ -57,7 +57,6 @@
 #define VIEW_FRONT 80  // the front view's tiles (the CPU, facing you)
 #define T_LYING 160    // lying (a slide, knocked down): three 8x16 columns, head to the right
 // Background tiles: the court from SCENE_TILES, then the meter's three.
-#define T_METER (SCENE_TILES + PITCH_TILE_COUNT)  // empty, half, full
 
 // Hardware sprites. Lower numbers draw on top. Interleave the ball and
 // player blocks by court depth; shadows remain underneath.
@@ -130,6 +129,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define SERVE_FRAMES 50
 #define BALL_R 3          // px: the ball's radius on the court
 #define HOME_CPU 24       // the CPU's depth, waiting
+#define HOME_YOU 196      // yours: between shots, nothing queued or held, you jog back
 #define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
 #define CPU_LATE 40       // px: and this close, in place or not
 #define CONTROL_LIFT 28   // a control touch: about 32 px up, 74 frames
@@ -224,12 +224,9 @@ uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 #define SEEN_BICYCLE 10
 #define SEEN_SCUFF 11     // a strike with next to no charge: mishit, short of the net
 #define SEEN_FRAMES 60
-static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMIS";
 uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
 uint8_t shot_seen_t;  // frames left showing it
 uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
-static uint8_t shot_buf[3];
-uint8_t meter_buf[8];  // its tiles, queued to the window's map
 uint8_t note_timer;    // the HUD shows a note (GOAL!) while this counts down
 uint8_t hud_pending;   // redraw the HUD at the start of the next frame
 
@@ -306,38 +303,10 @@ static void note(uint8_t frames) {
     hud_pending = 1;
 }
 
-// The meter: 8 tiles, 2 steps each, for your charge. Queued to the window's map
-// when it changes.
-static void meter_update(void) {
-    if (paused || note_timer) return;
-    uint8_t m = pl_charge[SIDE_YOU] >> 1;  // 0 .. 16
-    if (m == meter_shown) return;
-    meter_shown = m;
-    for (uint8_t k = 0; k < 8; k++) {
-        uint8_t full = (k << 1) + 2;
-        meter_buf[k] = T_METER + (m >= full ? 2 : m + 1 == full ? 1 : 0);
-    }
-    gfx_vram_copy(get_win_xy_addr(6, 0), meter_buf, 8, 0);
-}
-
 // Your shot's label, where it says YOU: queued to the window's map when it changes.
 static void seen(uint8_t what) {
     shot_seen = what;
     shot_seen_t = SEEN_FRAMES;
-}
-
-static void shot_label_update(void) {
-    if (paused || note_timer) return;
-    uint8_t k = pl_shot[SIDE_YOU];
-    if (shot_seen_t) {
-        shot_seen_t--;
-        if (!k) k = shot_seen;
-    }
-    if (k == shot_shown) return;
-    shot_shown = k;
-    const char *n = seen_names + (k << 1) + k;
-    for (uint8_t j = 0; j < 3; j++) shot_buf[j] = FONT_TILES + (uint8_t)(n[j] - ' ');
-    gfx_vram_copy(get_win_xy_addr(0, 0), shot_buf, 3, 0);
 }
 
 // --- setting up ---
@@ -428,7 +397,9 @@ static void draw_trail(int16_t sx, int16_t wy) {
     if (ball_trail)  // red, blue, or gold (the fire's)
         trail_pal = ball_trail == TRAIL_CURVE ? SPR_PAL_TRAIL_CURVE : ball_trail == TRAIL_GOLD ? SPR_PAL_POWER : SPR_PAL_TRAIL_POWER;
     uint8_t pal = trail_pal;
-    for (uint8_t k = 0; k < TRAIL_MAX; k++) {
+    // Half the dots a frame, alternately (a sprite loop is dear): each moves every
+    // other frame, a step behind at most; they're 4 frames apart anyway.
+    for (uint8_t k = (uint8_t)frame_count & 1; k < TRAIL_MAX; k += 2) {
         uint8_t age = (k + 1) << 2, n = OAM_TRAIL + k;
         if (k >= trail_len || age >= trail_n) {
             move_sprite(n, 0, 0);
@@ -502,7 +473,7 @@ static void draw(void) {
     set_sprite_tile(OAM_SHADOW, S_SHADOW);
     set_sprite_prop(OAM_SHADOW, SPR_PAL_UI);
     place(OAM_SHADOW, sx, sy - 1);
-    draw_trail(sx, sy + cam_y - bz);
+    if (flight_frame != (uint8_t)frame_count) draw_trail(sx, sy + cam_y - bz);  // (a new flight's starts empty: not on its busy first frame)
     // A lob or a pop-up coming down to you, or a drop shot: a flashing marker where
     // to meet it (the slam spot; off a drop shot's bounce).
     if (meet_flight[SIDE_YOU] == ball_flight && !goal_timer && coming(SIDE_YOU) &&
@@ -704,7 +675,9 @@ static void arc(int16_t land, uint8_t clear) {
 static void net_clear(void) {
     int16_t vy = abs16(ball_vy);
     if (!vy || (ball_vy < 0 ? PX(ball_y) <= HALFWAY : PX(ball_y) >= HALFWAY)) return;
-    int16_t tn = clamp16((abs16(HALFWAY - PX(ball_y)) << 4) / vy, 1, 160);
+    // At least 6 frames: struck right at the net, at its height, it rises gently over
+    // it rather than being launched up out of sight (and long).
+    int16_t tn = clamp16((abs16(HALFWAY - PX(ball_y)) << 4) / vy, 6, 160);
     int16_t drop = ((tn * (tn + 1)) >> 3) * 3;  // gravity's pull by then
     // High enough already (multiplying, not dividing): leave it.
     if (ball_z + ball_vz * tn - drop >= TO_SUB(NET_H + 3)) return;
@@ -1462,6 +1435,15 @@ void play_update(void) BANKED {
     }
     int8_t dx = joy & J_RIGHT ? 1 : joy & J_LEFT ? -1 : 0;
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;
+    // Between shots (nothing queued, the d-pad let go, the ball going away), you jog
+    // back to the middle, HOME_YOU deep, as the CPU goes home: a rally doesn't creep
+    // you up to the net, where everything goes over your head.
+    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY && !coming(SIDE_YOU)) {
+        int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
+        pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
+        pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
+        pl_auto[SIDE_YOU] = 1;
+    }
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
     ball_update();
@@ -1471,8 +1453,7 @@ void play_update(void) BANKED {
     // The meter and your shot's label: not on a strike's frame (it's busy, and both
     // change then): the next.
     if (flight_frame != (uint8_t)frame_count) {
-        meter_update();
-        shot_label_update();
+        hud_update();  // the meter and your shot's label (play_hud.c)
     }
     draw();
 }

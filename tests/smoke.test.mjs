@@ -690,7 +690,8 @@ test('the CPU plays: it returns your serve and can win a point', () => {
 
 test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 60, 0, 0, -20);  // away in the CPU's half
+  ballAt(emu, 80, 20, 0, 0, 12);  // far off, coming slowly, high (going away, you'd jog home)
+  set16(emu, 'ball_vz', 60);
   const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
   emu.hold('RIGHT', 4);
   assert.ok(vx() > 6 && vx() < 22, `speeding up: ${vx()}`);
@@ -704,6 +705,31 @@ test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a 
   assert.ok(vx() > 10, `turning: skidding ${vx()}`);
   emu.hold('LEFT', 12);
   assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
+});
+
+test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
+  let emu = quietRally();
+  placePlayer(emu, YOU, 40, 124);  // up at the net
+  ballAt(emu, 80, 60, 20, 0, -4);  // going away, slowly, high
+  set16(emu, 'ball_vz', 40);
+  emu.idle(20);
+  const y0 = px(at(emu, 'pl_y', YOU, 'i16'));
+  assert.ok(y0 > 126, `jogging back: ${y0}`);
+  emu.hold('UP', 12);
+  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) < y0 + 4, 'the d-pad still takes you anywhere');
+  emu.idle(90);
+  assert.equal(emu.v('goal_timer'), 0, 'still in play');
+  const x = px(at(emu, 'pl_x', YOU, 'i16')), y = px(at(emu, 'pl_y', YOU, 'i16'));
+  assert.ok(y > 170 && x > 60 && x < 100, `back home: (${x}, ${y})`);
+  emu = quietRally();
+  placePlayer(emu, YOU, 50, 122);
+  ballAt(emu, 52, 116, 10, 0, 6);  // dropping onto your foot at net height
+  emu.tap('A').tap('A').tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 40, 'the volley');
+  let top = 0;
+  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return e.v('ball_landings') > 0 || e.v('goal_timer'); }, 120, 'it landing');
+  assert.ok(top < 40, `up ${top} px (it went up 111 and long)`);
+  assert.equal(emu.v('goal_timer'), 0, 'in');
 });
 
 test('START pauses and resumes', () => {

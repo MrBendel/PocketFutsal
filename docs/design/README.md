@@ -192,6 +192,16 @@ slammed (the Captain Tsubasa feel).
   readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
   the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
   weak one is sped up instead of looping up like a pop-up; drop shots, 100.
+- **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
+  with nothing queued, the d-pad let go and the ball going away, you jog back to the
+  middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
+  10-20 frames after the CPU's touch and presses three times; build/scratch/humanbot.mjs)
+  was within 16 px of the net for three quarters of the CPU's strikes: the auto-run only
+  ever takes you toward the ball, so a rally crept you up to the net, where lobs and
+  drives went over your head. Half its lost points were its own volleys, out: struck
+  right at the net, at its height, the net check (`net_clear`) asked for the clearance in
+  one frame and launched the ball 111 px up and long. It now allows at least 6 frames.
+  The bot went from losing every game to winning 31 points to 15.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.

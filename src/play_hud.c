@@ -6,7 +6,37 @@
 #include "game.h"
 #include "play_hud.h"
 
-extern uint8_t note_timer, set_won, meter_shown, shot_shown;
+extern uint8_t note_timer, set_won, meter_shown, shot_shown, shot_seen, shot_seen_t;
+
+// Each frame: the meter (8 tiles, 2 steps each, for your charge) and your shot's
+// label, where it says YOU (the one queued, or for a moment what went, SEEN_* in
+// play.c), each queued to the window's map when it changes.
+static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMIS";
+uint8_t meter_buf[8];
+static uint8_t shot_buf[3];
+
+void hud_update(void) BANKED {
+    if (paused || note_timer) return;
+    uint8_t m = pl_charge[SIDE_YOU] >> 1;  // 0 .. 16
+    if (m != meter_shown) {
+        meter_shown = m;
+        for (uint8_t k = 0; k < 8; k++) {
+            uint8_t full = (k << 1) + 2;
+            meter_buf[k] = T_METER + (m >= full ? 2 : m + 1 == full ? 1 : 0);
+        }
+        gfx_vram_copy(get_win_xy_addr(6, 0), meter_buf, 8, 0);
+    }
+    uint8_t k = pl_shot[SIDE_YOU];
+    if (shot_seen_t) {
+        shot_seen_t--;
+        if (!k) k = shot_seen;
+    }
+    if (k == shot_shown) return;
+    shot_shown = k;
+    const char *n = seen_names + (k << 1) + k;
+    for (uint8_t j = 0; j < 3; j++) shot_buf[j] = FONT_TILES + (uint8_t)(n[j] - ' ');
+    gfx_vram_copy(get_win_xy_addr(0, 0), shot_buf, 3, 0);
+}
 
 void hud_draw(void) BANKED {
     fill_win_rect(0, 0, SCREEN_TW, HUD_ROWS, 0);
