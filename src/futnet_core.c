@@ -18,7 +18,8 @@ static const uint8_t curve_push[] = {
     2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
 
-static int16_t fc_arc_t;
+// 512 / t for t / 4 (the middle of each step; 12 at least).
+static const uint8_t inv_t[] = {43, 43, 43, 38, 29, 24, 20, 17, 15, 14, 12, 11, 10, 10, 9, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5};
 
 void fc_unready(uint8_t i) {
     pl_shot[i] = SHOT_NONE;
@@ -70,7 +71,7 @@ void fc_ready(uint8_t i, uint8_t b, uint8_t allow_gold) {
     pl_taps[i]++;
     uint8_t was = pl_charge[i];
     pl_charge[i] += i == SIDE_YOU ? FC_YOU_TAP : TAP_CHARGE;
-    if (i == SIDE_YOU && was < CHARGE_MAX / 2 && pl_charge[i] >= CHARGE_MAX / 2) sfx_play(SFX_HALF);
+    if (i == SIDE_YOU && was < FC_SLAM_CHARGE && pl_charge[i] >= FC_SLAM_CHARGE) sfx_play(SFX_HALF);
     if (pl_charge[i] >= CHARGE_MAX) {
         pl_charge[i] = CHARGE_MAX;
         if (i == SIDE_YOU) sfx_play(SFX_CHARGE);
@@ -148,14 +149,19 @@ void fc_arc(int16_t land, uint8_t clear) {
     if (!vy) vy = 1;
     int16_t t = clamp16((abs16(land - PX(ball_y)) << 4) / vy, 12, 400);
     uint8_t most = ball_drop ? FC_ARC_MAX : FC_ARC_FLAT;
-    while (t > most) {
-        ball_vx += ball_vx >> 2;
-        ball_vy += ball_vy >> 2;
-        t -= (t >> 2) - (t >> 4);
+    if (t > most) {
+        int16_t vx = abs16(ball_vx);
+        do {
+            vx += vx >> 2;
+            vy += vy >> 2;
+            t -= (t >> 2) - (t >> 4) + (t >> 7);
+        } while (t > most);
+        ball_vx = ball_vx < 0 ? -vx : vx;
+        ball_vy = ball_vy < 0 ? -vy : vy;
     }
-    fc_arc_t = t;
+    arc_t = t;
     ball_vz = (3 * (t + 1)) >> 3;
-    if (ball_z) ball_vz -= ball_z / t;
+    if (ball_z > 0) ball_vz -= (int16_t)(((uint16_t)ball_z * inv_t[t > 103 ? 25 : t >> 2]) >> 9);
     arc_clear = clear;
 }
 
@@ -210,7 +216,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land,
         ball_power = fire;
         fc_launch_vel(tx - side * FC_CURVE_OFS - bx, land - by, speed);
         fc_arc(land, !scuff);
-        uint8_t t = (uint8_t)clamp16(fc_arc_t, 32, 180);
+        uint8_t t = (uint8_t)clamp16(arc_t, 32, 180);
         uint8_t push = curve_push[t >> 2];
         ball_curve = side > 0 ? (int8_t)push : -(int8_t)push;
         ball_curve_t = t;

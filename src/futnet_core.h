@@ -17,6 +17,7 @@
 #define FC_BRAKE 4
 #define FC_SKID_FRAMES 9
 #define FC_YOU_TAP 4
+#define FC_SLAM_CHARGE 8
 #define FC_COMBO_FRAMES 24
 #define FC_POWER_SPEED 48
 #define FC_GOLD_SPEED 56
@@ -41,6 +42,7 @@ extern uint8_t meet_slam[2];
 extern uint8_t ball_gold;
 extern uint8_t ball_dropped;
 extern int16_t ball_cacc;
+extern int16_t arc_t;
 extern uint8_t arc_clear;
 extern uint8_t trail_n, trail_i, trail_pal;
 extern int16_t trail_x[16], trail_y[16];

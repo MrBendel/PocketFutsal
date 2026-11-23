@@ -68,7 +68,7 @@ calls are marked *(ours)*.
 
 The two touches give the game its set-up-and-attack move: reached unready, your first
 touch **controls** the ball up in front of you (not over the net); ready a strike as
-it comes down, and with half a meter your second touch is a **slam**, on fire.
+it comes down, and with two presses your second touch is a **slam**, on fire.
 
 The HUD says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
 that didn't go over), and SET TO ... at the end of a set.
@@ -163,8 +163,8 @@ slammed (the Captain Tsubasa feel).
   press of A or B adds 4, the first too, as many as you like; waiting and holding add
   nothing, and it never drains or gives up. SELECT calls the strike off. The CPU's
   still fills as it waits (a step every 4 frames, and up to 5 taps of 3) and gives up
-  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 12 (three
-  presses); less, and it pops up off you.
+  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 8 (two
+  presses; the CPU 12); less, and it pops up off you.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
   you are. LEFT / RIGHT angle it as far across as a strike goes (half as far as down
@@ -199,7 +199,7 @@ slammed (the Captain Tsubasa feel).
 - **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
   of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
   your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
-  there; met in the air with half a meter it's a **slam**, on fire, deep; with less, a
+  there; met in the air with two presses (8; the CPU half a meter) it's a **slam**, on fire, deep; with less, a
   header, still out of the air. A drop shot gets the marker too, off its bounce as well,
   and hops higher (about 11 px). The CPU taps hard against a ball on fire, so a slam can
   be met clean.
@@ -240,9 +240,35 @@ slammed (the Captain Tsubasa feel).
   into its own half. Aiming bots now win their points in about 15 s, 11-8 or 9-6.
 - **Cues** (the same playtest): the CPU's struck it to you and nothing's queued, your
   player blinks white and the HUD says **GO!** (a fire shot met unready knocks you down:
-  the commonest lost point left). Each press of A or B ticks; half a meter (a slam
+  the commonest lost point left). Each press of A or B ticks; two presses (a slam
   ready) and full have their own chimes (SFX_TICK, SFX_HALF, SFX_CHARGE). The slam spot
   is a 16x8 ring (two sprites, S_RING at tile 28, after the ball's spin tiles).
+- **From two recorded matches** (2026-11-22, played on a phone, lost 3-11 and 1-11;
+  tools/match-report.mjs replays a recording and breaks it down): you press 2 or 3 times
+  before the ball arrives (first press about 35 frames after the CPU's strike, the ball
+  there at about 55), so the meter sat at 4-8. At 12 to meet fire, a third of your
+  touches popped up, and the CPU slammed them past you (half the points lost). Of 25
+  slam chances you reached the ring for 9 and slammed 2: the rest were headers, short
+  of half a meter. Three shots went out by the left sideline, aimed 6 px inside it: a
+  long kick lands up to 10 px past its aim. So: two presses meet fire (FIRE_MEET_YOU 8)
+  and slam (SLAM_CHARGE 8; the chime moved there), and aim stays 16 px inside the lines
+  (AIM_IN). The CPU's thresholds are unchanged.
+- **Deep by the button, a slam zone, the ball's spin** (2026-11-22, from the playtest:
+  "near impossible to get the lob shots before they landed in the zone", "it always
+  seems to shoot the balls short... A shots the deepest where B shots should aim to
+  curve mid field", "the ball always rotates the same direction"):
+  - Your A lands 64-80 px past the net by the meter (UP 16 deeper, to 96; DOWN 24
+    shorter); B 48-56, mid-court. The CPU's depths are unchanged.
+  - Charged for a slam (two presses), you leap at a lob or a pop-up coming down from
+    up to 28 px across and 20 in depth (SLAM_LEAP_X, SLAM_LEAP_FWD; a strike reaches
+    16 and 4-8), moving up to 12 px, and strike it the next frame (a leap and a strike
+    in one frame was a match's busiest frame).
+  - Shots landed long: arc() sped up a slow shot with >> on a negative, which rounds
+    away from zero, so your shots (going up the court) went a tenth faster than their
+    time in the air allowed: serves 20 px long. Sped up as a size now, the time cut by
+    103/128 a step and z0 / t from a table: within 6 px, no division.
+  - The ball's frames roll its face down the screen (toward you); going up it, they
+    play backwards.
 - **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
