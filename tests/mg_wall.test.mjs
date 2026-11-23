@@ -46,7 +46,8 @@ test('hitting the lit panel scores, increments streak, flashes, and lights a new
   assert.equal(e.v('mg_wall_lit'), NO_PANEL, 'lit panel clears during flash');
   assert.ok(e.v('mg_wall_flash') > 0, 'hit panel flashes');
   assert.ok(e.v('mg_wall_pop') > 0 && e.v('mg_wall_pop_n') === 1, '+1 popup appears');
-  assert.equal(e.v('mg_wall_ball'), BALL_BACK, 'ball rebounds off the wall');
+  assert.equal(e.v('mg_wall_ball'), 0, 'ball goes through the open hole into the net');
+  assert.ok(e.v('mg_wall_wait') > 0, 'fresh pass queued after goal');
 
   // Step a few frames into the flash so the green panel + rising +1 popup are visible.
   e.idle(4);

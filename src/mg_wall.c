@@ -144,26 +144,27 @@ uint8_t mg_wall_walk;      // the run cycle
 uint8_t mg_wall_shown_time, mg_wall_shown_mult;
 uint16_t mg_wall_shown_points;
 
-// The panels' tiles (map rows 2-5, columns 1-18), for rewriting their attributes.
+// The closed shutter panels' tiles (rows 2-5, cols 1-18) and the 6x2 open goal-hole tiles.
 static uint8_t panel_tiles[4][18];
+static uint8_t open_tiles[2][6];
 
 static const uint16_t pals[6][4] = {
     {RGB8(32, 168, 80), RGB8(20, 136, 64), RGB8(12, 84, 44), RGB8(248, 252, 248)},      // 0: green court
-    {RGB8(64, 128, 192), RGB8(40, 84, 144), RGB8(16, 28, 56), RGB8(176, 224, 255)},     // 1: unlit steel panel
-    {RGB8(255, 224, 56), RGB8(248, 112, 24), RGB8(24, 24, 48), RGB8(255, 255, 232)},    // 2: lit glowing panel
-    {RGB8(80, 248, 112), RGB8(224, 255, 224), RGB8(16, 40, 48), RGB8(255, 255, 255)},   // 3: hit flash
+    {RGB8(64, 128, 192), RGB8(40, 84, 144), RGB8(16, 28, 56), RGB8(176, 224, 255)},     // 1: closed steel shutter
+    {RGB8(14, 22, 42), RGB8(128, 152, 184), RGB8(8, 10, 20), RGB8(255, 212, 48)},       // 2: OPEN goal hole (net + gold rim)
+    {RGB8(24, 216, 104), RGB8(160, 255, 196), RGB8(12, 84, 44), RGB8(255, 255, 255)},   // 3: GOAL! flash
     {RGB8(192, 48, 64), RGB8(248, 192, 48), RGB8(24, 24, 48), RGB8(248, 248, 240)},     // 4: stadium rail
-    {RGB8(88, 116, 152), RGB8(48, 68, 104), RGB8(16, 24, 44), RGB8(232, 240, 248)},     // 5: steel frame & barrier
+    {RGB8(196, 208, 224), RGB8(120, 136, 160), RGB8(20, 24, 40), RGB8(252, 252, 252)},  // 5: white futsal goalposts & crossbar
 };
-#define LIT_FACE RGB8(255, 224, 56)
-#define LIT_BLINK RGB8(255, 248, 168)
+#define LIT_FACE RGB8(255, 212, 48)
+#define LIT_BLINK RGB8(255, 252, 208)
 
 extern uint16_t pal_bg[PAL_COUNT * 4];
 extern volatile uint8_t pal_dirty;
 
 static void set_lit_color(uint16_t c) {
-    pal_base_bg[PAN_LIT * 4] = c;
-    pal_bg[PAN_LIT * 4] = c;
+    pal_base_bg[PAN_LIT * 4 + 3] = c;
+    pal_bg[PAN_LIT * 4 + 3] = c;
     pal_dirty = 1;
 }
 
@@ -180,9 +181,10 @@ static int16_t proj_x(int16_t x, uint8_t i) {  // world x (SUB) -> screen x
 
 static void set_panel(uint8_t p, uint8_t pal) {
     uint8_t row = (p >= 3 ? 2 : 0), col = (uint8_t)((p >= 3 ? p - 3 : p) * 6);
+    uint8_t open = (pal != PAN_UNLIT);
     for (uint8_t r = 0; r < 2; r++) {
         uint8_t *b = gfx_strip_attr(1 + col, 2 + row + r, 0, 6);
-        memcpy(b, &panel_tiles[row + r][col], 6);
+        memcpy(b, open ? open_tiles[r] : &panel_tiles[row + r][col], 6);
         memset(b + STRIP_MAX_LEN, pal, 6);
     }
 }
@@ -300,6 +302,7 @@ static void wall_hit(void) {
     mg_wall_hit_panel = p;
     mg_wall_shots++;
     if (p != NO_PANEL && p == mg_wall_lit) {
+        // GOAL! The ball rips through the open hole into the net!
         uint8_t n = mg_wall_mult + mg_wall_fire;
         mg_wall_points += n;
         mg_wall_hits++;
@@ -310,13 +313,16 @@ static void wall_hit(void) {
         set_panel(p, PAN_HIT);
         mg_wall_pop = POP_FRAMES;
         mg_wall_pop_n = n;
+        mg_wall_ball = BALL_HELD;
+        mg_wall_wait = FLASH_FRAMES + 4;  // fresh pass comes out right as the next hole opens
+        ball_trail = 0;
+        ball_curve_t = 0;
         sfx_play(SFX_GOAL);
-    } else {
-        mg_wall_mult = 1;
-        sfx_play(SFX_BOARD);
+        return;
     }
-    // The rebound: back toward you at 3/4 the pace, a quarter of the sideways
-    // drift, and a little pop up so it comes back in an arc.
+    // Closed steel panel or post: CLANG! Rebound back onto the pitch.
+    mg_wall_mult = 1;
+    sfx_play(SFX_BOARD);
     mg_wall_bd = 0;
     mg_wall_vd = (-mg_wall_vd * 3) >> 2;
     mg_wall_vx >>= 2;
@@ -546,11 +552,14 @@ static void finish(void) {
 
 void mg_wall_enter(void) BANKED {
     memcpy(pal_base_bg, pals, sizeof(pals));
+    // Load only rows 0..17 onto the screen; rows 18..19 hold the open-hole template!
     mg_load_bg(mg_wall_bg_tiles, MG_WALL_BG_TILE_COUNT, mg_wall_bg_map, mg_wall_bg_attr,
-               MG_WALL_BG_MAP_W, MG_WALL_BG_MAP_H, BANK(mg_wall_bg));
+               MG_WALL_BG_MAP_W, 18, BANK(mg_wall_bg));
     mg_load_spr(mg_wall_spr_tiles, MG_WALL_SPR_TILE_COUNT, BANK(mg_wall_spr));
     for (uint8_t r = 0; r < 4; r++)
         banked_memcpy(panel_tiles[r], mg_wall_bg_map + (2 + r) * MG_WALL_BG_MAP_W + 1, 18, BANK(mg_wall_bg));
+    for (uint8_t r = 0; r < 2; r++)
+        banked_memcpy(open_tiles[r], mg_wall_bg_map + (18 + r) * MG_WALL_BG_MAP_W, 6, BANK(mg_wall_bg));
 
     mg_wall_px = 80 << 4;
     mg_wall_pd = 88 << 4;
@@ -582,13 +591,14 @@ void mg_wall_enter(void) BANKED {
     mg_wall_err = 30 - stat_lv[STAT_AIM];
     // POWER: a full charge in 32 frames at level 1, 9 at 20.
     mg_wall_charge_rate = 2 + (stat_lv[STAT_POWER] >> 2);
-    // The first panel lit: the middle of the bottom row (set straight in VRAM: the
-    // display is off).
+    // The first open goal hole: middle of the bottom row (display is off).
     mg_wall_lit = 4;
     mg_wall_lit_age = 0;
     {
         uint8_t a[6];
         memset(a, PAN_LIT, 6);
+        set_bkg_tiles(7, 4, 6, 1, open_tiles[0]);
+        set_bkg_tiles(7, 5, 6, 1, open_tiles[1]);
         VBK_REG = 1;
         set_bkg_tiles(7, 4, 6, 1, a);
         set_bkg_tiles(7, 5, 6, 1, a);

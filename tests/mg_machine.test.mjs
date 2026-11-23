@@ -62,8 +62,12 @@ test('striking an incoming ball scores +1 in court and +3 in the gold ring', () 
   e.write8(e.symbols.addr('mg_machine_state'), MS_FLIGHT);
 
   // 1) Clean strike aimed at center (80, 54) while ring is off to the left (32, 20) -> R_IN (+1).
-  set16(e, 'mg_machine_tx', 32);
-  set16(e, 'mg_machine_ty', 20);
+  // Move all 3 pop-up dummies clear of center lane so shot 1 lands cleanly in bounds (+1).
+  for (let k = 0; k < 3; k++) {
+    e.writeBytes(e.symbols.addr('mg_machine_dx') + k * 2, [20, 0]);
+    e.writeBytes(e.symbols.addr('mg_machine_dy') + k * 2, [20, 0]);
+    e.write8(e.symbols.addr('mg_machine_dst') + k, 0);
+  }
   placePlayer(e, CENTER_X, 180);
   placeBall(e, CENTER_X, 176, 3, 0, 12, 0, BS_IN);
   e.tap('A');
@@ -74,50 +78,54 @@ test('striking an incoming ball scores +1 in court and +3 in the gold ring', () 
   assert.equal(e.v('mg_machine_returns', 'u16'), 1);
   assert.equal(e.v('mg_machine_targets', 'u16'), 0);
 
-  // 2) Clean strike aimed straight into the gold ring at (80, 52) -> R_TARGET (+3).
+  // 2) Clean strike aimed straight into the gold pop-up dummy at (80, 52) -> R_TARGET (+3).
   e.write8(e.symbols.addr('mg_machine_state'), MS_FLIGHT);
   e.write8(e.symbols.addr('mg_machine_result'), R_NONE);
+  const goldIdx = e.v('mg_machine_gold');
+  e.writeBytes(e.symbols.addr('mg_machine_dx') + goldIdx * 2, [CENTER_X, 0]);
+  e.writeBytes(e.symbols.addr('mg_machine_dy') + goldIdx * 2, [52, 0]);
+  e.write8(e.symbols.addr('mg_machine_dst') + goldIdx, 0);
   set16(e, 'mg_machine_tx', CENTER_X);
   set16(e, 'mg_machine_ty', 52);
   placePlayer(e, CENTER_X, 180);
   placeBall(e, CENTER_X, 176, 3, 0, 12, 0, BS_IN);
   e.tap('A');
   assert.equal(e.v('mg_machine_ball'), BS_OUT);
-  // Capture mid-return action shot (player in strike pose, ball soaring over net toward ring).
   e.idle(12);
   matchGolden(e, 'mg-machine-return');
-  e.until((u) => u.v('mg_machine_result') !== R_NONE, 140, 'target return lands');
+  e.until((u) => u.v('mg_machine_result') !== R_NONE, 140, 'dummy knockdown');
   assert.equal(e.v('mg_machine_result'), R_TARGET);
+  assert.ok(e.read8(e.symbols.addr('mg_machine_dst') + goldIdx) > 0, 'gold dummy knocked flat');
   assert.equal(e.v('mg_machine_points', 'u16'), 4);
   assert.equal(e.v('mg_machine_returns', 'u16'), 2);
   assert.equal(e.v('mg_machine_targets', 'u16'), 1);
 });
 
-test('misses (second bounce, out, net) increment misses and 3 misses end the game', () => {
+test('misses (missed pass, out of bounds) increment misses and 3 misses end the game', () => {
   const e = startLive(2025);
   e.write8(e.symbols.addr('mg_machine_state'), MS_FLIGHT);
   placePlayer(e, 20, 210);  // out of the way
 
-  // 1) Second bounce -> R_MISS.
-  placeBall(e, CENTER_X, 170, 6, 0, 0, -4, BS_IN);
-  e.until((u) => u.v('mg_machine_result') !== R_NONE, 120, 'second bounce miss');
+  // 1) Pass rolls past near baseline unplayed -> R_MISS.
+  placeBall(e, CENTER_X, 222, 0, 0, 24, 0, BS_IN);
+  e.until((u) => u.v('mg_machine_result') !== R_NONE, 40, 'missed pass');
   assert.equal(e.v('mg_machine_result'), R_MISS);
   assert.equal(e.v('mg_machine_misses'), 1);
 
-  // 2) Return landing past the far baseline -> R_OUT.
+  // 2) Return sailing wide out of bounds -> R_OUT.
   e.write8(e.symbols.addr('mg_machine_state'), MS_FLIGHT);
   e.write8(e.symbols.addr('mg_machine_result'), R_NONE);
-  placeBall(e, CENTER_X, 10, 4, 0, -24, -4, BS_OUT);
+  placeBall(e, 2, 10, 4, -8, -24, -4, BS_OUT);
   e.until((u) => u.v('mg_machine_result') !== R_NONE, 60, 'out of bounds');
   assert.equal(e.v('mg_machine_result'), R_OUT);
   assert.equal(e.v('mg_machine_misses'), 2);
 
-  // 3) Low return crossing the net -> R_NET -> third miss triggers game end.
+  // 3) Third miss (unplayed pass past baseline) triggers game end.
   e.write8(e.symbols.addr('mg_machine_state'), MS_FLIGHT);
   e.write8(e.symbols.addr('mg_machine_result'), R_NONE);
-  placeBall(e, CENTER_X, HALFWAY + 2, 4, 0, -32, 0, BS_OUT);
-  e.until((u) => u.v('mg_machine_result') !== R_NONE, 30, 'netted return');
-  assert.equal(e.v('mg_machine_result'), R_NET);
+  placeBall(e, CENTER_X, 222, 0, 0, 24, 0, BS_IN);
+  e.until((u) => u.v('mg_machine_result') !== R_NONE, 40, 'third miss');
+  assert.equal(e.v('mg_machine_result'), R_MISS);
   assert.equal(e.v('mg_machine_misses'), 3);
   assert.ok(e.v('mg_machine_end') > 0, 'end countdown started on third miss');
 
@@ -187,32 +195,16 @@ test('scripted bot plays a full game, scores points, and reaches MG_PH.RESULT', 
     const buttons = [];
 
     if (returns < targetReturns) {
-      const px0 = px(e.v('mg_machine_px', 'i16'));
-      const py0 = px(e.v('mg_machine_py', 'i16'));
-      const bx = px(e.v('mg_machine_bx', 'i16'));
-      const by = px(e.v('mg_machine_by', 'i16'));
-      const bz = px(e.v('mg_machine_bz', 'i16'));
-      const tx = ball === BS_IN ? e.v('mg_machine_shot_x', 'i16') : CENTER_X;
-      const ty = ball === BS_IN ? Math.min(220, e.v('mg_machine_shot_y', 'i16') + 4) : 184;
-
-      const inReach = ball === BS_IN && by >= HALFWAY
-        && Math.abs(bx - px0) <= e.v('mg_machine_reach') - 2
-        && (py0 - by) <= 10 && (py0 - by) >= -4 && bz <= 32;
-
-      if (inReach) {
-        // Aim toward the gold ring on strike.
-        const rx = e.v('mg_machine_tx', 'i16');
-        const ry = e.v('mg_machine_ty', 'i16');
-        if (rx < 60) buttons.push('LEFT');
-        else if (rx > 100) buttons.push('RIGHT');
-        if (ry < 36) buttons.push('UP');
-        else if (ry > 72) buttons.push('DOWN');
-        buttons.push('A');
+      if (ball === BS_IN) {
+        // Queue A (uses shared Futnet auto-run to meet the driven pass and blast it back!).
+        if (e.v('pl_shot') === 0) buttons.push('A');
       } else {
-        if (tx < px0 - 3) buttons.push('LEFT');
-        else if (tx > px0 + 3) buttons.push('RIGHT');
-        if (ty < py0 - 3) buttons.push('UP');
-        else if (ty > py0 + 3) buttons.push('DOWN');
+        const px0 = px(e.v('mg_machine_px', 'i16'));
+        const py0 = px(e.v('mg_machine_py', 'i16'));
+        if (CENTER_X < px0 - 3) buttons.push('LEFT');
+        else if (CENTER_X > px0 + 3) buttons.push('RIGHT');
+        if (184 < py0 - 3) buttons.push('UP');
+        else if (184 > py0 + 3) buttons.push('DOWN');
       }
     }
     // After scoring targetReturns, stand still so 3 misses finish the game naturally.

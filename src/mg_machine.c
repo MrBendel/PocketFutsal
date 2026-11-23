@@ -44,18 +44,27 @@
 // Sprite tiles (tools/art/mg_machine.mjs SPR), from MG_SPR_TILES.
 #define T_MACHINE (MG_SPR_TILES + 0)       // three 8x16 columns
 #define T_MACHINE_TURN (MG_SPR_TILES + 6)  // turned to your left (flipped: your right)
-#define T_RING (MG_SPR_TILES + 12)         // three columns
-#define T_FLASH (MG_SPR_TILES + 18)
+#define T_DUMMY_UP (MG_SPR_TILES + 12)     // pop-up defender dummy upright (2 columns)
+#define T_DUMMY_DOWN (MG_SPR_TILES + 16)   // knocked-over dummy flat (2 columns)
+#define T_FLASH (MG_SPR_TILES + 20)
 // OAM (lower numbers draw on top).
 #define OAM_FLASH (OAM_MG_FREE + 0)
 #define OAM_MACHINE (OAM_MG_FREE + 1)  // 3
 #define OAM_AIM (OAM_MG_FREE + 4)
-#define OAM_RING (OAM_MG_FREE + 5)     // 3
-#define OAM_TRAIL (OAM_MG_FREE + 8)    // 4: shared Futnet red/blue/gold shot trail
-#define OAM_LAST (OAM_MG_FREE + 11)
+#define OAM_DUMMIES (OAM_MG_FREE + 5)  // 3 dummies * 2 sprites = 6 (19..24)
+#define OAM_TRAIL (OAM_MG_FREE + 11)   // 4: shared Futnet red/blue/gold shot trail (25..28)
+#define OAM_LAST (OAM_MG_FREE + 14)
 // Keep SPR_PAL_TRAIL_POWER (red) & SPR_PAL_TRAIL_CURVE (blue) for real shot trails!
 #define PAL_MACHINE SPR_PAL_CPU
-#define PAL_RING SPR_PAL_POWER
+#define PAL_DUMMY SPR_PAL_CPU
+#define PAL_DUMMY_GOLD SPR_PAL_POWER
+
+#define DUMMY_MAX 3
+#define DUMMY_HIT_X 13
+#define DUMMY_HIT_Y 14
+#define DUMMY_HIT_Z 24
+#define DUMMY_DOWN_FRAMES 48
+#define PTS_DUMMY 2
 
 // --- tuning ---
 #define SPEED_BASE 21      // your run, SUB a frame, + REFLEX level / 2
@@ -105,6 +114,7 @@
 #define R_OUT 4
 #define R_MISS 5    // not reached before its second bounce
 #define R_LONG 6    // the machine's shot went out: no harm done
+#define R_DUMMY 7   // knocked over a red defender dummy: 2
 #define PTS_IN 1
 #define PTS_TARGET 3
 #define MISSES_MAX 3
@@ -142,8 +152,11 @@ uint8_t mg_machine_speed;      // your run speed (REFLEX)
 uint8_t mg_machine_reach;      // your reach across (REFLEX)
 uint8_t mg_machine_bad;        // the last strike's contact: 0 clean .. (scatter, the net)
 uint8_t mg_machine_netted;     // the last return was mishit into the net
-// The ring and your return.
-int16_t mg_machine_tx, mg_machine_ty;          // the ring's middle (court px)
+// The pop-up defender dummies and your return.
+int16_t mg_machine_tx, mg_machine_ty;          // the gold dummy's spot (court px)
+int16_t mg_machine_dx[DUMMY_MAX], mg_machine_dy[DUMMY_MAX];  // all 3 pop-up dummies (court px)
+uint8_t mg_machine_dst[DUMMY_MAX];             // 0 = standing upright, >0 = knocked flat timer
+uint8_t mg_machine_gold;                       // index (0..2) of the gold +3 dummy
 int16_t mg_machine_land_x, mg_machine_land_y;  // where the return is going (court px)
 uint8_t mg_machine_note;       // the HUD shows a note while this counts down
 uint8_t mg_machine_end;        // after the third miss: counts down to the end
@@ -268,46 +281,60 @@ static void trace(void) {
     trace_y = PX(y);
 }
 
+// --- pop-up defender dummies ---
+static void place_dummy(uint8_t k) {
+    // Each dummy occupies its own lane (0=left, 1=center, 2=right) at a varied depth.
+    static const int16_t lane_x[3] = {AIM_X_L, CENTER_X, AIM_X_R};
+    static const int16_t row_y[3] = {AIM_Y_DEEP + 12, AIM_Y_MID + 4, AIM_Y_SHORT - 4};
+    mg_machine_dx[k] = lane_x[k] + spread(10);
+    mg_machine_dy[k] = row_y[roll(3)];
+    mg_machine_dst[k] = 0;
+    if (k == mg_machine_gold) {
+        mg_machine_tx = mg_machine_dx[k];
+        mg_machine_ty = mg_machine_dy[k];
+    }
+}
+
+static void reset_dummies(void) {
+    mg_machine_gold = roll(DUMMY_MAX);
+    for (uint8_t k = 0; k < DUMMY_MAX; k++) place_dummy(k);
+}
+
 // --- the machine ---
-// Its next shot: where it lands, how long it's in the air (the pace), and the ring.
+// Direct soccer passes: low arc, snappy pace, no tennis lobs!
 static void plan_shot(void) {
     uint8_t lv = mg_machine_level;
-    int16_t wide = 24 + lv * 6;  // across: from the middle, wider as it goes
-    if (wide > 60) wide = 60;
-    uint8_t t = 84 - (lv << 2);  // frames in the air: 84 .. 44
+    int16_t wide = 24 + lv * 6;
+    if (wide > 56) wide = 56;
+    uint8_t t = 58 - (lv << 1);  // crisp pass: 58 .. 38 frames
     uint8_t kind = lv >= 2 ? roll(4) : 1;
-    int16_t ly = 150 + roll(36 + lv * 3);
+    int16_t ly = 152 + roll(36 + lv * 2);
     if (kind == 0) {
-        t += 34;  // a lob: high, deep, dropping steeply: it sits up off the bounce
-        ly = 188 + roll(20);
+        t += 12;  // driven half-volley pass (still low, not a tennis lob!)
+        ly = 178 + roll(22);
     } else if (kind == 3 && lv >= 4) {
-        t -= 12;  // a skimmer: low and fast
-        ly = 140 + roll(30);
+        t -= 8;   // fizzing ground pass
+        ly = 148 + roll(28);
     }
-    t += roll(16);
+    t += roll(8);
     mg_machine_shot_t = t;
-    mg_machine_shot_x = clamp16(CENTER_X + spread((uint8_t)wide), COURT_X0 + 10, COURT_X1 - 10);
+    mg_machine_shot_x = clamp16(CENTER_X + spread((uint8_t)wide), COURT_X0 + 12, COURT_X1 - 12);
     mg_machine_shot_y = clamp16(ly, HALFWAY + 24, COURT_NEAR - 16);
-    // It rolls along the baseline to fire from somewhere new (from level 3).
     mg_machine_mx_to = lv >= 3 ? MX_MIN + roll(MX_MAX - MX_MIN) : CENTER_X;
     int16_t d = mg_machine_shot_x - mg_machine_mx_to;
     mg_machine_aim = d < -14 ? 0 : d > 14 ? 2 : 1;
-    // The ring: one of the nine aim spots, not where it just was.
-    int16_t ox = mg_machine_tx, oy = mg_machine_ty;
-    do {
-        uint8_t r = roll(9);
-        uint8_t c = r % 3, w = r / 3;
-        mg_machine_tx = c == 0 ? AIM_X_L : c == 1 ? CENTER_X : AIM_X_R;
-        mg_machine_ty = w == 0 ? AIM_Y_DEEP : w == 1 ? AIM_Y_MID : AIM_Y_SHORT;
-    } while (mg_machine_tx == ox && mg_machine_ty == oy);
+    // Pop any knocked-over dummies back up in fresh spots!
+    for (uint8_t k = 0; k < DUMMY_MAX; k++) {
+        if (mg_machine_dst[k]) place_dummy(k);
+    }
 }
 
 static void begin_tell(void) {
     plan_shot();
     mg_machine_state = MS_TELL;
-    int16_t tell = 44 - 3 * mg_machine_level;  // 44 .. 14 frames of warning
+    int16_t tell = 38 - 2 * mg_machine_level;  // 38 .. 18 frames warning
     int16_t roll_far = abs16(mg_machine_mx_to - mg_machine_mx);
-    if (tell < roll_far) tell = roll_far;  // time to get there (a px a frame)
+    if (tell < roll_far) tell = roll_far;
     mg_machine_timer = (uint8_t)tell;
     sfx_play(SFX_TOUCH);
 }
@@ -316,19 +343,12 @@ static void fire(void) {
     uint8_t t = mg_machine_shot_t;
     mg_machine_bx = TO_SUB(mg_machine_mx);
     mg_machine_by = TO_SUB(MACHINE_Y);
-    mg_machine_bz = TO_SUB(MACHINE_Z);
+    mg_machine_bz = TO_SUB(3);  // low driven pass out of the launcher
     mg_machine_fall = 0;
     mg_machine_bvx = TO_SUB(mg_machine_shot_x - mg_machine_mx) / t;
     mg_machine_bvy = TO_SUB(mg_machine_shot_y - MACHINE_Y) / t;
-    arc(t, 0);
-    // Lifted over the net, a fast one flies on further: keep it in.
-    trace();
-    if (trace_y > COURT_NEAR - 6) {
-        mg_machine_bvy -= mg_machine_bvy >> 2;
-        trace();
-    }
-    mg_machine_shot_x = trace_x;
-    mg_machine_shot_y = trace_y;
+    // Low soccer-pass arc: skims cleanly along the grass or hops waist-high.
+    mg_machine_bvz = (roll(3) == 0 && mg_machine_level >= 2) ? 12 : 6;
     mg_machine_ball = BS_IN;
     mg_machine_bounces = 0;
     mg_machine_state = MS_FLIGHT;
@@ -339,6 +359,9 @@ static void fire(void) {
 
 static void machine_update(void) {
     if (mg_machine_recoil) mg_machine_recoil--;
+    for (uint8_t k = 0; k < DUMMY_MAX; k++) {
+        if (mg_machine_dst[k] > 1) mg_machine_dst[k]--;
+    }
     if (mg_machine_state == MS_WAIT) {
         if (mg_machine_timer) mg_machine_timer--;
         else if (!mg_machine_end) begin_tell();
@@ -355,26 +378,27 @@ static void decide(uint8_t r) {
     mg_machine_result = r;
     mg_machine_ball = BS_DEAD;
     mg_machine_dead = DEAD_FRAMES;
-    if (r == R_IN || r == R_TARGET) {
-        mg_machine_points += r == R_TARGET ? PTS_TARGET : PTS_IN;
+    if (r == R_IN || r == R_DUMMY || r == R_TARGET) {
+        mg_machine_points += r == R_TARGET ? PTS_TARGET : r == R_DUMMY ? PTS_DUMMY : PTS_IN;
         mg_machine_returns++;
-        if (r == R_TARGET) mg_machine_targets++;
+        if (r == R_TARGET || r == R_DUMMY) mg_machine_targets++;
         if (mg_machine_level < LEVEL_MAX && mg_machine_returns >= (uint16_t)(mg_machine_level + 1) * LEVEL_RETURNS) {
             mg_machine_level++;
             faster = 1;
         }
-        sfx_play(r == R_TARGET ? SFX_GOAL : SFX_CHARGE);
-        note(r == R_TARGET ? "TARGET! +3" : "IN! +1", faster);
+        sfx_play(r == R_TARGET ? SFX_GOAL : r == R_DUMMY ? SFX_CHARGE : SFX_TOUCH);
+        note(r == R_TARGET ? "GOLD DUMMY! +3" : r == R_DUMMY ? "KNOCKDOWN! +2" : "IN! +1", faster);
     } else if (r == R_LONG) {
-        note("LONG! NO MISS", 0);
+        note("WIDE PASS!", 0);
     } else {
         mg_machine_misses++;
-        sfx_play(r == R_NET ? SFX_BOARD : SFX_PARRY);
-        note(r == R_NET ? "NET! MISS" : r == R_OUT ? "OUT! MISS" : "MISSED IT!", 0);
+        sfx_play(SFX_PARRY);
+        note(r == R_OUT ? "OUT! MISS" : "MISSED IT!", 0);
         if (mg_machine_misses >= MISSES_MAX) mg_machine_end = END_FRAMES;
     }
     mg_machine_state = MS_WAIT;
-    int16_t gap = 50 - (mg_machine_level << 2);  // 50 .. 10 frames between shots
+    int16_t gap = 46 - (mg_machine_level << 2);
+    if (gap < 10) gap = 10;
     mg_machine_timer = (uint8_t)gap;
 }
 
@@ -382,13 +406,7 @@ static void decide(uint8_t r) {
 static void ball_update(void) {
     if (mg_machine_ball == BS_NONE) return;
     if (mg_machine_ball == BS_OUT) {
-        if (arc_clear) {
-            arc_clear = 0;
-            ball_x = mg_machine_bx; ball_y = mg_machine_by; ball_z = mg_machine_bz;
-            ball_vx = mg_machine_bvx; ball_vy = mg_machine_bvy; ball_vz = mg_machine_bvz;
-            fc_net_clear();
-            mg_machine_bvz = ball_vz;
-        }
+        arc_clear = 0;  // open futsal pitch: no tennis net lift!
         if (ball_curve_t) {
             ball_vx = mg_machine_bvx;
             fc_curve_step();
@@ -396,54 +414,75 @@ static void ball_update(void) {
         }
     }
     int16_t x = mg_machine_bx + mg_machine_bvx, y = mg_machine_by + mg_machine_bvy;
-    // Your return, across the net: over it, or into it.
-    if (mg_machine_ball == BS_OUT && PX(y) < HALFWAY && PX(mg_machine_by) >= HALFWAY) {
-        if (mg_machine_bz < TO_SUB(NET_H) && PX(x) >= COURT_X0 - 6 && PX(x) <= COURT_X1 + 5) {
-            y = mg_machine_by;
-            mg_machine_bvy = -(mg_machine_bvy >> 2);
-            mg_machine_bvx >>= 1;
-            ball_curve_t = 0;
-            ball_trail = 0;
-            decide(R_NET);
-        } else {
-            mg_machine_bounces = 0;
+
+    // Pop-up dummy knockdown check on your driven return!
+    if (mg_machine_ball == BS_OUT && PX(y) < HALFWAY) {
+        int16_t lx = PX(x), ly = PX(y), lz = PX(mg_machine_bz);
+        if (lz <= DUMMY_HIT_Z) {
+            for (uint8_t k = 0; k < DUMMY_MAX; k++) {
+                if (mg_machine_dst[k]) continue;
+                if (abs16(lx - mg_machine_dx[k]) <= DUMMY_HIT_X && abs16(ly - mg_machine_dy[k]) <= DUMMY_HIT_Y) {
+                    mg_machine_dst[k] = DUMMY_DOWN_FRAMES;
+                    mg_machine_bvy = -(mg_machine_bvy >> 2);
+                    mg_machine_bvx >>= 1;
+                    mg_machine_bvz = 10;
+                    ball_trail = 0;
+                    ball_power = 0;
+                    ball_curve_t = 0;
+                    uint8_t is_gold = (k == mg_machine_gold);
+                    if (is_gold) {
+                        mg_machine_gold = (mg_machine_gold + 1) % DUMMY_MAX;
+                        mg_machine_tx = mg_machine_dx[mg_machine_gold];
+                        mg_machine_ty = mg_machine_dy[mg_machine_gold];
+                    }
+                    decide(is_gold ? R_TARGET : R_DUMMY);
+                    break;
+                }
+            }
         }
     }
-    // In the air: gravity, and a bounce as it lands, three quarters as high again.
+
+    // In the air: gravity, and low soccer turf bounce.
     if (mg_machine_bz || mg_machine_bvz) {
         if (++mg_machine_fall & 3) mg_machine_bvz--;
         mg_machine_bz += mg_machine_bvz;
         if (mg_machine_bz <= 0) {
-            int16_t up = (-mg_machine_bvz * 3) >> 2;
-            uint8_t first = !mg_machine_bounces;
+            int16_t up = (-mg_machine_bvz * 5) >> 3;
             mg_machine_bz = 0;
-            if (first && up < BOUNCE_MIN) up = BOUNCE_MIN;
-            mg_machine_bvx -= mg_machine_bvx >> 2;
-            mg_machine_bvy -= mg_machine_bvy >> 2;
+            mg_machine_bvx -= mg_machine_bvx >> 3;
+            mg_machine_bvy -= mg_machine_bvy >> 3;
             mg_machine_bvz = up > BOUNCE_DEAD ? up : 0;
             mg_machine_bounces++;
-            ball_trail = 0;
-            ball_power = 0;
-            ball_curve_t = 0;
-            int16_t lx = PX(x), ly = PX(y);
-            if (mg_machine_ball == BS_IN) {
-                if (first && !in_near_half(lx, ly)) decide(R_LONG);
-                else if (!first || !mg_machine_bvz) decide(R_MISS);
-            } else if (mg_machine_ball == BS_OUT) {
-                if (!in_far_half(lx, ly)) decide(R_OUT);
-                else if (abs16(lx - mg_machine_tx) <= RING_X && abs16(ly - mg_machine_ty) <= RING_Y) decide(R_TARGET);
-                else decide(R_IN);
+            if (mg_machine_ball == BS_OUT) {
+                ball_trail = 0;
+                ball_power = 0;
+                ball_curve_t = 0;
+                int16_t lx = PX(x), ly = PX(y);
+                // Let low driven shots skim/roll into the pop-up dummies; only decide on bounce if out of bounds.
+                if (ly < HALFWAY && !in_far_half(lx, ly)) decide(R_OUT);
             }
         }
     } else if (!(frame_count & 1)) {
-        // On the ground: rolling, slowing.
+        // Rolling on the turf.
         if (mg_machine_bvx > 0) mg_machine_bvx--;
         else if (mg_machine_bvx < 0) mg_machine_bvx++;
         if (mg_machine_bvy > 0) mg_machine_bvy--;
         else if (mg_machine_bvy < 0) mg_machine_bvy++;
+        if (!mg_machine_bvx && !mg_machine_bvy) {
+            if (mg_machine_ball == BS_IN && PX(y) >= HALFWAY) decide(R_MISS);
+            else if (mg_machine_ball == BS_OUT) {
+                int16_t lx = PX(x), ly = PX(y);
+                decide(in_far_half(lx, ly) ? R_IN : R_OUT);
+            }
+        }
     }
-    // Past you on the full, or rolled off the back: gone.
-    if (mg_machine_ball == BS_IN && PX(y) > OUT_Y1) decide(mg_machine_bounces ? R_MISS : R_LONG);
+    // Driven shot past the far baseline without hitting a dummy: out or in.
+    if (mg_machine_ball == BS_OUT && PX(y) < COURT_FAR) {
+        int16_t lx = PX(x);
+        decide((lx >= COURT_X0 && lx <= COURT_X1) ? R_IN : R_OUT);
+    }
+    // Past you off the near baseline: missed!
+    if (mg_machine_ball == BS_IN && PX(y) > COURT_NEAR + 4) decide(R_MISS);
     if (mg_machine_bvx || mg_machine_bvy) mg_machine_roll++;
     if (PX(x) < OUT_X0 || PX(x) > OUT_X1) x = mg_machine_bx, mg_machine_bvx = 0;
     if (PX(y) < OUT_Y0 || PX(y) > OUT_Y1) y = mg_machine_by, mg_machine_bvy = 0;
@@ -478,6 +517,8 @@ static void strike(uint8_t move, int16_t rel_x, int16_t rel_fwd) {
     ball_z = mg_machine_bz;
     move = fc_strike_ball(SIDE_YOU, move, mg_machine_land_x, mg_machine_land_y,
                           FC_FLAGS(aim, mg_machine_netted, 0, 0));
+    // Keep returns low & driven (soccer shot, not a high tennis lob unless B->A lob).
+    if (pl_shot[SIDE_YOU] != SHOT_LOB && ball_vz > 12) ball_vz = 12;
     mg_machine_bvx = ball_vx;
     mg_machine_bvy = ball_vy;
     mg_machine_bvz = ball_vz;
@@ -627,12 +668,17 @@ static void draw(void) {
     } else {
         move_sprite(OAM_FLASH, 0, 0);
     }
-    // The ring, where it's worth three (blinking as it moves to a new spot).
-    if (mg_machine_state == MS_TELL && (mg_machine_timer & 2)) {
-        mg_hide(OAM_RING, OAM_RING + 2);
-    } else {
-        int16_t rx = proj_x(mg_machine_tx, mg_machine_ty) - 12, ry = proj_sy(mg_machine_ty) - 6;
-        for (uint8_t c = 0; c < 3; c++) mg_sprite(OAM_RING + c, T_RING + (c << 1), PAL_RING, rx + (c << 3), ry);
+    // Pop-up defender dummies: 3 across the far half (1 gold +3, 2 red +2).
+    for (uint8_t k = 0; k < DUMMY_MAX; k++) {
+        uint8_t o = OAM_DUMMIES + (k << 1);
+        uint8_t down = mg_machine_dst[k] != 0;
+        uint8_t dtile = down ? T_DUMMY_DOWN : T_DUMMY_UP;
+        uint8_t dpal = k == mg_machine_gold ? PAL_DUMMY_GOLD : PAL_DUMMY;
+        if (down && (mg_machine_dst[k] & 4)) dpal = SPR_PAL_FLASH;
+        int16_t dx_s = proj_x(mg_machine_dx[k], mg_machine_dy[k]) - 8;
+        int16_t dy_s = proj_sy(mg_machine_dy[k]) - 13;
+        mg_sprite(o, dtile, dpal, dx_s, dy_s);
+        mg_sprite(o + 1, dtile + 2, dpal, dx_s + 8, dy_s);
     }
     // While a ball comes at you, a marker where the d-pad / queued aim sends your return.
     if (mg_machine_ball == BS_IN && mg_run == MG_RUN_LIVE) {
@@ -680,8 +726,7 @@ void mg_machine_enter(void) BANKED {
     mg_machine_swing = mg_machine_move_t = 0;
     mg_machine_move = MOVE_NONE;
     mg_machine_note = mg_machine_end = 0;
-    mg_machine_tx = CENTER_X;
-    mg_machine_ty = AIM_Y_MID;
+    reset_dummies();
     // REFLEX: quicker to the ball, a longer reach.
     uint8_t rf = stat_lv[STAT_REFLEX];
     mg_machine_speed = SPEED_BASE + (rf >> 1);

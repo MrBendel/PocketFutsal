@@ -42,10 +42,10 @@ static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5, 3};
 // How to play: four lines each, short enough for the compact font (about 36
 // letters across the screen).
 static const char *const brief[MG_COUNT][4] = {
-    {"THE MACHINE FIRES BALLS AT YOU.", "A: POWER  B: CURVE (TAP CHARGE)", "D-PAD AIMS: GOLD RING IS +3!",
+    {"PASSES ZIP FROM THE MACHINE!", "A: POWER  B: CURVE (TAP CHARGE)", "KNOCK DOWN POP-UP DUMMIES (+3)!",
      "THREE MISSES AND YOU ARE OUT!"},
-    {"HIT THE PANEL THAT LIGHTS UP!", "A: POWER  B: CURVE. HOLD OR TAP", "TO CHARGE. D-PAD AIMS PANEL.",
-     "BEAT THE CLOCK FOR STREAKS!"},
+    {"PANELS OPEN HOLES IN THE GOAL!", "SHOOT THROUGH THE OPEN NET TO", "SCORE. A: POWER  B: CURVE.",
+     "D-PAD AIMS. BEAT THE CLOCK!"},
     {"KEEP THE BALL UP! A: KICK,", "UP+A: KNEE, B: HEADER FOR 2.", "TIME IT AS THE RING LIGHTS UP!",
      "D-PAD TO STAY UNDER THE BALL."},
     {"FIVE PENALTIES EACH. SHOOTING:", "AIM WITH D-PAD, A FOR POWER.", "IN GOAL: READ THE CPU AND PRESS",
