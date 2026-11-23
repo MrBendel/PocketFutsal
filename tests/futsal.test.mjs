@@ -197,7 +197,8 @@ test('a forward run can receive a called return pass in stride',()=>{
  e.hold('UP',12).hold('UP+B').hold('UP',24);
  e.until(e=>e.v('fs_owner')===1,80,'teammate receiving first pass');
  e.hold('UP+B').hold('UP',1);
- assert.equal(e.v('fs_receiver'),0,"B calls the teammate's return pass");
+ for(let f=0;f<20&&e.v('fs_receiver')!==0;f++)e.hold('UP');
+ assert.equal(e.v('fs_receiver'),0,"B calls the teammate's return at kicking reach");
  for(let f=0;f<60&&e.v('fs_owner')!==0;f++)e.hold('UP');
  assert.equal(e.v('fs_owner'),0,'moving human receives the led return');
  assert.ok(e.v('fs_completed_passes','u16')>=2);
@@ -210,7 +211,8 @@ test('directional B sends the receiver into space instead of at their old positi
  const rx=at(e,'fs_pl_x',1,'i16'),ry=at(e,'fs_pl_y',1,'i16');e.idle();
  assert.equal(e.v('fs_target_x','i16'),rx-24*16);
  assert.equal(e.v('fs_target_y','i16'),ry);
- assert.ok(at(e,'fs_vx',1,'i8')<0,'receiver reacts to the through pass');
+ for(let f=0;f<6&&at(e,'fs_vx',1,'i8')>=0;f++)e.idle();
+ assert.ok(at(e,'fs_vx',1,'i8')<0,'receiver brakes and turns toward the through pass');
  e.idle();e.until(e=>e.v('fs_owner')===1,90,'teammate meeting the directional pass');
  assert.ok(at(e,'fs_pl_x',1,'i16')<x-10*16,'receiver ran into the requested space');
  assert.equal(e.v('fs_completed_passes','u16'),1);
@@ -509,4 +511,60 @@ test('seeded Watch matches give both teams wins and comparable scoring opportuni
  assert.ok(blueShare>=.35&&blueShare<=.65,'neither side receives a persistent scoring advantage');
  assert.ok(shots[0]>=8&&shots[1]>=8,'both teams must create real shots, not just own goals');
  assert.ok(worst<65664,`balanced match frame budget: ${worst}`);
+});
+
+
+test('support opens a wide diagonal outlet instead of crowding a stationary carrier',()=>{
+ const e=humanSpace();setPlayer(e,0,48,160);setPlayer(e,1,52,164);
+ set16(e,'fs_ball_x',48*16);set16(e,'fs_ball_y',153*16);
+ e.write8(e.symbols.addr('fs_think')+1,0);
+ e.idle(48);
+ assert.equal(e.v('fs_owner'),0,'support movement leaves human possession alone');
+ assert.ok(at(e,'fs_pl_x',1,'i16')-at(e,'fs_pl_x',0,'i16')>48*16,'teammate creates real passing width');
+ assert.ok(at(e,'fs_pl_y',1,'i16')<at(e,'fs_pl_y',0,'i16')-16*16,'outlet also advances toward goal');
+});
+
+function defensiveShape(mirror=false){
+ const e=startGame();
+ const id=i=>mirror?i^2:i;
+ for(const [i,x,y] of [[0,80,160],[1,124,112],[2,80,110],[3,88,110]]){
+  const n=id(i);setPlayer(e,n,mirror?160-x:x,mirror?224-y:y);
+  e.write8(e.symbols.addr('fs_think')+n,200);
+  for(const axis of ['x','y']){
+   const v=at(e,'fs_pl_'+axis,n,'i16');
+   e.writeBytes(e.symbols.addr('fs_ai_t'+axis)+n*2,[v&255,v>>8]);
+  }
+ }
+ put(e,'fs_owner',id(0));put(e,'fs_receiver',255);
+ set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',(mirror?71:153)*16);
+ for(const n of ['fs_ball_vx','fs_ball_vy','fs_ball_z','fs_ball_vz'])set16(e,n,0);
+ e.write8(e.symbols.addr('fs_presser')+(mirror?0:1),id(2));
+ e.write8(e.symbols.addr('fs_think')+id(2),0);e.idle();
+ e.write8(e.symbols.addr('fs_think')+id(3),0);e.idle();
+ return {e,id};
+}
+
+test('one defender presses while the partner covers the other attacker on either end',()=>{
+ for(const mirror of [false,true]){
+  const {e,id}=defensiveShape(mirror),direction=mirror?-1:1;
+  assert.equal(at(e,'fs_role',id(2)),0);
+  assert.equal(at(e,'fs_role',id(3)),3);
+  const pressY=at(e,'fs_pl_y',id(2),'i16'),coverY=at(e,'fs_pl_y',id(3),'i16');
+  e.idle(8);
+  assert.ok((at(e,'fs_pl_y',id(2),'i16')-pressY)*direction>0,'presser closes the carrier');
+  assert.ok((at(e,'fs_pl_y',id(3),'i16')-coverY)*direction<0,'cover drops goal-side of the off-ball attacker');
+  assert.ok(Math.abs(at(e,'fs_pl_x',id(3),'i16')-at(e,'fs_pl_x',id(2),'i16'))>12*16,'defenders separate into different lanes');
+ }
+});
+
+test('small changes in distance do not make both defenders chase; a clear advantage hands over the press',()=>{
+ const {e}=defensiveShape();
+ setPlayer(e,2,72,110);setPlayer(e,3,80,110);
+ e.write8(e.symbols.addr('fs_think')+3,0);e.idle();
+ assert.equal(at(e,'fs_presser',1),2,'eight pixels closer does not abandon cover');
+ setPlayer(e,2,72,80);setPlayer(e,3,80,132);
+ e.write8(e.symbols.addr('fs_think')+3,0);e.idle(2);
+ assert.equal(at(e,'fs_presser',1),3,'clearly closer defender takes over');
+ e.write8(e.symbols.addr('fs_think')+2,0);e.idle(2);
+ assert.equal(at(e,'fs_role',2),3,'previous presser recovers into cover');
 });

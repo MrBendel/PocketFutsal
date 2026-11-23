@@ -55,6 +55,7 @@ uint8_t fs_moving[4], fs_view[4], fs_flip[4], fs_pose[4];
 uint8_t fs_side[4];
 uint8_t fs_role[4]; // 0 chase, 1 carry, 2 support, 3 cover
 uint8_t fs_kickoff_phase,fs_thought;
+uint8_t fs_presser[2]; // One challenger per team; partner protects the outlet.
 uint8_t fs_ball_oam, fs_hud_pending;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
 uint8_t fs_trail_x[16], fs_trail_y[16];
@@ -101,6 +102,7 @@ static void kickoff(uint8_t side) {
     // A fixed slot-based schedule replayed the same successful red press at
     // every restart. Stagger perception evenly, with a seeded phase per kickoff.
     fs_kickoff_phase=rand()&7;
+    fs_presser[0]=0;fs_presser[1]=2;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -263,37 +265,46 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     if(vx||vy){fs_dribble_x[i]=vx<0?-1:vx>0?1:0;fs_dribble_y[i]=vy<0?-1:vy>0?1:0;}
 }
 static void ai(uint8_t i){
-    uint8_t mate=i^1, own=fs_owner!=NOBODY&&team(fs_owner)==team(i);
-    int16_t goal=team(i)?224*16:0,tx=fs_ball_x,ty=fs_ball_y;
-    if(!fs_spectator&&i==1&&fs_owner==i&&fs_return_call&&distance(i,fs_ball_x,fs_ball_y)<=12*16){
-        pass(i,0,0,fs_return_lob);return;
+    static uint8_t mate,own,side,mark,presser,defender;
+    static int16_t goal,tx,ty,pressure,mate_space,d,forward;
+    if(!fs_spectator&&i==1&&fs_owner==i&&fs_return_call){
+        if(distance(i,fs_ball_x,fs_ball_y)<=12*16)pass(i,0,0,fs_return_lob);
+        else step_player(i,fs_ball_x,fs_ball_y);
+        return;
     }
     if(!fs_spectator&&i==1&&fs_owner==i&&fs_pass_charge&&fs_pass_source==1){step_player(i,fs_ball_x,fs_ball_y);return;}
     if(fs_think[i]||fs_kicked||fs_thought){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_thought=1;
     fs_think[i]=7;
+    // Cached movement frames do not need to rebuild the tactical scratch.
+    mate=i^1;side=team(i);own=fs_owner!=NOBODY&&team(fs_owner)==side;
+    goal=side?224*16:0;tx=fs_ball_x;ty=fs_ball_y;
     if(fs_lob&&fs_receiver==i&&aerial_try(i))return;
     fs_role[i]=0;
     if(fs_owner==i){
         fs_role[i]=1;
-        int16_t pressure=30000,mate_space=30000;uint8_t defender=0;
+        pressure=mate_space=30000;defender=0;
         for(uint8_t j=0;j<4;j++)if(team(j)!=team(i)){
-            int16_t d=distance(j,fs_ball_x,fs_ball_y);
+            d=distance(j,fs_ball_x,fs_ball_y);
             if(d<pressure){pressure=d;defender=j;}
             d=distance(j,fs_pl_x[mate],fs_pl_y[mate]);if(d<mate_space)mate_space=d;
         }
         tx=(fs_pl_x[i]<80*16?58:102)*16;ty=goal;
         // Attack a side of the press instead of driving into its centre.
         if(pressure<64*16&&ab(fs_pl_x[defender]-fs_pl_x[i])<40*16)tx=fs_pl_x[defender]<80*16?120*16:40*16;
-        int16_t forward=team(i)?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
+        forward=side?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
         if(distance(i,fs_ball_x,fs_ball_y)>12*16){tx=fs_ball_x;ty=fs_ball_y;}
         else if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16)shoot(i,0);
         else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100))pass(i,0,0,(fs_pass_count&3)==3);
         else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16)shoot(i,0);
     }else if(own){
         fs_role[i]=2;
-        tx=fs_pl_x[fs_owner]<80*16?120*16:40*16;
-        ty=clamp(fs_pl_y[fs_owner]+(team(i)?44*16:-44*16),24*16,200*16);
+        // Keep the far lane through the middle of the court instead of
+        // crossing behind the carrier every time they cross the centre line.
+        tx=fs_pl_x[i]<80*16?32*16:128*16;
+        if(fs_pl_x[fs_owner]<64*16)tx=128*16;
+        else if(fs_pl_x[fs_owner]>96*16)tx=32*16;
+        ty=clamp(fs_pl_y[fs_owner]+(side?24*16:-24*16),24*16,200*16);
     }else if(fs_owner==NOBODY&&fs_receiver==i){
         fs_role[i]=2;tx=fs_flight_left?fs_target_x:fs_ball_x;ty=fs_flight_left?fs_target_y:fs_ball_y;
     }else if(fs_owner==NOBODY&&fs_receiver!=NOBODY&&team(fs_receiver)==team(i)){
@@ -301,15 +312,30 @@ static void ai(uint8_t i){
         fs_role[i]=2;tx=fs_target_x<80*16?120*16:40*16;
         ty=clamp(fs_target_y+(team(i)?32*16:-32*16),24*16,200*16);
     }else{
-        // Eight-frame perception interval gives momentum and feints a purpose.
-        if(distance(mate,fs_ball_x,fs_ball_y)<distance(i,fs_ball_x,fs_ball_y)){
+        // A press belongs to one player. Only hand it over when the partner
+        // is clearly closer; tiny distance changes must not pull both in.
+        presser=fs_presser[side];
+        if(!fs_tackling[presser]&&distance(presser^1,fs_ball_x,fs_ball_y)+24*16<distance(presser,fs_ball_x,fs_ball_y))
+            presser=fs_presser[side]=presser^1;
+        if(i!=presser){
             fs_role[i]=3;
-            tx=clamp(fs_ball_x,40*16,120*16);
-            ty=team(i)?clamp(fs_ball_y-40*16,28*16,104*16):clamp(fs_ball_y+40*16,120*16,196*16);
+            // Cover the other attacker from the goal side, not the ball.
+            // On a loose ball protect a separate lane behind the challenger.
+            mark=fs_owner!=NOBODY?fs_owner^1:fs_receiver;
+            if(mark!=NOBODY){
+                tx=clamp(fs_pl_x[mark],28*16,132*16);
+                ty=clamp(fs_pl_y[mark]+(side?-24*16:24*16),24*16,200*16);
+            }else{
+                tx=fs_ball_x<80*16?104*16:56*16;
+                ty=clamp(fs_ball_y+(side?-40*16:40*16),24*16,200*16);
+            }
+            // If attackers bunch up, retain width rather than joining them.
+            if(ab(tx-fs_ball_x)<28*16&&ab(ty-fs_ball_y)<32*16)
+                tx=fs_ball_x<80*16?128*16:32*16;
         }else{
             tx=clamp(fs_ball_x+fs_ball_vx*6,16*16,144*16);
             ty=clamp(fs_ball_y+fs_ball_vy*6,12*16,212*16);
-            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<20*16)tackle(i);
+            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<16*16)tackle(i);
         }
     }
     fs_ai_tx[i]=tx;fs_ai_ty[i]=ty;
