@@ -6,6 +6,8 @@
 //
 // Proportions follow Mario Tennis (GBC), measured from its sheets (docs/design).
 
+import {BALL_FRAMES} from './ball-art.mjs';
+
 /** 8 strings -> 16 bytes of 2bpp. */
 export function asciiTile(rows, name = 'tile') {
   if (rows.length !== 8 || rows.some((r) => r.length !== 8)) throw new Error(`${name}: a tile is 8 rows of 8 characters`);
@@ -312,9 +314,9 @@ export const PLAYER_TILES = [
 ];
 
 // The ball (8x8, the top of an 8x16 pair): 1 white, 2 its patches, 3 outline.
-// Two frames, so it rolls. Its shadow on the court (3). In VRAM bank 0.
-const ballA = ['..3333..', '.311213.', '31122113', '31211113', '31111213', '31121113', '.312111.', '..3333..'];
-const ballB = ['..3333..', '.312113.', '31111213', '32111123', '31211113', '31112213', '.311113.', '..3333..'];
+// The first two of six spin frames. Four extra frames load into mode-specific
+// free slots; the shadow stays on the court. All use VRAM bank 0.
+const [ballA,ballB] = BALL_FRAMES;
 const shadow = ['........', '........', '........', '........', '..3333..', '.333333.', '..3333..', '........'];
 
 // The aim marker (1 bright, 3 outline): where your queued strike will land.

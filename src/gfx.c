@@ -2,6 +2,7 @@
 #include <gb/cgb.h>
 #include <string.h>
 #include <gb/metasprites.h>
+#include "ball_extra.h"
 #include "gfx.h"
 #include "gfx_internal.h"
 #include "state.h"
@@ -249,4 +250,27 @@ uint8_t gfx_running_side(uint8_t previous,int8_t vx,int8_t vy){
     if(delta>3)return 1;
     if(delta<-3)return 0;
     return previous;
+}
+
+uint8_t gfx_ball_phase,gfx_ball_first;
+uint16_t gfx_ball_distance;
+void gfx_ball_init(uint8_t extra_first){
+    gfx_ball_first=extra_first;gfx_ball_phase=0;gfx_ball_distance=0;
+    banked_sprite_data(extra_first,BALL_EXTRA_TILE_COUNT,ball_extra_tiles,BANK(ball_extra));
+}
+void gfx_ball_step(int16_t vx,int16_t vy){
+    static uint16_t x,y,t;
+    x=vx<0?-vx:vx;y=vy<0?-vy:vy;
+    if(x<y){t=x;x=y;y=t;}
+    // Approximate court distance, not elapsed time: four pixels per phase,
+    // about one circumference per six-frame revolution. Rest holds its pose.
+    gfx_ball_distance+=x+(y>>1);
+    if(gfx_ball_distance>=64){
+        // Keep fast shots readable instead of skipping poses and strobing.
+        if(gfx_ball_distance>=128)gfx_ball_distance=127;
+        gfx_ball_distance-=64;if(++gfx_ball_phase==6)gfx_ball_phase=0;
+    }
+}
+uint8_t gfx_ball_tile(void){
+    return gfx_ball_phase<2?gfx_ball_phase<<1:gfx_ball_first+((gfx_ball_phase-2)<<1);
 }

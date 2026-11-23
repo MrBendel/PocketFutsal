@@ -360,7 +360,7 @@ static void draw(void) {
         if(fs_tackling[i]) { tile=20+i*24+8+(fs_view[i]<<3); pal &= ~S_BANK; }
         gfx_actor(n,tile,0,x,sy,pal,fs_flip[i]);
     }
-    set_sprite_tile(fs_ball_oam,(fs_sim_ticks&8)?2:0); set_sprite_prop(fs_ball_oam,fs_power_trail?SPR_PAL_POWER:SPR_PAL_BALL);
+    set_sprite_tile(fs_ball_oam,gfx_ball_tile()); set_sprite_prop(fs_ball_oam,fs_power_trail?SPR_PAL_POWER:SPR_PAL_BALL);
     move_sprite(fs_ball_oam,ball_sx,(uint8_t)(ball_wy-fs_cam_y-(fs_ball_z>>4)));
     if(fs_power_trail||fs_trail_n) {
         // A short history in map coordinates keeps the trail stable while scrolling.
@@ -383,6 +383,7 @@ static void draw(void) {
 void futsal_enter(void) BANKED {
     uint8_t buf[FUTSAL_PITCH_MAP_W*FUTSAL_PITCH_MAP_H];
     palettes_futsal();
+    gfx_ball_init(116);
     for(uint8_t k=0;k<4;k++){set_sprite_tile(18+k,8+(k<<1));set_sprite_prop(18+k,4);move_sprite(18+k,0,0);}
     set_sprite_tile(30,4);set_sprite_prop(30,SPR_PAL_UI);
     set_sprite_tile(17,6);set_sprite_prop(17,SPR_PAL_UI);
@@ -458,5 +459,5 @@ void futsal_update(void) BANKED {
             if(!fs_kicked)step_player(0,fs_pl_x[0]+dx*64,fs_pl_y[0]+dy*64);
         }
     }
-    ball_update(); if(!fs_hud_pending)draw();
+    ball_update();gfx_ball_step(fs_ball_vx,fs_ball_vy);if(!fs_hud_pending)draw();
 }

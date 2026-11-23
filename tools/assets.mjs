@@ -29,6 +29,7 @@
 // Called by build.mjs; generated files are only rewritten when a source PNG is newer.
 import fs from 'node:fs';
 import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './player-art.mjs';
+import {BALL_EXTRA} from './ball-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +51,8 @@ export const ASSETS = [
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).
-  { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs' },
+  { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs', deps:['artwork/ball/v1/ball.json'] },
+  { name: 'ball_extra', bank: true, ascii: BALL_EXTRA, src: 'artwork/ball/v1/ball.json' },
   // The players' frames, both views (VRAM bank 1).
   { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
   ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),

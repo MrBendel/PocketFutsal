@@ -48,7 +48,7 @@ static const uint16_t cpu[4] = {0, SKIN, C(232, 64, 72), INK};
 // Charging: the player flashes through this (and the fire colors).
 static const uint16_t flash[4] = {0, C(255, 255, 255), C(255, 255, 208), C(112, 112, 160)};
 // The ball: white, grey patches; on fire after a power shot.
-static const uint16_t ball[4] = {0, C(255, 255, 255), C(96, 96, 112), INK};
+static const uint16_t ball[4] = {0, C(248, 248, 232), C(136, 152, 168), INK};
 static const uint16_t power[4] = {0, C(255, 240, 120), C(255, 112, 24), C(176, 24, 16)};
 // The trails behind a struck ball: hot to dim (1 the dot's core, 2 its middle, 3 its edge).
 static const uint16_t trail_power[4] = {0, C(255, 232, 160), C(248, 72, 40), C(176, 24, 24)};

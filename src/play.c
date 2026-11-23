@@ -40,7 +40,7 @@
 
 // Sprite tiles (tools/tile-art.mjs). VRAM bank 0: the ball and its shadow, an
 // 8x16 pair each. VRAM bank 1: the players, 8 tiles a frame.
-#define S_BALL 0  // and S_BALL + 2, its other roll
+#define S_BALL 0  // first two spin frames; gfx_ball_tile selects the six-frame cycle
 #define S_SHADOW 4
 #define S_AIM 6     // the aim marker
 #define S_TRAIL 8   // a trail's dots, largest first: S_TRAIL, +2, +4, +6
@@ -213,7 +213,6 @@ uint8_t ball_netted;
 uint8_t ball_serve;
 uint8_t set_won;  // this point won the set
 uint8_t ball_fall;  // counts frames in the air: gravity acts on 3 in 4
-uint8_t ball_roll;  // counts up as the ball rolls: its two frames
 
 uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 // Your shot on the HUD, where it says YOU (a debugging aid): the one queued, or for a
@@ -474,7 +473,7 @@ static void draw(void) {
     // The ball, up at its height, and its shadow on the court.
     int16_t sx = proj_x(PX(ball_x), by) + 4;
     int16_t sy = (int16_t)proj_y[PROJ_I(by)] - cam_y + 10;
-    set_sprite_tile(OAM_BALL, S_BALL + ((ball_roll & 8) ? 2 : 0));
+    set_sprite_tile(OAM_BALL, gfx_ball_tile());
     set_sprite_prop(OAM_BALL, ball_power ? SPR_PAL_POWER : SPR_PAL_BALL);
     place(OAM_BALL, sx, sy - bz);
     ball_hx = sx + 4;
@@ -1332,7 +1331,7 @@ static void ball_update(void) {
         ball_vy = drag(ball_vy);
     }
     if (ball_power && ball_speed() < POWER_FADE) ball_power = 0;
-    if (ball_vx || ball_vy) ball_roll++;
+    gfx_ball_step(ball_vx,ball_vy);
     // The floor round the court ends somewhere: the ball stops at its edge.
     if (PX(x) < OUT_X0 || PX(x) > OUT_X1) x = ball_x, ball_vx = 0, ball_curve_t = 0;
     if (PX(y) < OUT_Y0 || PX(y) > OUT_Y1) y = ball_y, ball_vy = 0;
@@ -1343,6 +1342,7 @@ static void ball_update(void) {
 // --- the scene ---
 void play_enter(void) BANKED {
     palettes_play();
+    gfx_ball_init(20);
     gfx_player_shadow_init(OAM_PLAYER_SHADOW);
     gfx_player_shadow_init(OAM_PLAYER_SHADOW + 2);
     banked_bkg_data(SCENE_TILES, PITCH_TILE_COUNT, pitch_tiles, BANK(pitch));

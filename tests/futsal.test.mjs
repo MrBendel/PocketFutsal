@@ -128,7 +128,8 @@ test('ball is occluded by nearer players and draws over farther players',()=>{
  for(const [y,expected] of [[210,0],[170,4],[110,8],[50,12],[10,16]]){
   set16(e,'fs_ball_y',y*16);e.idle(3);
   assert.equal(e.v('fs_ball_oam'),expected);
-  assert.equal(e.read8(0xfe02+expected*4)&0xfe,(e.v('fs_sim_ticks')&8)?2:0,'ball occupies sorted OAM slot');
+  const phase=e.v('gfx_ball_phase'),tile=phase<2?phase*2:116+(phase-2)*2;
+  assert.equal(e.read8(0xfe02+expected*4)&0xfe,tile,'ball occupies sorted OAM slot');
  }
 });
 function setPlayer(e,i,x,y){
