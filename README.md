@@ -28,6 +28,34 @@ B bursts; both defensive actions have a cooldown. When your teammate carries,
 B calls for a pass. D-pad moves and left/right aims shots. AI positioning and
 match balance still need playtesting.
 
+The 2v2 gameplay pass adds acceleration, braking and momentum when reversing.
+A slide has a short crouch, then commits feet-first to its launch direction;
+it steals only when the foot reaches a low ball. Passes and shots travel on
+ballistic arcs, with a shadow marking their ground position. High deliveries
+clear ground tackles, and a receiver controls the ball as it descends.
+Ball flight uses the same vector launch and gravity model as Futnet: precise
+angles toward the target, quick low exchanges over short distances, and higher
+arcs on longer deliveries. Shots travel faster than passes. Bounces lose pace
+and height.
+Dribbling uses separate foot touches: the ball rolls ahead and slows under its
+own momentum between contacts. Stopping does not pull it back to the player.
+A hard cut can leave it exposed or loose, and opponents can intercept the ball
+without touching the carrier. Pass/shot inputs wait briefly for kicking reach;
+steer back onto the ball to play it. AI carriers also recover their next touch.
+
+Teammates run ahead into the opposite lane and continue their run after passing.
+Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court
+pixels into that direction to receive in space. Try a one-two: **B to pass, run
+into space, B to call for the return, then A to finish**. You can call while your
+first pass is still airborne: your teammate returns it on receiving. The call
+expires after 48 frames or when an opponent takes possession.
+AI defenders have a brief reaction delay
+and commit to tackles, so changing direction can create an opening.
+
+Both modes use dedicated left/right side-running sprites; all four futsal
+characters retain their individual profile heads. The animated sprite review
+is at `artwork/players/roster/side-review.html`.
+
 The original futnet mode and its tests remain active. Futsal logic and watchable
 state live in `src/futsal.c` and `src/futsal.h`, with `fs_` prefixes for its state.
 Both modes share the graphics, sprite assets, build and emulator tooling.
@@ -85,21 +113,24 @@ the title switches between one set and the best of three.
 | D-pad | Run (eight ways) in your half. Queued, or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
-| B then A / A then B | A **lob** over them / a **drop shot** just past halfway |
-| A or B again while ready | Tap for more power |
-| LEFT / RIGHT while ready | Angle it that way; neutral is straight on (it sticks; a marker shows where it'll land) |
-| UP / DOWN while ready | Play it deep / short |
+| B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
+| A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and, with half a meter, jump and bicycle-kick it: a **slam**. A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
+| A or B again while ready | Tap for more power: the meter fills only as you press, and stays |
+| SELECT while ready | Call the strike off |
+| You blink, **GO!** on the HUD | The CPU's struck it to you and nothing's queued: press A or B now |
+| LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |
+| UP / DOWN while ready | Play it deep / short; neutral, away from the CPU: short of it at the back, past it up close |
 | START | Pause |
 
-Press A or B to queue a strike, any time in a rally: once the ball comes your way, it
-charges (the meter in the HUD; tap again for more, up to 5 taps) and the game runs you
+Press A or B to queue a strike, any time in a rally: each press fills the meter in the
+HUD (holding doesn't, and it doesn't drain); once the ball comes your way, the game runs you
 to it, then it goes by itself as the ball arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
 the waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
 Not ready when it reaches you, your first touch **controls** it, up in front of you:
 ready a strike as it comes down, and with half a meter your second touch is a **slam**.
 Planted out of reach, you **slide** for it: it pops up over the net, and you're on the
 floor a moment. A pop-up met in the air is a slam too, on fire, as is a full-meter strike;
-meeting a ball on fire takes three quarters of a meter, or it pops up off you (or knocks
+meeting a ball on fire takes three eighths of a meter, or it pops up off you (or knocks
 you down, if you slide to it or aren't ready). The side that lost the point serves: the ball is
 struck on the way down, and must go over.
 

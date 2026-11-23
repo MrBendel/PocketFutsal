@@ -2,6 +2,7 @@
 #include <gb/cgb.h>
 #include <string.h>
 #include <gb/metasprites.h>
+#include "ball_extra.h"
 #include "gfx.h"
 #include "gfx_internal.h"
 #include "state.h"
@@ -193,4 +194,83 @@ void banked_bkg_data(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank
     SWITCH_ROM(bank);
     set_bkg_data(first, n, data);
     SWITCH_ROM(saved);
+}
+
+// Shared by futnet and futsal; keeping this in bank 0 avoids growing the
+// already full match bank. OAM slots are allocated behind each mode's players.
+void gfx_player_shadow_init(uint8_t first) {
+    set_sprite_tile(first, 16); set_sprite_prop(first, SPR_PAL_UI);
+    set_sprite_tile(first + 1, 18); set_sprite_prop(first + 1, SPR_PAL_UI);
+}
+void gfx_player_shadow(uint8_t first, int16_t x, int16_t y) {
+    // Both modes constrain feet to the projected court (hardware y 12..156).
+    // The existing HUD sprite split clips the lower edge.
+    uint8_t ground_y = (uint8_t)(y + 12);
+    move_sprite(first, (uint8_t)x, ground_y);
+    move_sprite(first + 1, (uint8_t)(x + 8), ground_y);
+}
+
+// GBDK's assembly metasprite renderer writes the actor block without C's
+// repeated pointer arithmetic. Tile order stays identical to the original ABI.
+static const metasprite_t actor_right[]={{0,0,0,0},{16,0,2,0},{-16,8,4,0},{16,0,6,0},METASPR_TERM};
+static const metasprite_t actor_left[]={{0,0,4,0},{16,0,6,0},{-16,8,0,0},{16,0,2,0},METASPR_TERM};
+static const metasprite_t actor_slide_right[]={{0,0,0,0},{0,8,2,0},{0,8,4,0},METASPR_TERM};
+static const metasprite_t actor_slide_left[]={{0,0,4,0},{0,8,2,0},{0,8,0,0},METASPR_TERM};
+void gfx_actor(uint8_t first,uint8_t tile,uint8_t wide,int16_t x,int16_t y,uint8_t pal,uint8_t flip){
+    const metasprite_t *pose;
+    if(flip)pal|=S_FLIPX;
+    if(wide){pose=flip?actor_slide_left:actor_slide_right;x-=4;y++;shadow_OAM[first+3].y=0;}
+    else{pose=flip?actor_left:actor_right;y-=7;}
+    move_metasprite_ex(pose,tile,pal,first,(uint8_t)x,(uint8_t)y);
+}
+
+// Shared lower bodies keep all twelve side poses in 28 tiles, outside the
+// signed background tile range occupied by Club Court (bank 0: 128..213).
+#define SIDE_R(h,b) {{0,0,h,0},{16,0,b,0},{-16,8,h+2,0},{16,0,b+2,0},METASPR_TERM}
+#define SIDE_L(h,b) {{0,0,h+2,0},{16,0,b+2,0},{-16,8,h,0},{16,0,b,0},METASPR_TERM}
+#define SIDE_DEFINE(id,h) \
+static const metasprite_t sr##id##a[]=SIDE_R(h,16),sr##id##b[]=SIDE_R(h,20),sr##id##c[]=SIDE_R(h,24); \
+static const metasprite_t sl##id##a[]=SIDE_L(h,16),sl##id##b[]=SIDE_L(h,20),sl##id##c[]=SIDE_L(h,24);
+SIDE_DEFINE(0,0)
+SIDE_DEFINE(1,4)
+SIDE_DEFINE(2,8)
+SIDE_DEFINE(3,12)
+#define SIDE_PTR_ROW(M,id) M##id##a,M##id##b,M##id##c
+static const metasprite_t *const side_right_ptr[]={SIDE_PTR_ROW(sr,0),SIDE_PTR_ROW(sr,1),SIDE_PTR_ROW(sr,2),SIDE_PTR_ROW(sr,3)};
+static const metasprite_t *const side_left_ptr[]={SIDE_PTR_ROW(sl,0),SIDE_PTR_ROW(sl,1),SIDE_PTR_ROW(sl,2),SIDE_PTR_ROW(sl,3)};
+void gfx_side(uint8_t first,uint8_t character,uint8_t pose,uint8_t x,uint8_t y,uint8_t flip){
+    uint8_t index=character*3+pose,pal=character;
+    if(flip)pal|=S_FLIPX;
+    move_metasprite_ex(flip?side_left_ptr[index]:side_right_ptr[index],214,pal,first,x,(uint8_t)(y-7));
+}
+// Keep the locomotion view calculation outside the full Futnet ROM bank.
+uint8_t gfx_running_side(uint8_t previous,int8_t vx,int8_t vy){
+    uint8_t mx=vx<0?-vx:vx,my=vy<0?-vy:vy;
+    int8_t delta=mx-my;
+    if(delta>3)return 1;
+    if(delta<-3)return 0;
+    return previous;
+}
+
+uint8_t gfx_ball_phase,gfx_ball_first;
+uint16_t gfx_ball_distance;
+void gfx_ball_init(uint8_t extra_first){
+    gfx_ball_first=extra_first;gfx_ball_phase=0;gfx_ball_distance=0;
+    banked_sprite_data(extra_first,BALL_EXTRA_TILE_COUNT,ball_extra_tiles,BANK(ball_extra));
+}
+void gfx_ball_step(int16_t vx,int16_t vy){
+    static uint16_t x,y,t;
+    x=vx<0?-vx:vx;y=vy<0?-vy:vy;
+    if(x<y){t=x;x=y;y=t;}
+    // Approximate court distance, not elapsed time: four pixels per phase,
+    // about one circumference per six-frame revolution. Rest holds its pose.
+    gfx_ball_distance+=x+(y>>1);
+    if(gfx_ball_distance>=64){
+        // Keep fast shots readable instead of skipping poses and strobing.
+        if(gfx_ball_distance>=128)gfx_ball_distance=127;
+        gfx_ball_distance-=64;if(++gfx_ball_phase==6)gfx_ball_phase=0;
+    }
+}
+uint8_t gfx_ball_tile(void){
+    return gfx_ball_phase<2?gfx_ball_phase<<1:gfx_ball_first+((gfx_ball_phase-2)<<1);
 }

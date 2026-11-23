@@ -55,6 +55,10 @@ uint8_t *gfx_strip_attr(uint8_t x, uint8_t y, uint8_t vertical, uint8_t len);
 void gfx_vram_copy(uint8_t *dst, const uint8_t *src, uint8_t len, uint8_t bank);
 // Mark this frame's queued updates ready for the next vblank.
 void gfx_commit(void);
+// Ground ellipse, two sprites in VRAM bank 0; x/y are the projected feet.
+void gfx_player_shadow(uint8_t first, int16_t x, int16_t y);
+void gfx_player_shadow_init(uint8_t first);
+void gfx_actor(uint8_t first, uint8_t tile, uint8_t wide, int16_t x, int16_t y, uint8_t pal, uint8_t flip);
 // Write everything queued now (waits for VRAM access if the display is on).
 void gfx_flush(void);
 
@@ -127,6 +131,7 @@ void palettes_title(void) BANKED;
 #define PLAY_PAL_FIELD 0  // the court, its lines, the floor round it, the goals
 #define PLAY_PAL_BOARD 1  // the boards along the top and bottom
 void palettes_play(void) BANKED;
+void palettes_futsal(void) BANKED;
 // Menus (game over): the title's colors.
 void palettes_menu(void) BANKED;
 
@@ -142,6 +147,12 @@ void fade_in(void) BANKED;
 // (SWITCH_ROM would swap its own code out from under the CPU), so it calls these:
 // they live in bank 0, switch to `bank`, copy, and switch back.
 void banked_memcpy(void *dst, const void *src, uint16_t n, uint8_t bank);
+// Packed futsal side cycle: four character heads plus three shared lower bodies.
+void gfx_side(uint8_t first,uint8_t character,uint8_t pose,uint8_t x,uint8_t y,uint8_t flip);
+uint8_t gfx_running_side(uint8_t previous,int8_t vx,int8_t vy);
+void gfx_ball_init(uint8_t extra_first);
+void gfx_ball_step(int16_t vx,int16_t vy);
+uint8_t gfx_ball_tile(void);
 void banked_sprite_data(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);
 // The same into the Color's second VRAM bank (sprites whose flags have S_BANK).
 void banked_sprite_data_vbk1(uint8_t first, uint8_t n, const uint8_t *data, uint8_t bank);

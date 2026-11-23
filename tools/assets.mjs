@@ -28,10 +28,12 @@
 //
 // Called by build.mjs; generated files are only rewritten when a source PNG is newer.
 import fs from 'node:fs';
+import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './player-art.mjs';
+import {BALL_EXTRA} from './ball-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { FUTSAL_PITCH, PITCH, HUD_TILES, SPRITE_TILES, PLAYER_TILES, asciiTile } from './tile-art.mjs';
+import { FUTSAL_PITCH, PITCH, HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
 import * as MG_MACHINE from './art/mg_machine.mjs';
 import * as MG_WALL from './art/mg_wall.mjs';
 import * as MG_JUGGLE from './art/mg_juggle.mjs';
@@ -57,9 +59,13 @@ export const ASSETS = [
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).
-  { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs' },
+  { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs', deps:['artwork/ball/v1/ball.json'] },
+  { name: 'ball_extra', bank: true, ascii: BALL_EXTRA, src: 'artwork/ball/v1/ball.json' },
   // The players' frames, both views (VRAM bank 1).
-  { name: 'players', bank: true, ascii: PLAYER_TILES, src: 'tools/tile-art.mjs' },
+  { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
+  ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),
+  ...CHARACTERS.map(id => ({ name: `action_${id}`, bank: true, ascii: actionTiles(id), src: `artwork/players/roster/${id}/player.json` })),
+  { name: 'side_roster', bank: true, ascii: sideAtlas(), src: 'tools/player-art.mjs', deps: CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`) },
   // The mini games (src/mg_*.c): each a background (map from SCENE_TILES on) and
   // its own sprite tiles, drawn in tools/art/mg_*.mjs.
   ...MINIGAME_ART.flatMap(([id, art]) => [
@@ -325,7 +331,7 @@ export function buildSprite(a) {
 /** Regenerates stale assets. Returns the list of generated .c files. */
 export function buildAssets({ quiet = false } = {}) {
   fs.mkdirSync(GEN_DIR, { recursive: true });
-  const self = fs.statSync(fileURLToPath(import.meta.url)).mtimeMs;
+  const self = Math.max(fs.statSync(fileURLToPath(import.meta.url)).mtimeMs, fs.statSync(new URL('./player-art.mjs', import.meta.url)).mtimeMs);
   const out = [];
   for (const a of ASSETS) {
     const c = path.join(GEN_DIR, `${a.name}.c`);
@@ -333,7 +339,7 @@ export function buildAssets({ quiet = false } = {}) {
     out.push(c);
     const sources = a.kind === 'sprite'
       ? spriteSources(a)
-      : [path.join(ROOT, a.src)];
+      : [path.join(ROOT, a.src), ...(a.deps || []).map(f=>path.join(ROOT,f))];
     const genTime = fs.existsSync(c) && fs.existsSync(h) ? fs.statSync(c).mtimeMs : 0;
     if (genTime > Math.max(self, ...sources.map((f) => fs.statSync(f).mtimeMs))) continue;
     if (a.kind === 'sprite') {

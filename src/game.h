@@ -47,6 +47,7 @@
 // match is one set, or the best of three (match_sets, chosen on the title).
 #define SET_POINTS 11
 #define SET_CAP 15
+#define GOAL_FRAMES 110  // a point's celebration, frames
 
 // The rules of the rally (futnet singles), and how a point was won (point_reason):
 // - two touches a side (both yours, one after the other if you like), one bounce;
@@ -66,10 +67,12 @@
 #define SHOT_CURVE 2
 #define SHOT_LOB 3
 #define SHOT_DROP 4
+#define SHOT_GOLD 5  // both buttons, a slam coming: a gold slam
 // Readying a strike plants you until it goes, and you can only ready one with the
-// ball coming your way (or loose in your half). The meter fills as you wait, and
-// each tap of the button again adds more (up to TAP_MAX taps). A full meter on A or
-// B sets the ball on fire. Meeting a ball on fire needs half a meter.
+// ball coming your way (or loose in your half). Your meter fills only as you press
+// (YOU_TAP each press, the first too) and stays till the strike or SELECT; the CPU's
+// fills as it waits, and each tap adds more (up to TAP_MAX taps). A full meter on A
+// or B sets the ball on fire.
 #define CHARGE_MAX 32
 #define TAP_CHARGE 3
 #define TAP_MAX 5
@@ -149,6 +152,7 @@ extern uint8_t ball_drop;   // a drop shot: it barely bounces
 extern uint8_t ball_trail;  // the trail behind it: 0 none, TRAIL_POWER (red), TRAIL_CURVE (blue)
 #define TRAIL_POWER 1
 #define TRAIL_CURVE 2
+#define TRAIL_GOLD 3
 extern uint8_t trail_len;   // its dots
 extern uint8_t ball_lob;    // a lob: it sits up where it lands (slowed, a high bounce)
 extern uint8_t last_touch;  // the side that touched it last

@@ -104,13 +104,22 @@ that rallies against its CPU. Only measurements were taken; nothing was copied.
 |---|---|---|
 | A rally shot, one player to the other | 60-80 frames (about 1.1 s); the shadow 1.1-1.6 px a frame down a court about 120 px long | 53 frames median, 74 at p90 (was 33: twice as fast) |
 | A serve | about 49 frames, 2.75 px a frame | |
-| Running | about 1.75 px a frame across, about half that up and down | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
-| Starting / stopping / turning | about 10 / 8 / 14 frames | 8 / 6 / 14 (`ACCEL` 3, `BRAKE` 4) |
+| Running | the same speed every way (it looks half as fast up and down: the perspective) | 1.4 px a frame (`SPEED_YOU` 22 SUB) |
+| Starting | a straight ramp, full speed in 7 frames | 8 frames (`ACCEL` 3) |
+| Letting go | a coast of 20 frames, easing down evenly | 22 frames, about 15 px (`GRIP` 1) |
+| Turning round | a skid at the coasting rate for 8-10 frames, then the full push: about 20 frames | 9 frames' skid (`SKID_FRAMES`), then `ACCEL`: about 21 |
 | A trail behind the ball | 5 afterimages | 4 dots, red or blue |
 
 So the whole ball plays at half speed: gravity 3/4 SUB a frame and every speed and lift
 halved, which keeps each arc's shape and height and doubles its time. Players accelerate,
-coast and turn (`approach()`), and the auto-run steers through the same momentum.
+coast and turn (`approach()`). The running rows come from the velocity itself, read
+from its RAM a frame at a time (build/scratch/mt/vel.mjs, 2026-11-22: from the playtest,
+"a real nice loose easing ... a real momentum to moving around the field"); the first
+pass, from sprite positions, had the coast at 8 frames. Each player's speed, push and
+grip (`pl_top`, `pl_accel`, `pl_grip`) are their own, for upgrades later (Mario
+Tennis's RPG mode raises them). The auto-run (the game running you to the ball) and the
+CPU brake firmly instead (`BRAKE` 4), so they stop where they mean to; it's your own
+running that glides.
 
 The court is played in flat coordinates (`game.h`) and drawn in perspective: each depth
 has a screen row and a width scale (`proj_y`, `proj_s` in `play.c`, the same formula as
@@ -143,25 +152,39 @@ slammed (the Captain Tsubasa feel).
 
 - **Queueing a strike** (2026-11-22, from the playtest: "I should be able to return the
   ball as long as I'm near it, as long as you queue it up"): A or B any time in a
-  rally. It waits, and you move freely, until the ball comes your way; then it charges
-  (a step every 4 frames, each tap of the button again adds 3, up to 5 taps) and the
+  rally. It waits, and you move freely, until the ball comes your way; then the
   game runs you to where to meet it, at running speed with the same momentum, easing in
   as you get there, anywhere in your half (the d-pad doesn't move you then). The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees). You only play the ball over your
   own half: no reaching over the net.
+- **The meter fills only as you press** (2026-11-22, from the playtest: "repeatedly
+  pressing A should fill the gauge, not holding it, and it shouldn't go down"): each
+  press of A or B adds 4, the first too, as many as you like; waiting and holding add
+  nothing, and it never drains or gives up. SELECT calls the strike off. The CPU's
+  still fills as it waits (a step every 4 frames, and up to 5 taps of 3) and gives up
+  a strike held full for 90 frames. Meeting a ball on fire cleanly takes 12 (three
+  presses); less, and it pops up off you.
 - **Aim** (2026-11-22, from the playtest: "it doesn't feel like I can control the
   ball", then "the reticle's left but the ball goes straight"): a direction from where
-  you are. Neutral goes straight on; LEFT / RIGHT angle it as far across as a strike
-  goes (half as far as down the court), kept in the court; UP plays it deep, DOWN short.
+  you are. LEFT / RIGHT angle it as far across as a strike goes (half as far as down
+  the court), kept in the court; UP plays it deep, DOWN short. Neutral goes away from
+  the CPU (from the playtest: "no matter what, I always hit the ball to them"): half as
+  far across, to the side it isn't on, and in depth short of it when it's back by its
+  baseline (40 px past the net at most), past it when it's up near the net. Headers and
+  bicycle kicks are aimed the same way (they used to land at a fixed depth).
   Held as it goes, or last held while queued (they stick). Queued (and serving), the
   d-pad only aims: it doesn't walk you, so aiming left never leaves you on the left
   sideline striking straight. A yellow marker on the CPU's side shows where it will land
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B then A: lob**, dropping just behind the other player. **A then B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.)
+- **B then A: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **A then B: drop shot**,
+  dying just past halfway. (Mario Tennis has these the other way round.) The second
+  button arms it for 24 frames (about 0.4 s), so press it just before the ball arrives;
+  struck later it's the curve or the power shot again (2026-11-22, from the playtest:
+  "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **No distance limits** (2026-11-22, from the playtest): you're run to the ball from
@@ -173,9 +196,28 @@ slammed (the Captain Tsubasa feel).
   A slide that gets there pops the ball up, and you're down a short while; miss and
   you're down longer. (Measured with build/scratch/misses.mjs: balls getting past within
   30 px of a queued player went from 32 to 15 in seven matches.)
+- **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
+  of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
+  your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
+  there; met in the air with half a meter it's a **slam**, on fire, deep; with less, a
+  header, still out of the air. A drop shot gets the marker too, off its bounce as well,
+  and hops higher (about 11 px). The CPU taps hard against a ball on fire, so a slam can
+  be met clean.
+- **Slams by the button** (2026-11-22, from the playtest: "if it's A then it's a red
+  slam, if it's B it's a blue slam, and if it's A+B it's a gold slam"): every slam is a
+  jump into a bicycle kick. A: red, straight (48). B: blue, bending the curve's way, as
+  fast. Both (the other button while the slam spot shows, or both at once): **GLD** on
+  the HUD, gold, straight and faster (56), its trail in the fire's colors; only a full
+  meter meets a gold slam clean, less pops it up (a slam back, if you're ready). A lob or
+  drop shot queued slams red. Gold is yours: the CPU slams red or blue.
+- **Bursts** (2026-11-22): an impact star where a slam is met (big) or a strike goes on
+  fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
+  BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
+  the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
+  20-27, a row of sprites placed a frame at most (src/vfx.c).
 - **Pop-ups**: a slide, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
-  on fire. A slam met with three quarters of a meter is returned clean; less, and it
+  on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.
 - **Unready**, your first touch controls it (v0.3); a ball on fire knocks you down.
 - **Bounces** (2026-11-22, from the playtest: some returns died where they landed): a
@@ -186,7 +228,31 @@ slammed (the Captain Tsubasa feel).
   strike arcs, to come down at a depth set by its charge (deeper the more charged), so
   the ball is in the air with its shadow under it, and it's lifted to clear the net
   (fast flat strikes land deeper, or long). A strike with almost no meter (under 4:
-  readied at the last moment) is scuffed: it comes down short, on your own side.
+  readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
+  the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
+  weak one is sped up instead of looping up like a pop-up; drop shots, 100.
+- **The CPU under pressure** (2026-11-22, from "how can we improve playability": points
+  went on and on, a player who didn't aim getting about 70 touches a point): the CPU,
+  meeting your shot, may mishit it. Out of 64: a quarter of how far it ran for it (from
+  where it stood as you struck it) plus half the shot's speed, past 30. It runs about
+  74 px for a shot at the median, at speed 28: no chance; a wide fast one (100 px, 40)
+  about a quarter. Mostly it pops up (a slam for you); a quarter of the time it's scuffed
+  into its own half. Aiming bots now win their points in about 15 s, 11-8 or 9-6.
+- **Cues** (the same playtest): the CPU's struck it to you and nothing's queued, your
+  player blinks white and the HUD says **GO!** (a fire shot met unready knocks you down:
+  the commonest lost point left). Each press of A or B ticks; half a meter (a slam
+  ready) and full have their own chimes (SFX_TICK, SFX_HALF, SFX_CHARGE). The slam spot
+  is a 16x8 ring (two sprites, S_RING at tile 28, after the ball's spin tiles).
+- **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
+  with nothing queued, the d-pad let go and the ball going away, you jog back to the
+  middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
+  10-20 frames after the CPU's touch and presses three times; build/scratch/humanbot.mjs)
+  was within 16 px of the net for three quarters of the CPU's strikes: the auto-run only
+  ever takes you toward the ball, so a rally crept you up to the net, where lobs and
+  drives went over your head. Half its lost points were its own volleys, out: struck
+  right at the net, at its height, the net check (`net_clear`) asked for the clearance in
+  one frame and launched the ball 111 px up and long. It now allows at least 6 frames.
+  The bot went from losing every game to winning 31 points to 15.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
@@ -194,6 +260,9 @@ slammed (the Captain Tsubasa feel).
   and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
   from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
   fades out at the bounce or the next touch.
+- **Shot label** (2026-11-22, a debugging aid: "I'm hitting lobs when I mean curves"): the
+  HUD says your shot where it says YOU: PWR, CRV, LOB or DRP while queued, then for a
+  second what went (HDR and BIK go straight, SLM a slam, POP a pop-up, CTL a control).
 - **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's
   struck on the way down, aimed with LEFT / RIGHT, and must go over.
 - **CPU**: traces the ball's flight 12 frames a step (gravity and a bounce, not the curve,

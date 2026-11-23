@@ -6,6 +6,8 @@
 //
 // Proportions follow Mario Tennis (GBC), measured from its sheets (docs/design).
 
+import {BALL_FRAMES} from './ball-art.mjs';
+
 /** 8 strings -> 16 bytes of 2bpp. */
 export function asciiTile(rows, name = 'tile') {
   if (rows.length !== 8 || rows.some((r) => r.length !== 8)) throw new Error(`${name}: a tile is 8 rows of 8 characters`);
@@ -122,6 +124,48 @@ function drawCourt(futsal = false) {
     const d = y < BOARD_TOP ? BOARD_TOP - 1 - y : y - BOARD_BOTTOM;  // 0 nearest the court
     for (let x = 0; x < W; x++) px[y][x] = d === 0 ? 2 : d === 1 ? 3 : d >= 6 ? 2 : d === 4 && x % 8 === 3 ? 2 : 1;
   }
+  if (futsal) {
+    // Club Court: a quiet blue playing surface with detailed green surrounds.
+    for (let y = 0; y < 32; y++) for (let x = 0; x < W; x++) plot(x, y, 0);
+    for (let y = 3; y <= 16; y++) for (let x = 0; x < W; x++) {
+      plot(x, y, y === 3 || y === 16 || x % 24 === 0 ? 1 : 2);
+      if (y > 4 && y < 15 && ((x + y) % 6 === 0 || (x - y + 180) % 6 === 0)) plot(x, y, 3);
+    }
+    for (let x = 0; x < W; x += 24) {
+      for (let y = 1; y < 19; y++) plot(x, y, 1), plot(x + 1, y, 3);
+    }
+    // Small shrubs around the apron; side planting stays outside the touchlines.
+    const bush = (cx, cy, top = false) => {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        if (dx * dx + dy * dy > 11) continue;
+        plot(cx + dx, cy + dy, top ? (Math.abs(dx) + Math.abs(dy) > 3 ? 2 : 1) : (Math.abs(dx) + Math.abs(dy) > 3 ? 1 : 0));
+      }
+      plot(cx - 1, cy - 2, 0);
+    };
+    for (const x of [6, 22, 38, 122]) bush(x, 25, true);
+    for (const y of [45, 69, 101, 129]) bush(3, y), bush(156, y);
+    for (let x = 0; x < W; x += 8) for (let y = 38; y < H; y += 16) {
+      if (x < 5 || x > 154 || y > 154) plot(x, y, 1);
+    }
+    // Bench occupies whole palette-aligned tiles in the top-right apron.
+    for (let y = 16; y < 32; y++) for (let x = 128; x < 152; x++) plot(x, y, 0);
+    for (let y = 20; y <= 26; y++) for (let x = 130; x <= 149; x++) plot(x, y, y % 3 === 0 ? 2 : 1);
+    for (const x of [132, 147]) for (let y = 26; y <= 29; y++) plot(x, y, 2);
+    // Center circle is projected from the same flat coordinates as the ball.
+    for (let a = 0; a < Math.PI * 2; a += 0.025) line(80 + Math.cos(a) * 21, HALF + Math.sin(a) * 21);
+    line(80, HALF);
+    // Goal mouths match collision coordinates x=56..104. Dark net interiors
+    // and a cream frame read clearly against the bright court and grass.
+    for (const end of [FAR, NEAR]) {
+      const y = projY(end), left = projX(56, end), right = projX(104, end);
+      const back = y + (end === FAR ? -9 : 9);
+      for (let gy = Math.min(y, back); gy <= Math.max(y, back); gy++) for (let gx = left; gx <= right; gx++) {
+        const rim = gx === left || gx === right || gy === back;
+        plot(gx, gy, rim || ((gx + gy) % 5 === 0 && gy !== y) ? 3 : 1);
+      }
+      for (let gx = left; gx <= right; gx++) plot(gx, y, 3);
+    }
+  }
   return px;
 }
 
@@ -133,7 +177,12 @@ function buildPitch(futsal = false) {
     for (let tx = 0; tx < PITCH_W; tx++) {
       const rows = [];
       for (let y = 0; y < 8; y++) rows.push(px[ty * 8 + y].slice(tx * 8, tx * 8 + 8).join(''));
-      const pal = ty * 8 < BOARD_TOP || ty * 8 >= BOARD_BOTTOM ? PAL_BOARD : PAL_FIELD;
+      let pal = ty * 8 < BOARD_TOP || ty * 8 >= BOARD_BOTTOM ? PAL_BOARD : PAL_FIELD;
+      if (futsal) {
+        const sy = ty * 8, fy = Math.min(NEAR, Math.max(0, (sy - COURT_SY) * 2));
+        pal = sy < 32 ? 1 : sy >= projY(NEAR) || tx * 8 + 7 < projX(COURT_X0, fy) || tx * 8 > projX(COURT_X1, fy) ? 3 : 0;
+        if (ty >= 2 && ty < 4 && tx >= 16 && tx < 19) pal = 2;
+      }
       const key = rows.join('');  // the palette is an attribute: same pixels, same tile
       if (!keys.has(key)) {
         keys.set(key, tiles.length);
@@ -265,9 +314,9 @@ export const PLAYER_TILES = [
 ];
 
 // The ball (8x8, the top of an 8x16 pair): 1 white, 2 its patches, 3 outline.
-// Two frames, so it rolls. Its shadow on the court (3). In VRAM bank 0.
-const ballA = ['..3333..', '.311213.', '31122113', '31211113', '31111213', '31121113', '.312111.', '..3333..'];
-const ballB = ['..3333..', '.312113.', '31111213', '32111123', '31211113', '31112213', '.311113.', '..3333..'];
+// The first two of six spin frames. Four extra frames load into mode-specific
+// free slots; the shadow stays on the court. All use VRAM bank 0.
+const [ballA,ballB] = BALL_FRAMES;
 const shadow = ['........', '........', '........', '........', '..3333..', '.333333.', '..3333..', '........'];
 
 // The aim marker (1 bright, 3 outline): where your queued strike will land.
@@ -289,6 +338,9 @@ export const SPRITE_TILES = [
   trail1, blank,
   trail2, blank,
   trail3, blank,
+  // 16x8 ground ellipse: two 8x16 hardware sprites, tiles 16 and 18.
+  ['........','........','.....333','..333333','.3333333','..333333','.....333','........'], blank,
+  ['........','........','333.....','333333..','3333333.','333333..','333.....','........'], blank,
 ];
 
 export const FUTSAL_PITCH = buildPitch(true);
