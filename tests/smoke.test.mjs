@@ -192,15 +192,16 @@ test('you reach a body width either side, and head a ball up to 35 px', () => {
   }
 });
 
-test('queued, you are run to where an angled ball crosses your line, and you strike it', () => {
+test('an angled ball: stand where it crosses your line, queue, and you strike it', () => {
   const emu = quietRally();
   placePlayer(emu, YOU, 40, 190);
   incoming(emu, 20, 120, 24, 20);
   set16(emu, 'ball_vx', 24);  // angled across: it crosses your line about 50 px to your right
+  standAtMeet(emu);
   emu.tap('A');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 240, 'the strike');
   assert.equal(at(emu, 'pl_shots', YOU), 1, 'struck, not missed');
-  assert.notEqual(at(emu, 'pl_last_move', YOU), MOVE_SLIDE, 'run there, no slide needed');
+  assert.notEqual(at(emu, 'pl_last_move', YOU), MOVE_SLIDE, 'there, no slide needed');
 });
 
 test('every strike arcs over the net', () => {
@@ -488,24 +489,27 @@ test('queued, you are locked where you stand: a ball in reach, you return it', (
   assert.ok(emu.v('ball_vy', 'i16') < 0, 'returned');
 });
 
-test('too far to reach, you slide and return it; further still, you miss', () => {
-  const emu = quietRally();
-  ballAt(emu, 112, 150, 0, 0, 96);
-  emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
-  emu.write8(emu.symbols.addr('pl_charge') + YOU, 12);
-  emu.until((e) => at(e, 'pl_move', YOU) === MOVE_SLIDE, 20, 'the slide');
-  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 12, 'the touch');
-  assert.equal(at(emu, 'pl_move', YOU), MOVE_SLIDE, 'still on the floor');
-  assert.equal(emu.v('ball_pop'), 0, 'a return, not a pop-up');
-  assert.ok(emu.v('ball_vy', 'i16') < 0, 'into the other half');
-  const x = at(emu, 'pl_x', YOU, 'i16');
-  emu.hold('LEFT', 20);
-  assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'on the floor');
-  const far = quietRally();
-  ballAt(far, 150, 150, 0, 0, 64);  // 70 px across: past a slide
-  far.write8(far.symbols.addr('pl_shot') + YOU, SHOT_POWER);
-  far.idle(40);
-  assert.equal(at(far, 'pl_shots', YOU), 0, 'missed: never touched');
+test('out of reach you always slide: near, you return it; at full stretch, a pop-up; too far, a miss', () => {
+  const slideAt = (off) => {
+    const emu = quietRally();
+    ballAt(emu, 80 + off, 130, 0, 0, 40);
+    emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
+    emu.write8(emu.symbols.addr('pl_charge') + YOU, 12);
+    let slid = false;
+    for (let f = 0; f < 60 && !at(emu, 'pl_shots', YOU); f++) { emu.idle(1); slid ||= at(emu, 'pl_move', YOU) === MOVE_SLIDE; }
+    return { emu, slid, touched: at(emu, 'pl_shots', YOU) > 0, pop: emu.v('ball_pop') };
+  };
+  const near = slideAt(28), stretch = slideAt(48), far = slideAt(70);
+  assert.ok(near.slid && near.touched && !near.pop, 'near: slide and return');
+  assert.ok(near.emu.v('ball_vy', 'i16') < 0, 'into the other half');
+  assert.equal(at(near.emu, 'pl_move', YOU), MOVE_SLIDE, 'still on the floor');
+  const x = at(near.emu, 'pl_x', YOU, 'i16');
+  near.emu.hold('LEFT', 20);
+  assert.equal(at(near.emu, 'pl_x', YOU, 'i16'), x, 'on the floor');
+  assert.ok(stretch.slid && stretch.touched && stretch.pop, 'full stretch: slid, popped up');
+  assert.ok(far.slid, 'too far: you still try');
+  assert.ok(!far.touched, 'and miss');
+  assert.equal(at(far.emu, 'pl_shot', YOU), 0, 'the strike called off');
 });
 
 test('unready, your first touch controls it, up in front of you; your second can slam it', () => {

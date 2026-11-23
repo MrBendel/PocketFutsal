@@ -107,6 +107,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
 #define SLIDE_SPEED 48
 #define SLIDE_LUNGE 12    // frames of sliding
+#define SLIDE_STRETCH 8   // got there within this many of them: a return; later, a pop-up
 // The furthest a slide gets you: your reach plus the lunge (16 + 36 px). No other
 // limit: you're run to the ball from anywhere; out of this at the last moment,
 // you just miss.
@@ -149,6 +150,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define HOME_YOU 196      // yours: between shots, nothing queued or held, you jog back
 #define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
 #define CPU_LATE 40       // px: and this close, in place or not
+#define CPU_START 8       // its meter as it readies
 #define CONTROL_LIFT 28   // a control touch: about 32 px up, 74 frames
 #define CONTROL_FRAMES 8  // its pose: then you can ready your second touch
 
@@ -812,13 +814,15 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         keep_in(i);
         relate(i);
         if (in_half(i) && abs16(rel_x) <= REACH_X && rel_fwd >= -REACH_BACK - 2 && rel_fwd <= REACH_FWD && rel_z < SLIDE_Z) {
-            // Got there: slide and return it, the strike by its height (on fire,
-            // without the meter to meet it: down you go).
+            // Got there: slide and return it, the strike by its height; at full
+            // stretch (the lunge's last third), only a pop-up (on fire, without
+            // the meter to meet it: down you go).
             if (ball_power && pl_charge[i] < (i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
                 knock_down(i);
                 return;
             }
-            meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
+            if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_STRETCH) pop_up(i, MOVE_SLIDE, 0);
+            else meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
             pl_move[i] = MOVE_SLIDE;
             pl_move_timer[i] = SLIDE_REST;  // got there: up sooner
         }
@@ -898,13 +902,10 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // Queued, you're locked where you stood (playtest: "position after the kick
         // to where the ball's landing, power up, locked; near it you return, a bit
         // further you slide and return, too far you miss"): only a loose ball in
-        // your half walks you to it. The CPU is still run to where to meet it (at
-        // running speed, easing in; going out, it leaves it).
-        int16_t tx = loose ? PX(ball_x) : meet_x[i];
-        int16_t ty = loose ? PX(ball_y) + (i == SIDE_YOU ? 6 : -6) : meet_y[i];  // loose: just behind it
-        int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
-        // (Only on a trace of this flight: an old one would send it the wrong way.)
-        if (loose || (i == SIDE_CPU && meet_flight[i] == ball_flight && !meet_out[i])) {
+        // your half walks you to it. The CPU too: it gets there, then readies.
+        if (loose) {
+            int16_t dx = PX(ball_x) - PX(pl_x[i]);
+            int16_t dy = PX(ball_y) + (i == SIDE_YOU ? 6 : -6) - PX(pl_y[i]);  // just behind it
             int8_t sp = pl_top[i];
             pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // a quarter of the way (SUB) a frame, near
             pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
@@ -914,10 +915,13 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // just gets there in time (the ball's frames to reach you, rel_fwd / |vy|,
         // down to the slide's frames across, (ax - REACH_X + 2) / SLIDE_SPEED).
         // Toward where it'll cross your line (its trace), not where it is now: an
-        // angled ball keeps going across while you lunge.
+        // angled ball keeps going across while you lunge. Too far for a slide to
+        // get there, you still try, at full stretch (playtest: "the player should
+        // always make the attempt even if they're too far"); a ball going out, you
+        // let go.
         int16_t sx = meet_flight[i] == ball_flight ? meet_x[i] - PX(pl_x[i]) : rel_x, asx = abs16(sx);
-        if (!loose && !meet_out[i] && asx > REACH_X && asx <= SLIDE_REACH && rel_fwd >= -REACH_BACK && rel_z < SLIDE_Z &&
-            rel_fwd * SLIDE_SPEED <= (asx - REACH_X + 2) * abs16(ball_vy))
+        if (!loose && !meet_out[i] && asx > REACH_X && rel_fwd >= -REACH_BACK && rel_z < SLIDE_Z &&
+            rel_fwd * SLIDE_SPEED <= (min16(asx, SLIDE_REACH) - REACH_X + 2) * abs16(ball_vy))
             slide(i, sx < 0 ? -SLIDE_SPEED : SLIDE_SPEED, 0);
         return;
     }
@@ -963,6 +967,9 @@ static void cpu_ready(void) {
     if (yy < 160 && (r & 3) == 0) ready(SIDE_CPU, 1), ready(SIDE_CPU, 0);
     else if (yy > 196 && (r & 3) == 1) ready(SIDE_CPU, 0), ready(SIDE_CPU, 1);
     else ready(SIDE_CPU, ((r >> 2) & 3) == 0);
+    // Readied as it gets there (locked, as you are), not as the ball sets off: two
+    // of your presses' worth to start (with less it netted half its strikes).
+    if (pl_charge[SIDE_CPU] < CPU_START) pl_charge[SIDE_CPU] = CPU_START;
 }
 
 // The CPU: get across to where the ball's coming, plant in time, tap now and
@@ -1011,13 +1018,16 @@ static void cpu_update(void) {
                     dist = abs16(by - cy);
                 }
             }
-            uint8_t there = abs16(tx - cx) <= 3 && abs16(ty - cy) <= 3;
+            // There: lined up across, near enough in depth (where to meet it moves
+            // with where it stands: exactly there, it readied late, scuffing).
+            uint8_t there = abs16(tx - cx) <= 3 && abs16(ty - cy) <= 10;
             if (meet_out[SIDE_CPU]) {
                 if (pl_shot[SIDE_CPU]) unready(SIDE_CPU);
             } else if (!pl_shot[SIDE_CPU]) {
-                // By your rules: it queues as soon as the ball's on its way (the
-                // game runs it there), with a moment's reaction.
-                if (there || dist < CPU_PLANT || !(frame_count & 3)) cpu_ready();
+                // By your rules: it gets there first, then readies (locked, as you
+                // are); the ball close and not there yet, it readies anyway and
+                // slides for it if it must.
+                if (there || dist < CPU_LATE) cpu_ready();
             } else if (!((uint8_t)frame_count & (ball_power ? 3 : 15)) && (rand() & 3)) {  // on fire: taps hard (to meet it clean)
                 ready(SIDE_CPU, pl_shot[SIDE_CPU] == SHOT_CURVE);  // a tap
             }
