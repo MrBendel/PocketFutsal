@@ -495,7 +495,7 @@ test('kickoff perception timing varies across seeds and reproduces the same seed
 
 test('seeded Watch matches give both teams wins and comparable scoring opportunities',()=>{
  const wins=[0,0],goals=[0,0],shots=[0,0];let worst=0;
- for(const seed of [1,7,19,42,77,123,256,511]){
+ for(const seed of [1,7,19,42,77,123,256,511,2026]){
   const e=startGame(undefined,seed);let previousShots=0;
   for(let f=0;f<18000&&e.v('game_state')===PLAY;f++){
    e.idle();if(e.v('game_state')!==PLAY||e.v('in_transition'))continue;
