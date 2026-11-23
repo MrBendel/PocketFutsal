@@ -56,6 +56,9 @@ uint8_t fs_side[4];
 uint8_t fs_role[4]; // 0 chase, 1 carry, 2 support, 3 cover
 uint8_t fs_kickoff_phase,fs_thought;
 uint8_t fs_presser[2]; // One challenger per team; partner protects the outlet.
+int8_t fs_cut_dir;
+uint8_t fs_cut_window,fs_cut_count,fs_cut_cooldown,fs_stumble_player,fs_stumble_timer;
+uint16_t fs_ankle_count;
 uint8_t fs_ball_oam, fs_hud_pending;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
 uint8_t fs_trail_x[16], fs_trail_y[16];
@@ -63,7 +66,7 @@ uint8_t fs_projection_y[225], fs_projection_s[225];
 
 static int16_t ab(int16_t n) { return n < 0 ? -n : n; }
 static int16_t clamp(int16_t n, int16_t lo, int16_t hi) { return n < lo ? lo : n > hi ? hi : n; }
-static uint8_t team(uint8_t i) { return i >> 1; }
+#define team(i) ((uint8_t)((i) >> 1))
 static int16_t distance(uint8_t i,int16_t x,int16_t y){
     int16_t dx=fs_pl_x[i]-x,dy=fs_pl_y[i]-y;
     if(dx<0)dx=-dx;if(dy<0)dy=-dy;
@@ -103,6 +106,8 @@ static void kickoff(uint8_t side) {
     // every restart. Stagger perception evenly, with a seeded phase per kickoff.
     fs_kickoff_phase=rand()&7;
     fs_presser[0]=0;fs_presser[1]=2;
+    fs_cut_dir=0;fs_cut_window=fs_cut_count=fs_cut_cooldown=fs_stumble_timer=0;
+    fs_stumble_player=NOBODY;
     for(uint8_t i=0;i<4;i++) {
         fs_tackling[i]=fs_cooldown[i]=fs_action[i]=fs_burst[i]=fs_moving[i]=fs_flip[i]=0;
         fs_view[i]=team(i)?0:1;
@@ -264,7 +269,35 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     if(vy<-3)fs_view[i]=1;else if(vy>3)fs_view[i]=0;
     if(vx||vy){fs_dribble_x[i]=vx<0?-1:vx>0?1:0;fs_dribble_y[i]=vy<0?-1:vy>0?1:0;}
 }
+// Two genuine lateral reversals within half a second sell a crossover.
+// Only the nearby presser, already leaning the wrong way, can be wrong-footed.
+static void crossover(int8_t dx){
+    static uint8_t defender;
+    static int8_t vx;
+    if(fs_owner!=0||fs_cut_cooldown||fs_ball_z>3*16||fs_tackling[0]||(joy&(J_A|J_B))){
+        fs_cut_dir=0;fs_cut_count=fs_cut_window=0;return;
+    }
+    if(!dx)return;
+    vx=fs_vx[0];
+    if(!fs_cut_dir){if((dx<0&&vx<=-8)||(dx>0&&vx>=8))fs_cut_dir=dx;return;}
+    if(dx==fs_cut_dir)return;
+    // A second button flick before the body has changed direction is ignored.
+    if((fs_cut_dir<0&&vx>-8)||(fs_cut_dir>0&&vx<8))return;
+    fs_cut_dir=dx;fs_cut_window=28;
+    if(++fs_cut_count<2)return;
+    fs_cut_count=0;
+    defender=fs_presser[1];
+    if(fs_stumble_timer||fs_tackling[defender]||fs_aerial[defender]||distance(0,fs_ball_x,fs_ball_y)>20*16||distance(defender,fs_pl_x[0],fs_pl_y[0])>28*16)return;
+    vx=fs_vx[defender];
+    if((dx<0&&vx<6)||(dx>0&&vx>-6))return;
+    fs_stumble_player=defender;fs_stumble_timer=22;
+    fs_action[defender]=34;fs_burst[defender]=0;
+    fs_cut_cooldown=90;fs_ankle_count++;
+    sfx_play(SFX_PARRY);
+}
 static void ai(uint8_t i){
+    if(fs_stumble_timer&&i==fs_stumble_player){step_player(i,fs_pl_x[i],fs_pl_y[i]);return;}
+
     static uint8_t mate,own,side,mark,presser,defender;
     static int16_t goal,tx,ty,pressure,mate_space,d,forward;
     if(!fs_spectator&&i==1&&fs_owner==i&&fs_return_call){
@@ -323,12 +356,16 @@ static void ai(uint8_t i){
             // On a loose ball protect a separate lane behind the challenger.
             mark=fs_owner!=NOBODY?fs_owner^1:fs_receiver;
             if(mark!=NOBODY){
-                tx=clamp(fs_pl_x[mark],28*16,132*16);
-                ty=clamp(fs_pl_y[mark]+(side?-24*16:24*16),24*16,200*16);
+                tx=fs_pl_x[mark];
+                if(tx<28*16)tx=28*16;else if(tx>132*16)tx=132*16;
+                ty=fs_pl_y[mark]+(side?-24*16:24*16);
             }else{
                 tx=fs_ball_x<80*16?104*16:56*16;
-                ty=clamp(fs_ball_y+(side?-40*16:40*16),24*16,200*16);
+                ty=fs_ball_y+(side?-40*16:40*16);
             }
+            // Bound once after selecting cover; avoid software clamp calls
+            // on busy four-player movement frames.
+            if(ty<24*16)ty=24*16;else if(ty>200*16)ty=200*16;
             // If attackers bunch up, retain width rather than joining them.
             if(ab(tx-fs_ball_x)<28*16&&ab(ty-fs_ball_y)<32*16)
                 tx=fs_ball_x<80*16?128*16:32*16;
@@ -449,6 +486,12 @@ static void draw(void) {
             else sy-=t>=10?10:5;
             gfx_actor(n,tile,0,x,sy,pal,fs_flip[i]);continue;
         }
+        if(fs_stumble_timer&&i==fs_stumble_player){
+            // Reuse this character's connected crouch/head, then stand up.
+            if(fs_stumble_timer>8)gfx_actor(n,28+i*24+(fs_view[i]<<3),0,x,sy,i,fs_flip[i]);
+            else gfx_side(n,i,0,x,(uint8_t)sy,fs_flip[i]);
+            continue;
+        }
         if(!i&&fs_pass_charge&&fs_pass_source==0&&fs_pass_charge>4){
             pal=fs_pass_charge>=12&&(fs_sim_ticks&4)?SPR_PAL_POWER:0;
             gfx_actor(n,28+(fs_view[i]<<3),0,x,sy,pal,fs_flip[i]);continue;
@@ -528,7 +571,7 @@ void futsal_enter(void) BANKED {
     }
     initrand(game_seed); score[0]=score[1]=sets[0]=sets[1]=0;
     match_sets=1; winner=NOBODY; fs_paused=fs_goal_timer=fs_hud_pending=0;
-    fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=fs_dribble_touches=0;
+    fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=fs_dribble_touches=fs_ankle_count=0;
     fs_lob_count=fs_aerial_count=0;
     move_win(7,HUD_WY); SHOW_WIN; gfx_sprite_split(HUD_WY);
     kickoff(0); hud(); draw();
@@ -539,7 +582,7 @@ void futsal_update(void) BANKED {
     // Text VRAM writes get their own event frame instead of sharing a busy
     // physics/AI/actor frame. Match time and player momentum stay frozen here.
     if(fs_hud_pending) { fs_hud_pending=0; hud(); return; }
-    if(joy_pressed&J_SELECT) { fs_spectator=!fs_spectator;fs_pass_charge=fs_pending_kick=fs_return_call=0;hud();return; }
+    if(joy_pressed&J_SELECT) { fs_spectator=!fs_spectator;fs_pass_charge=fs_pending_kick=fs_return_call=fs_cut_count=fs_cut_window=0;fs_cut_dir=0;hud();return; }
     if(fs_goal_timer) {
         if(!--fs_goal_timer) {
             if(score[0]>=5 || score[1]>=5) { winner=score[0]>=5?0:1; state_change(STATE_GAME_OVER); return; }
@@ -549,6 +592,9 @@ void futsal_update(void) BANKED {
     }
     fs_sim_ticks++;
     fs_kicked=fs_thought=0;
+    if(fs_stumble_timer)fs_stumble_timer--;
+    if(fs_cut_cooldown)fs_cut_cooldown--;
+    if(fs_cut_window)fs_cut_window--;else fs_cut_count=0;
     fs_zone_ready=fs_lob&&fs_ball_vz<0&&fs_flight_left<=28&&fs_ball_z>=10*16;
     if(fs_pending_timer)fs_pending_timer--;else fs_pending_kick=0;
     if(fs_return_call)fs_return_call--;
@@ -564,6 +610,7 @@ void futsal_update(void) BANKED {
         if(i || fs_spectator) ai(i);
         else {
             int8_t dx=((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0),dy=((joy&J_DOWN)!=0)-((joy&J_UP)!=0);
+            crossover(dx);
             pass_input(dx,dy);
             if(fs_owner==0) {
                 if(joy_pressed&J_A){

@@ -53,6 +53,14 @@ pixels into that direction to receive in space. Try a one-two: **B to pass, run
 into space, B to call for the return, then A to finish**. You can call while your
 first pass is still airborne: your teammate returns it on receiving. The call
 expires after 48 frames (80 for a lob) or when an opponent takes possession.
+**Crossover:** while dribbling, cut left-right-left (or right-left-right).
+Let your body actually change direction between cuts; two reversals within
+28 frames can wrong-foot a presser within 28 court pixels who is still moving
+into your feint. They skid, crouch, and recover over 22 frames, opening a pass
+or shot. Stationary button spam, a single cut, and distant or balanced defenders
+do not trigger it. A 90-frame cooldown prevents repeated stuns; the ball keeps
+its normal independent movement, so an uncontrolled cut can still lose it.
+
 Only one defender presses at a time. Their partner covers the other attacker
 from the goal side and keeps a separate lane when attackers bunch up. The press
 changes hands only when the partner is clearly closer, so a small juke does not

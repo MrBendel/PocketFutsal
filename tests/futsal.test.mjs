@@ -568,3 +568,82 @@ test('small changes in distance do not make both defenders chase; a clear advant
  e.write8(e.symbols.addr('fs_think')+2,0);e.idle(2);
  assert.equal(at(e,'fs_role',2),3,'previous presser recovers into cover');
 });
+
+
+function sellCrossover(){
+ const e=humanSpace(),rawHold=e.hold;
+ e.crossWorst=0;
+ e.hold=(buttons,n=1)=>{for(let f=0;f<n;f++){rawHold(buttons);e.crossWorst=Math.max(e.crossWorst,e.lastFrameCycles);}return e;};
+ e.idle=(n=1)=>e.hold([],n);
+ e.hold('LEFT',10).hold('RIGHT');
+ assert.equal(e.v('fs_cut_count'),1,'first actual reversal sells the feint');
+ for(let f=0;f<24&&at(e,'fs_vx',0,'i8')<8;f++)e.hold('RIGHT');
+ assert.equal(e.v('fs_owner'),0,'ordinary crossover retains a reachable dribble');
+ assert.ok(at(e,'fs_vx',0,'i8')>=8,'body really moved into the feint');
+ return e;
+}
+function leaningPresser(e,{far=false,lean=12,sliding=false}={}){
+ const x=at(e,'fs_pl_x',0,'i16')/16,y=at(e,'fs_pl_y',0,'i16')/16;
+ setPlayer(e,2,far?140:x+16,y);setPlayer(e,3,x-16,y);
+ e.write8(e.symbols.addr('fs_presser')+1,2);
+ e.write8(e.symbols.addr('fs_vx')+2,lean&255);
+ if(sliding)e.write8(e.symbols.addr('fs_tackling')+2,12);
+}
+
+test('a real double cut wrong-foots only the nearby presser and opens a recovery window',()=>{
+ const e=sellCrossover();leaningPresser(e);e.hold('LEFT');
+ assert.equal(e.v('fs_ankle_count','u16'),1);
+ assert.equal(e.v('fs_stumble_player'),2);
+ assert.ok(e.v('fs_stumble_timer')>=21);
+ assert.ok(at(e,'fs_action',2)>10,'stumbling feet cannot steal immediately');
+ assert.ok(e.v('fs_cut_cooldown')>=89);
+ const x=at(e,'fs_pl_x',2,'i16');e.idle(8);e.shot('futsal-crossover');
+ assert.ok(at(e,'fs_pl_x',2,'i16')>=x,'defender skids out of the old direction');
+ assert.equal(at(e,'fs_vx',2,'i8'),0,'defender settles instead of tracking the new cut');
+ const timer=e.v('fs_stumble_timer');e.tap('START');const paused=e.v('fs_stumble_timer');
+ e.idle(15);assert.equal(e.v('fs_stumble_timer'),paused,'pause freezes recovery');
+ e.tap('START');e.idle(timer+2);assert.equal(e.v('fs_stumble_timer'),0,'defender recovers');
+ assert.equal(e.v('fs_ankle_count','u16'),1,'one crossover has one victim');
+ assert.ok(e.crossWorst<65664,`crossover and recovery budget: ${e.crossWorst}`);
+});
+
+test('stationary direction spam and a single reversal cannot break ankles',()=>{
+ const e=humanSpace();leaningPresser(e);
+ for(let f=0;f<16;f++)e.hold(f&1?'LEFT':'RIGHT');
+ assert.equal(e.v('fs_ankle_count','u16'),0,'button spam without body movement earns nothing');
+ const one=humanSpace();one.hold('LEFT',10);leaningPresser(one,{lean:-12});one.hold('RIGHT');
+ assert.equal(one.v('fs_ankle_count','u16'),0,'one cut only arms the feint');
+});
+
+test('crossovers cannot stun distant, balanced, or already sliding defenders',()=>{
+ for(const setup of [{far:true},{lean:0},{sliding:true}]){
+  const e=sellCrossover();leaningPresser(e,setup);e.hold('LEFT');
+  assert.equal(e.v('fs_ankle_count','u16'),0,JSON.stringify(setup));
+  assert.equal(e.v('fs_stumble_timer'),0);
+ }
+ const late=sellCrossover();late.hold('RIGHT',32);leaningPresser(late);late.hold('LEFT');
+ assert.equal(late.v('fs_ankle_count','u16'),0,'widely separated cuts are not a combo');
+});
+
+test('a crossover does not trigger without possession and its cooldown prevents another stun',()=>{
+ const loose=sellCrossover();leaningPresser(loose);put(loose,'fs_owner',255);loose.hold('LEFT');
+ assert.equal(loose.v('fs_ankle_count','u16'),0);
+ const e=sellCrossover();leaningPresser(e);e.hold('LEFT');
+ const count=e.v('fs_ankle_count','u16');
+ for(let f=0;f<45;f++)e.hold((f%24)<12?'LEFT':'RIGHT');
+ assert.equal(e.v('fs_ankle_count','u16'),count,'cannot chain-lock a defender');
+});
+
+
+test('stumbling feet cannot intercept the dribble on the last recovery frame',()=>{
+ const e=sellCrossover();leaningPresser(e);e.hold('LEFT');
+ while(e.v('fs_stumble_timer')>1){
+  set16(e,'fs_sim_ticks',1); // The next controlled-ball interception checks slot 2.
+  set16(e,'fs_ball_x',at(e,'fs_pl_x',2,'i16'));
+  set16(e,'fs_ball_y',at(e,'fs_pl_y',2,'i16'));
+  set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);put(e,'fs_touch_timer',10);
+  e.idle();
+  assert.equal(e.v('fs_owner'),0,'defender cannot collect even with ball at their feet');
+ }
+ assert.equal(e.v('fs_stumble_timer'),1,'checked through the final recovery frame');
+});
