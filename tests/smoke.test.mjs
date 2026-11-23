@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import {
   assert, matchGolden, settle, bootToTitle, startGame, served, FRAME_LIMIT,
-  TITLE, PLAY, GAME_OVER, YOU, CPU, SHOT_NONE, SHOT_POWER, SHOT_CURVE, SHOT_LOB, SHOT_DROP,
+  TITLE, PLAY, GAME_OVER, YOU, CPU, SHOT_NONE, SHOT_POWER, SHOT_CURVE, SHOT_LOB, SHOT_DROP, SHOT_GOLD,
   CHARGE_MAX, TAP_CHARGE, TAP_MAX, YOU_TAP, MOVE_KICK, MOVE_VOLLEY, MOVE_HEADER, MOVE_BICYCLE, MOVE_SLIDE, MOVE_DOWN, MOVE_CONTROL,
   PHASE_SERVE, PHASE_TOSS, PHASE_RALLY, HALFWAY, POINT_NET, POINT_OUT, POINT_BOUNCE, POINT_TOUCHES,
   px, at, set16, placeBall, placePlayer,
@@ -309,7 +309,7 @@ test('a lob coming down to you: a flashing marker where to meet it; queued, you 
   assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
   assert.ok(marker(emu) > 0, 'the marker shows');
   emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the slam');
-  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_HEADER, 'met in the air');
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_BICYCLE, 'met in the air: a jumping bicycle kick');
   assert.equal(emu.v('ball_power'), 1, 'a slam, on fire');
   assert.equal(marker(emu), 0, 'the marker gone');
   const low = quietRally();
@@ -320,6 +320,47 @@ test('a lob coming down to you: a flashing marker where to meet it; queued, you 
   low.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the header');
   assert.equal(at(low, 'pl_last_move', YOU), MOVE_HEADER, 'less than half a meter: still out of the air');
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
+});
+
+test('a slam by the button: A red, B blue (bending), both gold (faster; only a full meter meets it clean)', () => {
+  const slam = (first, second) => {
+    const emu = quietRally();
+    incoming(emu, 60, 50, 26, 28);
+    set16(emu, 'ball_vx', 4);
+    emu.write8(emu.symbols.addr('ball_lob'), 1);
+    emu.idle(4);  // the slam spot shows
+    emu.tap(first);
+    if (second) emu.tap(second);
+    const queued = at(emu, 'pl_shot', YOU);
+    for (let k = 0; k < 4; k++) emu.tap(first === 'B' ? 'B' : 'A');  // the same button: more charge
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 160, 'the slam');
+    assert.equal(at(emu, 'pl_last_move', YOU), MOVE_BICYCLE, 'a jumping bicycle kick');
+    assert.equal(emu.v('ball_power'), 1, 'on fire');
+    return { emu, queued, speed: Math.abs(emu.v('ball_vx', 'i16')) + Math.abs(emu.v('ball_vy', 'i16')) };
+  };
+  const red = slam('A'), blue = slam('B'), gold = slam('A', 'B'), both = slam('A+B');
+  assert.equal(red.emu.v('ball_trail'), 1, 'red');
+  assert.equal(red.emu.v('ball_curve'), 0, 'straight');
+  assert.equal(blue.emu.v('ball_trail'), 2, 'blue');
+  assert.notEqual(blue.emu.v('ball_curve'), 0, 'bending');
+  assert.equal(gold.queued, SHOT_GOLD, 'A then B, a slam coming: GLD');
+  assert.equal(both.queued, SHOT_GOLD, 'A and B at once too');
+  assert.equal(gold.emu.v('ball_gold'), 1);
+  assert.equal(gold.emu.v('ball_trail'), 3, 'gold');
+  assert.ok(gold.speed > red.speed, `faster: ${gold.speed} against ${red.speed}`);
+  // Gold, met with three quarters of a meter: popped up (a red slam's met clean).
+  const meetIt = (gold) => {
+    const emu = quietRally();
+    incoming(emu, 80, 20, 48, 20);
+    emu.write8(emu.symbols.addr('ball_power'), 1);
+    emu.write8(emu.symbols.addr('ball_gold'), gold);
+    emu.tap('A');
+    for (let k = 0; k < 5; k++) emu.tap('A');  // 24 of 32
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the touch');
+    return emu.v('ball_pop');
+  };
+  assert.equal(meetIt(0), 0, 'fire, three quarters: clean');
+  assert.equal(meetIt(1), 1, 'gold, three quarters: popped up');
 });
 
 test('a drop shot coming to you shows where to meet it, after its bounce too', () => {
@@ -546,7 +587,7 @@ test('barely charged, a strike is scuffed: it never gets over, and it\'s the CPU
   ballAt(emu, 82, 184);
   readied(emu, SHOT_POWER, 0);
   assert.equal(pointWithin(emu, 160), CPU);
-  assert.equal(emu.v('shot_seen'), 10, 'MIS on the HUD');
+  assert.equal(emu.v('shot_seen'), 11, 'MIS on the HUD');
 });
 
 test('SELECT calls off your queued strike', () => {
@@ -649,7 +690,8 @@ test('the CPU plays: it returns your serve and can win a point', () => {
 
 test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
   const emu = quietRally();
-  ballAt(emu, 80, 60, 0, 0, -20);  // away in the CPU's half
+  ballAt(emu, 80, 20, 0, 0, 12);  // far off, coming slowly, high (going away, you'd jog home)
+  set16(emu, 'ball_vz', 60);
   const vx = () => (emu.read8(emu.symbols.addr('pl_vx')) << 24) >> 24;
   emu.hold('RIGHT', 4);
   assert.ok(vx() > 6 && vx() < 22, `speeding up: ${vx()}`);
@@ -663,6 +705,31 @@ test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a 
   assert.ok(vx() > 10, `turning: skidding ${vx()}`);
   emu.hold('LEFT', 12);
   assert.ok(vx() < -10, `then pushing off the other way: ${vx()}`);
+});
+
+test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
+  let emu = quietRally();
+  placePlayer(emu, YOU, 40, 124);  // up at the net
+  ballAt(emu, 80, 60, 20, 0, -4);  // going away, slowly, high
+  set16(emu, 'ball_vz', 40);
+  emu.idle(20);
+  const y0 = px(at(emu, 'pl_y', YOU, 'i16'));
+  assert.ok(y0 > 126, `jogging back: ${y0}`);
+  emu.hold('UP', 12);
+  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) < y0 + 4, 'the d-pad still takes you anywhere');
+  emu.idle(90);
+  assert.equal(emu.v('goal_timer'), 0, 'still in play');
+  const x = px(at(emu, 'pl_x', YOU, 'i16')), y = px(at(emu, 'pl_y', YOU, 'i16'));
+  assert.ok(y > 170 && x > 60 && x < 100, `back home: (${x}, ${y})`);
+  emu = quietRally();
+  placePlayer(emu, YOU, 50, 122);
+  ballAt(emu, 52, 116, 10, 0, 6);  // dropping onto your foot at net height
+  emu.tap('A').tap('A').tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 40, 'the volley');
+  let top = 0;
+  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return e.v('ball_landings') > 0 || e.v('goal_timer'); }, 120, 'it landing');
+  assert.ok(top < 40, `up ${top} px (it went up 111 and long)`);
+  assert.equal(emu.v('goal_timer'), 0, 'in');
 });
 
 test('START pauses and resumes', () => {

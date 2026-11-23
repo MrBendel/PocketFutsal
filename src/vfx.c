@@ -85,7 +85,7 @@ void vfx_draw(int16_t cam_y) BANKED {
     }
     if (--vfx_hold) return;
     vfx_hold = e[4];
-    vfx_cell += (uint8_t)(cols * rows);
+    vfx_cell += rows == 2 ? cols << 1 : cols;  // (1 or 2 rows: no multiply, it's dear)
     vfx_rows = 3;
     if (++vfx_frame >= e[1]) {
         vfx_kind = 0xFF;

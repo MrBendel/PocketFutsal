@@ -160,10 +160,17 @@ slammed (the Captain Tsubasa feel).
 - **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
   of the air"; Mario Tennis shows a flashing circle): a lob or a pop-up coming down over
   your half has a flashing marker where it drops to 26 px up. Queued, the game runs you
-  there; met in the air with half a meter it's a **slam** (a header, or a bicycle kick
-  if it's gone over you), on fire; with less, a header, still out of the air. A drop
-  shot gets the marker too, off its bounce as well, and hops higher (about 11 px).
-  The CPU taps hard against a ball on fire, so a slam can be met clean.
+  there; met in the air with half a meter it's a **slam**, on fire, deep; with less, a
+  header, still out of the air. A drop shot gets the marker too, off its bounce as well,
+  and hops higher (about 11 px). The CPU taps hard against a ball on fire, so a slam can
+  be met clean.
+- **Slams by the button** (2026-11-22, from the playtest: "if it's A then it's a red
+  slam, if it's B it's a blue slam, and if it's A+B it's a gold slam"): every slam is a
+  jump into a bicycle kick. A: red, straight (48). B: blue, bending the curve's way, as
+  fast. Both (the other button while the slam spot shows, or both at once): **GLD** on
+  the HUD, gold, straight and faster (56), its trail in the fire's colors; only a full
+  meter meets a gold slam clean, less pops it up (a slam back, if you're ready). A lob or
+  drop shot queued slams red. Gold is yours: the CPU slams red or blue.
 - **Bursts** (2026-11-22): an impact star where a slam is met (big) or a strike goes on
   fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
@@ -185,6 +192,16 @@ slammed (the Captain Tsubasa feel).
   readied at the last moment) is scuffed: it comes down short, on your own side (MIS on
   the HUD). Drives, curves and headers arc for at most 60 frames (about 22 px up): a
   weak one is sped up instead of looping up like a pop-up; drop shots, 100.
+- **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
+  with nothing queued, the d-pad let go and the ball going away, you jog back to the
+  middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
+  10-20 frames after the CPU's touch and presses three times; build/scratch/humanbot.mjs)
+  was within 16 px of the net for three quarters of the CPU's strikes: the auto-run only
+  ever takes you toward the ball, so a rally crept you up to the net, where lobs and
+  drives went over your head. Half its lost points were its own volleys, out: struck
+  right at the net, at its height, the net check (`net_clear`) asked for the clearance in
+  one frame and launched the ball 111 px up and long. It now allows at least 6 frames.
+  The bot went from losing every game to winning 31 points to 15.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
 - **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
   meter fills.
