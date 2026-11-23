@@ -20,8 +20,12 @@
 #include "action_bandana.h"
 #include "side_roster.h"
 #include "futsal_zone.h"
+#include "futsal_fx.h"
 #if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
 #error Futsal court overlaps side sprite atlas
+#endif
+#if 214 + SIDE_ROSTER_TILE_COUNT > 242
+#error Futsal side sprite atlas overlaps contact effects
 #endif
 
 
@@ -161,6 +165,7 @@ static void shoot(uint8_t i, int8_t aim) {
     if(!aim)x=(rand()&1)?60:100;
     fs_receiver=NOBODY;fs_is_shot=1;fs_lob=0;
     kick(i,x*16,team(i)?224*16:0);fs_power_trail=48;fs_shot_count++;
+    futsal_fx_start(fs_ball_x,fs_ball_y,fs_ball_z,fs_aerial[i]!=0);
 }
 static uint8_t aerial_try(uint8_t i){
     if(!fs_zone_ready||fs_owner!=NOBODY||fs_aerial[i]||fs_tackling[i]||distance(i,fs_target_x,fs_target_y)>20*16)return 0;
@@ -458,11 +463,13 @@ static void draw(void) {
         move_sprite(31,zx,fs_projection_y[zy]-fs_cam_y+12);
         move_sprite(32,zx+8,fs_projection_y[zy]-fs_cam_y+12);
     }else{move_sprite(31,0,0);move_sprite(32,0,0);}
+    if(fs_fx_timer||fs_fx_frame!=255)futsal_fx_draw(fs_cam_y);
 }
 void futsal_enter(void) BANKED {
     uint8_t buf[FUTSAL_PITCH_MAP_W*FUTSAL_PITCH_MAP_H];
     palettes_futsal();
     gfx_ball_init(116);
+    futsal_fx_load();
     banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
     set_sprite_tile(31,124);set_sprite_tile(32,126);
     for(uint8_t k=0;k<4;k++){set_sprite_tile(18+k,8+(k<<1));set_sprite_prop(18+k,4);move_sprite(18+k,0,0);}

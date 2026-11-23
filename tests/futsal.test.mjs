@@ -420,8 +420,9 @@ test('a timed jump meets the descending lob with a bicycle kick and grounded sha
  e.until(e=>e.v('fs_aerial_count','u16')===1,18,'airborne foot meeting lob');
  assert.equal(e.v('fs_shot_count','u16'),1);assert.ok(e.v('fs_ball_z','i16')>0,'shot starts from actual contact height');
  assert.equal(e.v('fs_lob'),0);assert.ok(e.v('fs_power_trail')>0);
+ assert.ok(e.v('fs_fx_timer')>0,'pack impact starts on real airborne contact');
  assert.equal(at(e,'fs_pl_x',0,'i16'),x);assert.equal(at(e,'fs_pl_y',0,'i16'),y);
- e.tap('START').idle(3);
+ e.idle(5).tap('START').idle(3);
  assert.ok(e.read8(0xfe03+humanActor(e)*4)&64,'bicycle uses the actual inverted character tiles');
  const ground=e.read8(e.symbols.addr('fs_projection_y')+(y>>4))-e.v('fs_cam_y');
  assert.equal(e.read8(0xfe00+22*4),ground+12,'shadow stays under the launch point');
@@ -434,6 +435,7 @@ test('jumping outside the zone or missing the airborne ball cannot create a shot
  const miss=incomingLob();set16(miss,'fs_ball_x',140*16);set16(miss,'fs_ball_vy',0);
  miss.tap('A');assert.ok(miss.v('fs_aerial')>0);miss.idle(30);
  assert.equal(miss.v('fs_aerial_count','u16'),0);assert.equal(miss.v('fs_shot_count','u16'),0);
+ assert.equal(miss.v('fs_fx_timer'),0,'missed jump does not create an impact');
 });
 
 test('one-two, charged lob return, run into zone and bicycle finish form a playable sequence',()=>{
@@ -463,4 +465,21 @@ test('releasing a charged pass during pause delivers it on resume without sticki
  assert.equal(e.v('fs_pass_count','u16'),0);
  e.tap('START').idle();
  assert.equal(e.v('fs_lob'),1);assert.equal(e.v('fs_pass_charge'),0);
+});
+
+test('BURST FX contact flash animates at the strike point, pauses and cleans up',()=>{
+ const e=humanSpace();e.tap('B');assert.equal(e.v('fs_fx_timer'),0,'quick passing does not spam impact bursts');
+ put(e,'fs_owner',0);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',173*16);
+ set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);set16(e,'fs_ball_z',0);
+ e.tap('A');assert.ok(e.v('fs_fx_timer')>0);
+ const x=e.v('fs_fx_x','i16'),y=e.v('fs_fx_y','i16'),poses=new Set();
+ for(let f=0;f<4;f++){e.idle();poses.add(e.read8(0xfe02+33*4));}
+ assert.ok(poses.size>=2,'original pack animation advances');
+ assert.equal(e.v('fs_fx_x','i16'),x);assert.equal(e.v('fs_fx_y','i16'),y,'flash stays at contact, not on moving ball');
+ e.tap('START').idle(3);const timer=e.v('fs_fx_timer');
+ assert.ok(e.read8(0xfe00+33*4)>0);assert.equal(e.read8(0xfe03+33*4)&7,6);
+ assert.equal(e.read8(0xfe00+33*4),y-e.v('fs_cam_y'),'flash follows the camera');
+ e.idle(5);assert.equal(e.v('fs_fx_timer'),timer,'pause freezes the effect');
+ e.shot('futsal-burst-contact');e.tap('START').idle(20);
+ assert.equal(e.v('fs_fx_timer'),0);assert.equal(e.read8(0xfe00+33*4),0);assert.equal(e.read8(0xfe00+34*4),0);
 });

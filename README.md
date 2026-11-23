@@ -64,6 +64,14 @@ A recent defensive burst does not block this jump, so you can sprint into
 position. Try **tap B, run forward, hold/release B for the lob return, then A
 in the pulsing zone**. AI receivers can attempt aerial finishes too.
 
+Shot contact now uses the small hit burst from `artwork/BURST_VFX`: a brief
+flash for a normal shot, longer for an aerial finish. It stays at the contact
+point and respects the camera and pause. Misses and regular passes do not
+trigger it. `tools/export-futsal-fx.mjs` preserves the pack pixels and uses
+hardware flips to fit four frames into eight tiles (242..249), with two
+effect sprites (33/34). The purchased source pack remains ignored; converted
+Game Boy tile data is committed so builds do not require the source pack.
+
 Both modes use dedicated left/right side-running sprites; all four futsal
 characters retain their individual profile heads. The animated sprite review
 is at `artwork/players/roster/side-review.html`.
