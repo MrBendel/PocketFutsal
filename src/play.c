@@ -123,7 +123,10 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
 #define POWER_FADE 20     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 8            // a ball slower than this (|vx| + |vy|) is loose
-#define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (a press and a moment)
+#define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (the CPU's)
+#define FIRE_MEET_YOU 8   // yours: two presses (playtests: people press two or three times before it arrives)
+#define SLAM_CHARGE 8     // your charge for a slam off a pop-up or a lob: two presses (the CPU's: half a meter)
+#define AIM_IN 16         // px: aimed this far inside the lines (a long shot lands up to 10 px past its aim)
 #define SCUFF 4           // a strike with less charge than this is scuffed into the net
 #define KICK_FRAMES 14    // a strike's pose; no touches meanwhile
 #define BICYCLE_FRAMES 24
@@ -608,7 +611,7 @@ static void ready(uint8_t i, uint8_t b) {
     pl_taps[i]++;
     uint8_t was = pl_charge[i];
     pl_charge[i] += i == SIDE_YOU ? YOU_TAP : TAP_CHARGE;
-    if (i == SIDE_YOU && was < CHARGE_MAX / 2 && pl_charge[i] >= CHARGE_MAX / 2) sfx_play(SFX_HALF);
+    if (i == SIDE_YOU && was < SLAM_CHARGE && pl_charge[i] >= SLAM_CHARGE) sfx_play(SFX_HALF);  // a slam's ready
     if (pl_charge[i] >= CHARGE_MAX) {
         pl_charge[i] = CHARGE_MAX;
         if (i == SIDE_YOU) sfx_play(SFX_CHARGE);
@@ -749,10 +752,10 @@ static void aim_point(uint8_t i) {
         // Over their head, and deep: 24 px behind them, at least 60 past the net, so
         // a lob at a player up at the net sends them back for it (a bicycle kick).
         aim_land = i == SIDE_YOU ? min16(PX(pl_y[SIDE_CPU]) - 24, other_y(i, 60)) : max16(PX(pl_y[SIDE_YOU]) + 24, other_y(i, 60));
-        aim_land = clamp16(aim_land, COURT_FAR + 8, COURT_NEAR - 8);
+        aim_land = clamp16(aim_land, COURT_FAR + AIM_IN, COURT_NEAR - AIM_IN);
     }
     else if (pl_shot[i] == SHOT_DROP) aim_land = other_y(i, 18);
-    else aim_land = clamp16(other_y(i, d), COURT_FAR + 8, COURT_NEAR - 8);
+    else aim_land = clamp16(other_y(i, d), COURT_FAR + AIM_IN, COURT_NEAR - AIM_IN);
     // A direction from where you are: as far across as a strike goes (half as far as
     // down the court) to the left or right; neither held, half that, away from the
     // other player (straight ahead is where they stand); kept in the court.
@@ -761,7 +764,7 @@ static void aim_point(uint8_t i) {
         wide >>= 1;
         aim = PX(pl_x[SIDE_CPU]) < x0 ? 2 : 0;
     }
-    aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + 6, COURT_X1 - 6);
+    aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + AIM_IN, COURT_X1 - AIM_IN);
 }
 
 // A clean strike: the readied shot, shaped by the ball's height (move).
@@ -779,10 +782,10 @@ static void strike(uint8_t i, uint8_t move) {
     uint8_t scuff = c < SCUFF && phase == PHASE_RALLY;
     int16_t land = scuff ? other_y(i, -10) : aim_land;
     ball_plain();
-    uint8_t slam = move != MOVE_KICK && (was_pop || was_lob) && c >= CHARGE_MAX / 2;
+    uint8_t slam = move != MOVE_KICK && (was_pop || was_lob) && c >= (i == SIDE_YOU ? SLAM_CHARGE : CHARGE_MAX / 2);
     if (slam) {
         // A pop-up (or your own control) or a lob met in the air before it lands,
-        // half charged: a slam, a jumping bicycle kick, on fire, deep. By the button:
+        // charged (yours two presses, SLAM_CHARGE; the CPU half a meter): a slam, a jumping bicycle kick, on fire, deep. By the button:
         // A red (straight), B blue (bending, the curve's way), both gold (straight,
         // faster still, and only a full meter meets it clean). Anything else queued
         // (a lob, a drop shot) slams red. (Less charged, it's a header: still out of the air.)
@@ -915,7 +918,7 @@ static void knock_down(uint8_t i) {
 // 28: none; a wide fast one, 100 px at 40, about a quarter.) Mostly it pops up (a
 // slam for you); a quarter of the time, scuffed into its own half.
 static void meet(uint8_t i, uint8_t move) {
-    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : FIRE_MEET)) {
+    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
         pop_up(i, move, KICK_FRAMES);
         return;
     }
