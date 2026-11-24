@@ -81,7 +81,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_AIM 10    // where your queued strike will land
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing): a ring,
 #define OAM_SLAM_R 28 // its right half
-// OAM_PLAYER_SHADOW 15, two, and OAM_GAUGE 37, three: play_hud.h.
+// OAM_PLAYER_SHADOW 15, two a player (with the power gauge in them): play_hud.h. 37-39 free.
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
@@ -411,6 +411,14 @@ static void slam_dots(int16_t hx, int16_t hy) {
     int16_t ex = (dx >> 1) + (dx >> 3) + (dx >> 4), ey = (dy >> 1) + (dy >> 3) + (dy >> 4);  // x 11/16 (the diagonals)
     place(OAM_DOTS, hx + dx, hy);
     place(OAM_DOTS + 1, hx - dx, hy);
+    // There (on the spot, in depth and across): the ring and the side dots only.
+    // The rest would share your lines (an 8x16 sprite counts on all 16 of them),
+    // past the ten a line shows, and the hardware would drop some of them.
+    if (abs16(PX(pl_y[SIDE_YOU]) - meet_y[SIDE_YOU]) <= 12 && abs16(PX(pl_x[SIDE_YOU]) - meet_x[SIDE_YOU]) <= 16) {
+        for (uint8_t k = 2; k < DOTS; k++) shadow_OAM[OAM_DOTS + k].y = 0;
+        dots_on = 1;
+        return;
+    }
     place(OAM_DOTS + 2, hx, hy + dy);
     place(OAM_DOTS + 3, hx, hy - dy);
     place(OAM_DOTS + 4, hx + ex, hy + ey);

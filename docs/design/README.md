@@ -386,6 +386,19 @@ goals. The keepers and the sideways view went in v0.2.
 - **The name**: PocketFutsal is now a futnet game.
 - **See-through overlays** (milestone, 2026-11-24): the serve box and the point banner
   on sprites, so the court shows round the letters (the window layer is always solid).
-  It needs a sprite budget first: about 20 of the 40 are free during a serve, but ten a
-  line is the hardware's limit, and a face plus YOU 03 is eight. Pack the text (two
-  narrow glyphs a tile), share tiles, and keep players off the box's lines.
+  It needs a sprite budget first: ten a line is the hardware's limit, and a face plus
+  YOU 03 is eight. Pack the text (two narrow glyphs a tile), share tiles, and keep
+  players off the box's lines. Measured after the sprite pass below: in a serve 17 of
+  the 40 are in use (23 free), the busiest line 6, so 4 a line to spare.
+- **Sprite pass** (2026-11-24; build/scratch/oamscan.mjs counts sprites a line in bot
+  matches). The game draws 8x16 sprites, so even a 3 px dot counts on 16 lines of the
+  ten a line can show. Before: in a serve the bottom of the screen already had 8 a
+  line; in a rally 3.3% of frames went past ten (up to 20), and the power gauges were
+  what the hardware dropped. Now each player's power gauge is drawn into the blank
+  lower half of their own copy of the shadow's tiles (sprite tiles 140-147), not three
+  sprites of its own (37-39 are free): serves and tosses peak at 6 a line, rallies go
+  past ten on 2.6% of frames. What's left is the slam zone: its 8 dots sit within 16
+  lines of each other, ring and all ten a line by themselves; standing on the spot
+  shows only the ring and the side dots. Lower numbers win, and the dots are the
+  highest on those lines: the hardware drops dots, never a player, the ball or an
+  effect. (Work RAM isn't tight: globals run on past 0xD000, 3.2 KB short of the stack.)

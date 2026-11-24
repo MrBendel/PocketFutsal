@@ -9,11 +9,12 @@
 // Background tiles after the court's: the faces (4: top left, bottom left, top right,
 // bottom right). In the 0x8800 block, shared with sprite tiles of the same numbers.
 #define T_FACE (SCENE_TILES + PITCH_TILE_COUNT)
-// Sprite tiles for the power gauges (8x16 pairs, drawn into RAM and copied in when
-// they change): your gauge's halves, then the CPU's. Past the faces, same block.
+// Each player's shadow, with their power gauge drawn into its blank lower half: own
+// copies of the shadow's 8x16 tiles (yours 140-143, the CPU's 144-147), the gauge's
+// rows copied in when it changes. One pair of sprites under each player, not two:
+// in 8x16 mode a 3 px bar still counts on 16 lines of the ten a line can show.
 #define S_GAUGE 140
-#define OAM_GAUGE 37  // 3: your gauge (two), the CPU's (one)
-#define OAM_PLAYER_SHADOW 15  // two columns per player, below the body (play.c draws them)
+#define OAM_PLAYER_SHADOW 15  // two columns per player, below the body (play.c places them)
 // Background palettes for the faces (palettes.c).
 #define BG_PAL_FACE_YOU 2
 #define BG_PAL_FACE_CPU 3

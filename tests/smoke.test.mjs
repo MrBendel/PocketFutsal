@@ -273,7 +273,8 @@ test('a struck ball leaves a trail: red off A, blue off B, longer charged; it fa
 });
 
 test('no HUD in a rally: the score box (faces, points) before each serve, a banner for the call, the board in the court art', () => {
-  const OAM_GAUGE = 37, BOARD_ROW = 2, BOARD_PTS = 7;
+  const BOARD_ROW = 2, BOARD_PTS = 7;
+  const gauge = (e) => e.read8(0x8000 + 141 * 16 + 2);  // your shadow's lower tile, the bar's outline row: its columns
   const win = (e) => (e.read8(0xFF40) & 0x20 ? e.read8(0xFF4A) : -1);  // the window's line, or -1: off
   const board = (e) => [0, 1, 3, 4].map((k) => e.read8(0x9800 + BOARD_ROW * 32 + BOARD_PTS + k) - 16);  // font: '0' is 16
   const emu = served(startGame());
@@ -286,10 +287,11 @@ test('no HUD in a rally: the score box (faces, points) before each serve, a bann
   const rally = quietRally();
   rally.idle(2);
   assert.equal(win(rally), -1, 'none in a rally');
-  assert.equal(rally.read8(0xFE00 + OAM_GAUGE * 4), 0, 'an empty power meter: no gauge');
+  assert.equal(gauge(rally), 0, 'an empty power meter: no gauge');
   rally.write8(rally.symbols.addr('pl_power') + YOU, 40);
   rally.idle(2);
-  assert.ok(rally.read8(0xFE00 + OAM_GAUGE * 4) > 0, 'some power: a gauge under you');
+  assert.equal(gauge(rally), 0xFF, 'some power: a gauge in your shadow');
+  assert.equal(rally.read8(0xFE00 + 37 * 4), 0, 'no sprites of its own (37-39 free)');
   // A point: the call along the bottom, the board's digits swapped, then the box.
   for (const [n, v] of [['last_touch', YOU], ['holder', CPU], ['ball_landings', 1], ['ball_netted', 0], ['ball_serve', 0]]) rally.write8(rally.symbols.addr(n), v);
   ballAt(rally, 100, 60, 2);

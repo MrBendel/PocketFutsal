@@ -15,8 +15,8 @@
 extern uint8_t note_timer, set_won, hud_pending;
 uint8_t hud_mode = 0xFF;      // the overlay showing (HUD_*; 0xFF: none yet)
 uint8_t board_shown[4];       // the board's points and sets as drawn (0xFF: redraw)
-uint8_t gauge_shown[3];       // each gauge sprite's fill, px (0xFF: redraw)
-static uint8_t gauge_buf[3][6];  // their bars: three rows of the sprite's top tile
+uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (fill px, 0x80: shown; 0xFF: redraw)
+static uint8_t gauge_buf[4][6];  // their bars: three rows of the shadow's lower tile
 static uint8_t strip_buf[5];
 
 #define DIGIT(n) (FONT_TILES + ('0' - ' ') + (n))
@@ -53,15 +53,18 @@ static void board_update(void) {
     }
 }
 
-static const uint8_t zeros[16 * 6];
-
 void hud_init(void) BANKED {
     banked_bkg_data(T_FACE, PORTRAIT_TILE_COUNT, portrait_tiles, BANK(portrait));
-    // The gauges: blank tiles (only their top three rows are ever drawn), sprites hidden.
-    set_sprite_data(S_GAUGE, 6, zeros);
-    for (uint8_t k = 0; k < 3; k++) {
-        set_sprite_tile(OAM_GAUGE + k, S_GAUGE + (k << 1));
-        move_sprite(OAM_GAUGE + k, 0, 0);
+    // The shadows (sprite tiles 16-19, set up by gfx_player_shadow_init) copied for
+    // each player, their lower halves blank till a gauge is drawn in; the shadow
+    // sprites pointed at the copies.
+    uint8_t t[64];
+    get_sprite_data(16, 4, t);
+    for (uint8_t k = 16; k < 32; k++) t[k] = t[k + 32] = 0;
+    set_sprite_data(S_GAUGE, 4, t);
+    set_sprite_data(S_GAUGE + 4, 4, t);
+    for (uint8_t k = 0; k < 4; k++) {
+        set_sprite_tile(OAM_PLAYER_SHADOW + k, S_GAUGE + (k << 1));
         gauge_shown[k] = 0xFF;
     }
     // The board, in the UI's palette.
@@ -135,51 +138,45 @@ void hud_draw(void) BANKED {
     else win_text(0, 0, you ? "2 BOUNCES! POINT YOU" : "2 BOUNCES! POINT CPU");
 }
 
-// A gauge sprite's bar, n px of 8 filled: an outline row (2), the fill (1) then the
-// empty (3), an outline row. Copied in at the next vblank when it changes.
-static void gauge_fill(uint8_t k, uint8_t n) {
-    if (n == gauge_shown[k]) return;
-    gauge_shown[k] = n;
+// The bar in shadow tile k's lower half: over the columns in m, an outline row (2),
+// the fill (1) then the empty (3, the columns in e), an outline row. Copied in at the
+// next vblank when it changes (key: what's drawn).
+static void gauge_fill(uint8_t k, uint8_t key, uint8_t m, uint8_t e) {
+    if (key == gauge_shown[k]) return;
+    gauge_shown[k] = key;
     uint8_t *b = gauge_buf[k];
     b[0] = 0x00;
-    b[1] = 0xFF;
-    b[2] = 0xFF;
-    b[3] = n >= 8 ? 0x00 : (uint8_t)(0xFF >> n);
+    b[1] = m;
+    b[2] = m;
+    b[3] = e;
     b[4] = 0x00;
-    b[5] = 0xFF;
-    gfx_vram_copy((uint8_t *)(0x8000 + ((uint16_t)(S_GAUGE + (k << 1)) << 4)), b, 6, 0);
+    b[5] = m;
+    gfx_vram_copy((uint8_t *)(0x8000 + ((uint16_t)(S_GAUGE + (k << 1) + 1) << 4)), b, 6, 0);
 }
 
 void hud_update(uint8_t busy) BANKED {
     // The box goes once the serve's tossed (and comes back for the next: on the
     // frame after, hud_pending, not on the serve's set-up, a full frame already).
     if (!paused && !goal_timer && !hud_pending && (phase == PHASE_SERVE) != (hud_mode == HUD_BOX)) hud_draw();
-    // The gauges, under each player's shadow (draw() placed it this frame): yours
-    // 16 px, a pixel for each 4 of the meter, the CPU's 8; full or armed, flashing.
-    // Empty, hidden.
+    // The gauges, in each player's shadow: yours 16 px across both halves, a pixel
+    // for each 4 of the meter; the CPU's 8, centred (half in each). Full or armed,
+    // the shadow flashes; empty, no bar.
     for (uint8_t i = 0; i < 2; i++) {
         uint8_t p = pl_power[i], full = pl_special[i] || p == POWER_MAX;
         OAM_item_t *s = &shadow_OAM[OAM_PLAYER_SHADOW + (i << 1)];
-        OAM_item_t *o = &shadow_OAM[OAM_GAUGE + (i << 1)];
-        uint8_t y = (p || full) ? s->y + 8 : 0;
         uint8_t pal = full && (frame_count & 8) ? SPR_PAL_POWER : SPR_PAL_UI;
+        s->prop = pal;
+        s[1].prop = pal;
+        if (busy) continue;
+        uint8_t on = (p || full) ? 0xFF : 0;
         if (i == SIDE_YOU) {
-            uint8_t n = full ? 16 : p >> 2;
-            if (!busy) {
-                gauge_fill(0, n > 8 ? 8 : n);
-                gauge_fill(1, n > 8 ? n - 8 : 0);
-            }
-            o->y = y;
-            o->x = s->x;
-            o->prop = pal;
-            o[1].y = y;
-            o[1].x = s->x + 8;
-            o[1].prop = pal;
+            uint8_t n = full ? 16 : p >> 2, a = n > 8 ? 8 : n, b = n > 8 ? n - 8 : 0;
+            gauge_fill(0, a | (on & 0x80), on, on & (a >= 8 ? 0 : (uint8_t)(0xFF >> a)));
+            gauge_fill(1, b | (on & 0x80), on, on & (b >= 8 ? 0 : (uint8_t)(0xFF >> b)));
         } else {
-            if (!busy) gauge_fill(2, full ? 8 : p >> 3);
-            o->y = y;
-            o->x = s->x + 4;
-            o->prop = pal;
+            uint8_t n = full ? 8 : p >> 3, e = on & (n >= 8 ? 0 : (uint8_t)(0xFF >> n));
+            gauge_fill(2, n | (on & 0x80), on & 0x0F, e >> 4);
+            gauge_fill(3, n | (on & 0x80), on & 0xF0, (uint8_t)(e << 4));
         }
     }
 }
