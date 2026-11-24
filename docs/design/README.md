@@ -304,6 +304,18 @@ slammed (the Captain Tsubasa feel).
   ring, 8 dots (sprites 29-36, tile 30, set once a match: a frame only moves them) as
   far out as your leap reaches while the ball's 64 px or more from the spot in depth,
   closing on the ring as it comes: closed, it's there. A drop shot's marker has none.
+  (2026-11-24: replaced by three rings, below.)
+- **The slam zone, by palette** (2026-11-24, the user's idea: "a single ring sprite and
+  cycle the palette to make it look like it's moving"): three rings, one inside the
+  other, 48x16 (six sprites in one row, the right three the left flipped; tiles from
+  build/scratch/zoneart.mjs), the inner one the spot. Nothing moves: the lit ring steps
+  in as the ball comes down (past 48 px of depth from the spot the outer, past 20 the
+  middle, then the spot), flashing yellow and orange, the others a dim teal. Its
+  palette is the curve trail's, borrowed while it shows (a lob or a pop-up leaves no
+  trail; a last one fading out is cut) and given back after. With you on its lines and
+  the outer ring no longer lit, the outer ring's two ends go: four sprites there. Rally
+  frames past ten sprites a line: 101 with all six, 33 with that (0.24%), from 358 with
+  the dots; what's left is both players on the same lines with an effect playing.
 - **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
   seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
@@ -397,8 +409,6 @@ goals. The keepers and the sideways view went in v0.2.
   what the hardware dropped. Now each player's power gauge is drawn into the blank
   lower half of their own copy of the shadow's tiles (sprite tiles 140-147), not three
   sprites of its own (37-39 are free): serves and tosses peak at 6 a line, rallies go
-  past ten on 2.6% of frames. What's left is the slam zone: its 8 dots sit within 16
-  lines of each other, ring and all ten a line by themselves; standing on the spot
-  shows only the ring and the side dots. Lower numbers win, and the dots are the
-  highest on those lines: the hardware drops dots, never a player, the ball or an
-  effect. (Work RAM isn't tight: globals run on past 0xD000, 3.2 KB short of the stack.)
+  past ten on 2.6% of frames. What was left was the slam zone: its 8 dots sat within
+  16 lines of each other, ring and all ten a line by themselves (now three rings by
+  palette, above: 0.24%). (Work RAM isn't tight: globals run on past 0xD000, 3.2 KB short of the stack.)

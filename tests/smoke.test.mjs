@@ -346,7 +346,8 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
 
 test('a lob coming down to you: a flashing marker where to meet it; there and queued, you slam it out of the air', () => {
   const emu = quietRally();
-  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  // The marker: the slam zone's middle sprite (29-34) for a slam, the small ring (19) for a drop shot.
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 31) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
@@ -371,24 +372,30 @@ test('a lob coming down to you: a flashing marker where to meet it; there and qu
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
-test('the slam zone: a ring of dots as wide as your leap while the lob is far, closing on the spot as it comes', () => {
+test('the slam zone: three rings, 48 px across, the lit one stepping in to the spot as the lob comes; its palette borrowed and given back', () => {
   const emu = quietRally();
   const oam = (n) => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n + 1), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n)];
-  const spread = () => oam(29)[0] - oam(30)[0];  // the right dot's x less the left's
+  const pal = () => [1, 2, 3].map((k) => at(emu, 'pal_base_obj', 4 * 4 + k, 'u16'));  // the curve trail's, palette 4
+  const before = pal();
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
   emu.idle(6);
   assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
-  assert.ok(oam(29)[1] > 0, 'the dots show');
-  const wide = spread();
-  assert.ok(wide >= 50, `far: as wide as the leap, ${wide} px`);
+  assert.equal(emu.v('zone_on'), 1, 'the zone shows');
+  assert.equal(oam(34)[0] - oam(29)[0], 40, 'six sprites in a row: 48 px across');
+  assert.equal(oam(29)[1], oam(34)[1], 'one row: six on its lines');
+  assert.equal(emu.v('zone_lit'), 0, 'far: the outer ring lit');
+  assert.notDeepEqual(pal(), before, 'the palette borrowed');
   matchGolden(emu, 'slam-zone');
+  emu.until((e) => e.v('zone_lit') === 1, 200, 'the middle ring');
   emu.until((e) => Math.abs(px(e.v('ball_y', 'i16')) - at(e, 'meet_y', YOU, 'i16')) <= 4, 200, 'it reaching the spot');
-  assert.ok(spread() <= 22, `at the spot: closed in, ${spread()} px (from ${wide})`);
+  assert.equal(emu.v('zone_lit'), 2, 'there: the spot lit');
+  assert.equal(oam(19)[1], 0, 'no small ring meanwhile');
   emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
   emu.idle(2);
   assert.equal(oam(29)[1], 0, 'gone once it lands');
+  assert.deepEqual(pal(), before, 'the palette given back');
 });
 
 test('charged for a slam (four presses), you leap at a lob coming down well outside your reach', () => {

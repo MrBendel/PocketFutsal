@@ -49,15 +49,28 @@
                     // the ball's extra spin tiles (20-27), before the bursts' (32 on)
 // Its tiles (an 8x16 sprite: the ring, then blank): 1 bright, 3 inside, as
 // tools/tile-art.mjs's ASCII would be ('....1111', '..113333', '.13.....', '13......').
-static const uint8_t ring_tiles[64] = {
+static const uint8_t ring_tiles[32] = {
     0x0f, 0x00, 0x3f, 0x0f, 0x60, 0x20, 0xc0, 0x40, 0xc0, 0x40, 0x60, 0x20, 0x3f, 0x0f, 0x0f, 0x00,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    // S_DOT (30): a 4x2 dash at the top, '2112' twice (orange, yellow in the middle).
-    0x60, 0x90, 0x60, 0x90,
 };
-#define S_DOT 30     // the slam zone's dots (an 8x16 sprite: the dash, then blank)
-#define OAM_DOTS 29  // 8: the slam zone, a ring of dots closing on the spot as the ball comes down
-#define DOTS 8
+// The slam zone: three rings, one inside the other, 48x16 (build/scratch/zoneart.mjs),
+// 1 the outer, 2 the middle, 3 the inner (the spot). Its left three columns; the
+// right three are them flipped. Six sprites, one row of them: six on its lines, where
+// a ring and 8 dots were ten. It closes by palette, not by moving: the lit ring steps
+// in as the ball comes down, the others dim.
+#define S_ZONE 148   // 6 tiles (sprite tiles past the gauges: play_hud.h)
+#define OAM_ZONE 29  // 6
+#define ZONE_PAL SPR_PAL_TRAIL_CURVE  // borrowed: a lob or a pop-up leaves no trail
+static const uint8_t zone_tiles[96] = {
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x18, 0x00, 0x60, 0x00, 0x40, 0x00, 0x80, 0x00,
+    0x40, 0x00, 0x60, 0x00, 0x18, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x0f, 0x00, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x30, 0x00, 0xc0, 0x01, 0x81,
+    0x00, 0xc0, 0x00, 0x30, 0x00, 0x0f, 0x00, 0x00, 0xf0, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x3f, 0x3f, 0xc0, 0xc0, 0x00, 0x00,
+    0xc0, 0xc0, 0x3f, 0x3f, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+#define ZONE_DIM RGB8(32, 96, 112)   // the rings not lit: a shade darker than the court
+#define ZONE_LIT RGB8(255, 232, 64)  // the lit one, flashing to ...
+#define ZONE_HOT RGB8(255, 144, 32)
 #define F_STAND 0
 #define F_RUN_A 1
 #define F_RUN_B 2
@@ -394,38 +407,54 @@ static void draw_trail(int16_t sx, int16_t wy) {
 static uint8_t coming(uint8_t i);  // (the rules, below)
 
 // The slam zone (playtest: "something bigger that acts like a target to say get
-// here now"): 8 dots round the spot, as far out as your leap reaches (SLAM_LEAP_X
-// across, half that deep) while the ball's far, closing on the spot as it comes
-// (by its depth: 64 px out, the ring's closing; there, it's time). (hx, hy): the
-// dash's corner for the spot.
-uint8_t dots_on;
-static void dots_off(void) {
-    for (uint8_t k = 0; k < DOTS; k++) move_sprite(OAM_DOTS + k, 0, 0);
-    dots_on = 0;
+// here now"): three rings round the spot, the outer as wide as most of your leap.
+// The lit ring steps in as the ball comes (by its depth from the spot: past 48 px the
+// outer, past 20 the middle, then the spot), flashing; the others dim. Its palette's
+// the curve trail's, borrowed while it shows and given back after.
+extern uint16_t pal_obj[];
+extern volatile uint8_t pal_dirty;
+uint8_t zone_on;        // showing (the palette borrowed)
+uint8_t zone_lit;       // the lit ring: 0 outer, 1 middle, 2 the spot
+static uint8_t zone_key;  // the palette as set: zone_lit and the flash
+static uint16_t zone_saved[4];
+static void zone_colors(const uint16_t *c) {
+    uint16_t *b = &pal_base_obj[ZONE_PAL << 2], *o = &pal_obj[ZONE_PAL << 2];
+    for (uint8_t k = 1; k < 4; k++) b[k] = o[k] = c[k];
+    pal_dirty = 1;
 }
-static void slam_dots(int16_t hx, int16_t hy) {
-    int16_t h = abs16(PX(ball_y) - meet_y[SIDE_YOU]) >> 1;
-    if (h > 32) h = 32;                 // far: all the way out
-    h += h << 2;                        // x5: (5h / 8) 0 .. 20 across, half deep
-    int16_t dx = 8 + (h >> 3), dy = 4 + (h >> 4);
-    int16_t ex = (dx >> 1) + (dx >> 3) + (dx >> 4), ey = (dy >> 1) + (dy >> 3) + (dy >> 4);  // x 11/16 (the diagonals)
-    place(OAM_DOTS, hx + dx, hy);
-    place(OAM_DOTS + 1, hx - dx, hy);
-    // There (on the spot, in depth and across): the ring and the side dots only.
-    // The rest would share your lines (an 8x16 sprite counts on all 16 of them),
-    // past the ten a line shows, and the hardware would drop some of them.
-    if (abs16(PX(pl_y[SIDE_YOU]) - meet_y[SIDE_YOU]) <= 12 && abs16(PX(pl_x[SIDE_YOU]) - meet_x[SIDE_YOU]) <= 16) {
-        for (uint8_t k = 2; k < DOTS; k++) shadow_OAM[OAM_DOTS + k].y = 0;
-        dots_on = 1;
-        return;
+static void zone_off(void) {
+    for (uint8_t k = 0; k < 6; k++) move_sprite(OAM_ZONE + k, 0, 0);
+    zone_colors(zone_saved);
+    zone_on = 0;
+}
+static void zone_draw(int16_t rx, int16_t ry) {
+    if (!zone_on) {
+        uint16_t *b = &pal_base_obj[ZONE_PAL << 2];
+        for (uint8_t k = 1; k < 4; k++) zone_saved[k] = b[k];
+        trail_len = 0;  // a last trail fading out (its palette's ours now): gone
+        zone_on = 1;
+        zone_key = 0xFF;
     }
-    place(OAM_DOTS + 2, hx, hy + dy);
-    place(OAM_DOTS + 3, hx, hy - dy);
-    place(OAM_DOTS + 4, hx + ex, hy + ey);
-    place(OAM_DOTS + 5, hx - ex, hy + ey);
-    place(OAM_DOTS + 6, hx + ex, hy - ey);
-    place(OAM_DOTS + 7, hx - ex, hy - ey);
-    dots_on = 1;
+    int16_t d = abs16(PX(ball_y) - meet_y[SIDE_YOU]);
+    zone_lit = d > 48 ? 0 : d > 20 ? 1 : 2;
+    uint8_t key = zone_lit | ((uint8_t)frame_count & 8);
+    if (key != zone_key) {
+        uint16_t c[4];
+        zone_key = key;
+        c[1] = c[2] = c[3] = ZONE_DIM;
+        c[zone_lit + 1] = (frame_count & 8) ? ZONE_HOT : ZONE_LIT;
+        zone_colors(c);
+    }
+    // You on its lines (your body and shadow, feet 18 px above its middle to 32
+    // below, on the screen), the outer ring no longer lit: its two ends go (its sides;
+    // its top and bottom stay), the zone four sprites on those lines, not six: with
+    // you, your shadow, the ball and its shadow, ten.
+    int16_t dy = (int16_t)proj_y[PROJ_I(PX(pl_y[SIDE_YOU]))] - (int16_t)proj_y[PROJ_I(meet_y[SIDE_YOU])];
+    uint8_t there = zone_lit && dy >= -18 && dy <= 32;
+    for (uint8_t k = 0; k < 6; k++) {
+        if (there && (k == 0 || k == 5)) shadow_OAM[OAM_ZONE + k].y = 0;
+        else place(OAM_ZONE + k, rx - 16 + (k << 3), ry - 4);
+    }
 }
 
 // Lying and lifted, for the player being drawn: globals, not locals. As locals with
@@ -504,18 +533,23 @@ static void draw(void) {
         ((meet_slam[SIDE_YOU] && (ball_lob || ball_pop)) || ((ball_drop || ball_dropped) && !meet_out[SIDE_YOU]))) {
         uint8_t pal = ((uint8_t)frame_count & 4) ? SPR_PAL_POWER : SPR_PAL_UI;
         int16_t rx = proj_x(meet_x[SIDE_YOU], meet_y[SIDE_YOU]), ry = (int16_t)proj_y[PROJ_I(meet_y[SIDE_YOU])] - cam_y + 12;
-        set_sprite_tile(OAM_SLAM, S_RING);
-        set_sprite_prop(OAM_SLAM, pal);
-        place(OAM_SLAM, rx, ry);
-        set_sprite_tile(OAM_SLAM_R, S_RING);
-        set_sprite_prop(OAM_SLAM_R, pal | S_FLIPX);
-        place(OAM_SLAM_R, rx + 8, ry);
-        if (meet_slam[SIDE_YOU] && (ball_lob || ball_pop)) slam_dots(rx + 6, ry + 3);
-        else if (dots_on) dots_off();
+        if (meet_slam[SIDE_YOU] && (ball_lob || ball_pop)) {
+            move_sprite(OAM_SLAM, 0, 0);  // the zone's inner ring is the spot
+            move_sprite(OAM_SLAM_R, 0, 0);
+            zone_draw(rx, ry);
+        } else {
+            set_sprite_tile(OAM_SLAM, S_RING);
+            set_sprite_prop(OAM_SLAM, pal);
+            place(OAM_SLAM, rx, ry);
+            set_sprite_tile(OAM_SLAM_R, S_RING);
+            set_sprite_prop(OAM_SLAM_R, pal | S_FLIPX);
+            place(OAM_SLAM_R, rx + 8, ry);
+            if (zone_on) zone_off();
+        }
     } else {
         move_sprite(OAM_SLAM, 0, 0);
         move_sprite(OAM_SLAM_R, 0, 0);
-        if (dots_on) dots_off();
+        if (zone_on) zone_off();
     }
     // Your strike queued: a marker where it's aimed to land.
     // (Every other frame, and not a strike's: it's another aim_point.)
@@ -1303,13 +1337,14 @@ void play_enter(void) BANKED {
     banked_bkg_data(SCENE_TILES, PITCH_TILE_COUNT, pitch_tiles, BANK(pitch));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
     vfx_load();
-    set_sprite_data(S_RING, 4, ring_tiles);
-    for (uint8_t k = 0; k < DOTS; k++) {  // set once: a frame only moves them
-        set_sprite_tile(OAM_DOTS + k, S_DOT);
-        set_sprite_prop(OAM_DOTS + k, SPR_PAL_POWER);
-        move_sprite(OAM_DOTS + k, 0, 0);
+    set_sprite_data(S_RING, 2, ring_tiles);
+    set_sprite_data(S_ZONE, 6, zone_tiles);
+    for (uint8_t k = 0; k < 6; k++) {  // set once: a frame only moves them
+        set_sprite_tile(OAM_ZONE + k, S_ZONE + ((k < 3 ? k : 5 - k) << 1));
+        set_sprite_prop(OAM_ZONE + k, k < 3 ? ZONE_PAL : ZONE_PAL | S_FLIPX);
+        move_sprite(OAM_ZONE + k, 0, 0);
     }
-    dots_on = 0;
+    zone_on = 0;
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     hud_init();  // the score board in the court art, the faces, the gauges
