@@ -119,7 +119,7 @@ static uint8_t wind_x[3];
 
 // Each touch's height (the ball's bottom, sixteenths) and reach (px either side).
 static const int16_t touch_z[4] = {0, 5 << 4, 10 << 4, 26 << 4};
-static const uint8_t touch_reach[4] = {0, 14, 12, 9};
+static const uint8_t touch_reach[4] = {0, 16, 14, 11};
 // The tiers: from these points on; gravity; the kick's pop (sqrt(2 g H) for a
 // rise of H = 64, 80, 80, 96, 96, 100 px); a GOOD touch's drift (least, + 0..7).
 static const uint16_t tier_at[TIER_MAX] = {10, 25, 50, 75, 100};
@@ -147,10 +147,10 @@ static const uint16_t cool_pal[4] = {0, RGB8(255, 255, 255), RGB8(176, 216, 248)
 // --- rules ---
 static void set_windows(void) {
     uint8_t c = stat_lv[STAT_CONTROL];
-    uint8_t pw = 1 + (c >= 8) + (c >= 16);
-    uint8_t gw = 4 + (c >= 4) + (c >= 10) + (c >= 16) - tier_narrow[mg_juggle_tier];
-    if (mg_juggle_tier >= 4 && pw > 1) pw--;
-    if (gw < pw + 1) gw = pw + 1;
+    uint8_t pw = 3 + (c >= 8) + (c >= 16);
+    uint8_t gw = 7 + (c >= 4) + (c >= 10) + (c >= 16) - tier_narrow[mg_juggle_tier];
+    if (mg_juggle_tier >= 4 && pw > 2) pw--;
+    if (gw < pw + 2) gw = pw + 2;
     mg_juggle_pw = pw;
     mg_juggle_gw = gw;
     mg_juggle_g = tier_g[mg_juggle_tier];

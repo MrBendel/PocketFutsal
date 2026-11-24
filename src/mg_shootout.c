@@ -355,8 +355,8 @@ static void your_dive(void) {
     mg_shootout_dived = 1;
     mg_shootout_kmove = your_keeper_move(mg_shootout_kguess, mg_shootout_kup, mg_shootout_kup);
     sfx_play(SFX_CATCH);
-    // Too early, and the right way: the CPU sees you go and (mostly) switches.
-    if (mg_shootout_contact < 0 && mg_shootout_clock + EARLY_WIN < (int16_t)mg_shootout_run &&
+    // Too early (before the tell flashes), and the right way: the CPU sees you go and (mostly) switches.
+    if (mg_shootout_contact < 0 && mg_shootout_clock + (int16_t)mg_shootout_tell < (int16_t)mg_shootout_run &&
         mg_shootout_kguess == mg_shootout_col && (rand() & 3) != 0) {
         mg_shootout_switched = 1;
         if (mg_shootout_col == 1) mg_shootout_col = (rand() & 1) ? 2 : 0;
@@ -375,9 +375,9 @@ static void cpu_plan(void) {
     // Off target now and then, less often as the pressure rises.
     mg_shootout_miss = below(mg_shootout_cpu_kicks >= REGULATION ? 16 : 10) == 0;
     mg_shootout_run = 44 + (rand() & 15) + (rand() & 7);
-    // The tell: REFLEX makes it start earlier.
-    mg_shootout_tell = 6 + lv(STAT_REFLEX);
-    if (mg_shootout_tell > 26) mg_shootout_tell = 26;
+    // The tell: REFLEX makes the aim cue flash earlier.
+    mg_shootout_tell = 18 + lv(STAT_REFLEX);
+    if (mg_shootout_tell > 34) mg_shootout_tell = 34;
     mg_shootout_switched = 0;
 }
 
@@ -627,20 +627,29 @@ static void update_cpurun(void) {
         feet = 150 - fy;
         x = 58 + gx;
     }
-    // The tell: in its last frames it drifts away from its side and turns to it.
-    if (left <= (int16_t)mg_shootout_tell && mg_shootout_col != 1) {
-        uint8_t e = mg_shootout_tell - (uint8_t)left;
-        uint8_t amp = 3 + (lv(STAT_REFLEX) >> 2);
-        uint8_t off = (e + 1) >> 1;
-        if (off > amp) off = amp;
-        if (mg_shootout_col == 2) x -= off;
-        else x += off;
-        flip = mg_shootout_col == 0;
+    // The tell: flashes a target warning reticle in the goal corner + kicker leans into the shot!
+    if (left <= (int16_t)mg_shootout_tell) {
+        if (left == (int16_t)mg_shootout_tell) sfx_play(SFX_TOUCH);
+        uint8_t cpal = (t & 2) ? SPR_PAL_POWER : SPR_PAL_UI;
+        mg_sprite(OAM_AIM, MG_T_AIM, cpal, col_x[mg_shootout_col] - 4,
+                  GOAL_LINE - row_z[mg_shootout_row] - 8);
+        if (mg_shootout_col != 1) {
+            uint8_t e = mg_shootout_tell - (uint8_t)left;
+            uint8_t amp = 6 + (lv(STAT_REFLEX) >> 2);
+            uint8_t off = (e + 1) >> 1;
+            if (off > amp) off = amp;
+            if (mg_shootout_col == 2) x -= off;
+            else x += off;
+            flip = mg_shootout_col == 0;
+        }
+    } else {
+        move_sprite(OAM_AIM, 0, 0);
     }
     shooter_x = (uint8_t)x;
     shooter_feet = (uint8_t)feet;
     draw_shooter(left <= 2 ? MG_F_KICK : (t & 4) ? MG_F_RUN_A : MG_F_RUN_B, flip);
     if (left <= 0) {
+        move_sprite(OAM_AIM, 0, 0);
         cpu_flight();
         launch();
     }

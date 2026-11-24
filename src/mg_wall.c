@@ -52,8 +52,8 @@
 #define CHARGE_FULL 64
 #define T_DRIVE 36        // frames to the wall: a tap; less with charge, down to 20
 #define T_POWER 18        // a power shot (less with POWER)
-#define FEED_T 56
-#define FEED_VD 24
+#define FEED_T 62
+#define FEED_VD 22
 #define MISS_WAIT 50      // frames from a missed ball to the next feed
 #define FLASH_FRAMES 24   // a hit panel flashes, then another lights
 #define POP_FRAMES 36
@@ -314,7 +314,7 @@ static void wall_hit(void) {
         mg_wall_pop = POP_FRAMES;
         mg_wall_pop_n = n;
         mg_wall_ball = BALL_HELD;
-        mg_wall_wait = FLASH_FRAMES + 4;  // fresh pass comes out right as the next hole opens
+        mg_wall_wait = FLASH_FRAMES + 34;  // breather after goal so you see the next open hole before the feed
         ball_trail = 0;
         ball_curve_t = 0;
         sfx_play(SFX_GOAL);

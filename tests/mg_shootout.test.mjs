@@ -138,11 +138,16 @@ test('goalkeeping: timely dive saves, wrong side concedes, staying still saves c
   // 1) Timely dive to the right corner & height -> SAVED!
   let e = setupCpuKick(0, 0);
   const run = e.v('mg_shootout_run');
+  const tell = e.v('mg_shootout_tell');
+  assert.ok(tell >= 18, `readable goalie tell window (${tell}f)`);
+  e.until((x) => x.v('mg_shootout_clock', 'i16') >= run - tell + 2, 120, 'into tell window');
+  const cueY = e.read8(0xFE00 + 14 * 4);
+  assert.ok(cueY > 0 && cueY < 160, `goalie aim cue reticle visible during tell (OAM y=${cueY})`);
   e.until((x) => x.v('mg_shootout_clock', 'i16') >= run - 4, 120, 'just before kick');
   e.hold('LEFT+A', 1);
   assert.equal(e.v('mg_shootout_dived'), 1);
   assert.equal(e.v('mg_shootout_kguess'), 0);
-  assert.equal(e.v('mg_shootout_switched'), 0, 'within EARLY_WIN: CPU did not switch');
+  assert.equal(e.v('mg_shootout_switched'), 0, 'within tell window: CPU did not switch');
   untilPhase(e, P.RESULT, 60);
   assert.equal(e.v('mg_shootout_result'), R.SAVED);
   assert.equal(e.v('mg_shootout_saves'), 1);
