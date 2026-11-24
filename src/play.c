@@ -116,23 +116,15 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 // The ball's pace: Mario Tennis's, a little over a second from one player to the
 // other. Gravity is 3/4 SUB a frame each frame (3 frames in 4: ball_fall), so
 // speeds and lifts are half what they'd be at gravity 3: the same arcs, twice as long.
-#define POWER_SPEED 48    // a ball on fire
-#define GOLD_SPEED 56     // a gold slam
-#define DRIVE_SPEED 28    // A: + half the charge
-#define CURVE_SPEED 25    // B: + half the charge
-#define CURVE_OFS 44      // px a curve bends by the time it gets there
-#define HEADER_SPEED 24   // + a quarter of the charge: flat, not a loop up
-#define CHIP_LIFT 28      // a lob: about 32 px up, 74 frames in the air
+// The strikes' speeds and arcs (a drive, fire, a slam, a lob) are futnet_core.h's FC_*.
 #define POP_LIFT 32       // a pop-up: about 43 px up, 84 frames
 #define DROP_HOP 16       // a drop shot's: about 11 px, 43 frames
-#define ARC_MAX 100       // frames: the longest a drop shot is in the air (about 60 px up)
-#define ARC_FLAT 60       // frames: the longest anything else arcs (about 22 px up): a weak kick doesn't loop
 #define BOUNCE_DEAD 4     // a bounce lower than this: it rolls
 #define POWER_FADE 20     // a ball on fire burns out below this speed (|vx| + |vy|)
 #define SLOW 8            // a ball slower than this (|vx| + |vy|) is loose
 #define FIRE_MEET 12      // the charge it takes to meet a ball on fire cleanly (the CPU's)
 #define FIRE_MEET_YOU 8   // yours: two presses (playtests: people press two or three times before it arrives)
-#define SLAM_CHARGE 8     // your charge for a slam off a pop-up or a lob: two presses (the CPU's: half a meter)
+#define SLAM_CHARGE FC_SLAM_CHARGE  // your charge for a slam off a pop-up or a lob: four presses (the CPU's: half a meter)
 #define SLAM_LEAP_X 28    // px across: your slam's reach, charged, at a lob or a pop-up coming down (a strike's 16)
 #define SLAM_LEAP_FWD 20  // px either way in depth (a strike's 4 behind, 8 in front); 12 px of it a leap
 #define AIM_IN 16         // px: aimed this far inside the lines (a long shot lands up to 10 px past its aim)
@@ -142,7 +134,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 // first press after it's struck: no mashing) returns it, on fire; else it knocks you
 // down. The CPU times it CPU_SP_TIMED times in 8.
 #define POWER_GAIN 1
-#define SPECIAL_SPEED 64
+#define SPECIAL_SPEED 88
 #define SPECIAL_WINDOW 5
 #define CPU_SP_TIMED 2
 #define SCUFF 4           // a strike with less charge than this is scuffed into the net
@@ -155,7 +147,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define SERVE_FRAMES 50
 #define BALL_R 3          // px: the ball's radius on the court
 #define HOME_CPU 24       // the CPU's depth, waiting
-#define HOME_YOU 196      // yours: between shots, nothing queued or held, you jog back
+#define HOME_YOU 196
 #define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
 #define CPU_LATE 40       // px: and this close, in place or not
 #define CPU_START 8       // its meter as it readies
@@ -258,7 +250,7 @@ uint8_t ball_fall;  // counts frames in the air: gravity acts on 3 in 4
 #define SEEN_SCUFF 11     // a strike with next to no charge: mishit, short of the net
 #define SEEN_GO 12        // the CPU's struck it to you and nothing's queued: press!
 #define SEEN_FRAMES 60
-uint8_t go_cue;       // the ball's coming to you, nothing queued: you blink, GO! on the HUD
+uint8_t go_cue;       // the ball's coming to you, nothing queued (watched by tests: no blink now)
 // Under pressure the CPU mishits: how far it ran for your shot (from where it stood
 // as you struck it) and how fast the shot came, past PRESSURE_FREE, out of 64.
 #define PRESSURE_FREE 30
@@ -473,7 +465,6 @@ static void draw(void) {
             if (pl_vx[i]) flip = pl_vx[i] < 0;
         }
         uint8_t pal = i == SIDE_YOU ? SPR_PAL_YOU : SPR_PAL_CPU;
-        if (i == SIDE_YOU && go_cue && ((uint8_t)frame_count & 4)) pal = SPR_PAL_FLASH;  // press!
         if (pl_shot[i]) pal = fc_charge_pal(i, pal);
         int16_t py = PX(pl_y[i]);
         int16_t sx = proj_x(PX(pl_x[i]), py);
@@ -1435,6 +1426,8 @@ void play_update(void) BANKED {
         pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
         pl_auto[SIDE_YOU] = 1;
     }
+    // No autopilot after a strike (playtest: "the player auto moves after kicking"):
+    // you stand where you are till the d-pad moves you, the CPU going home meanwhile.
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
     ball_update();

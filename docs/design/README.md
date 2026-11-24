@@ -68,7 +68,7 @@ calls are marked *(ours)*.
 
 The two touches give the game its set-up-and-attack move: reached unready, your first
 touch **controls** the ball up in front of you (not over the net); ready a strike as
-it comes down, and with two presses your second touch is a **slam**, on fire.
+it comes down, and with four presses your second touch is a **slam**, on fire.
 
 A banner along the bottom says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
 that didn't go over), and SET TO ... at the end of a set.
@@ -304,7 +304,8 @@ slammed (the Captain Tsubasa feel).
   ring, 8 dots (sprites 29-36, tile 30, set once a match: a frame only moves them) as
   far out as your leap reaches while the ball's 64 px or more from the spot in depth,
   closing on the ring as it comes: closed, it's there. A drop shot's marker has none.
-- **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
+- **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
+  seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
   10-20 frames after the CPU's touch and presses three times; build/scratch/humanbot.mjs)
@@ -315,12 +316,25 @@ slammed (the Captain Tsubasa feel).
   one frame and launched the ball 111 px up and long. It now allows at least 6 frames.
   The bot went from losing every game to winning 31 points to 15.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
-- **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
-  meter fills.
+- **Charging flashes** from half a meter (2026-11-24: a press or two stays in your own
+  colors, and the blink as the CPU's ball came, GO!'s stand-in, is gone: "I seem to be
+  flashing every time the ball is returned to me"): white and fire, faster as it fills.
 - **Shot trails** (Mario Tennis style): a struck ball streaks a trail of dots, taper
-  and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
-  from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
-  fades out at the bounce or the next touch.
+  and fading behind it, only on the shots that earned one (2026-11-24, playtest: "it
+  seems like every shot is a slam or curve with trails"; it was 85% of strikes, now
+  15-20%): red on fire or a slam, blue off a curve charged past half, gold. Three dots,
+  four on fire. The trail fades out at the bounce or the next touch.
+- **Pace by power** (2026-11-24, playtest: "the ball never seems to change velocity ...
+  a lob ... should be moving slower and if you hit a slam ball it should move with a lot
+  more velocity"): every strike's time in the air was capped at 60 frames (`FC_ARC_FLAT`),
+  slower ones sped up to it, so a two-press drive left at about 50 and a full-meter fire
+  shot at 48. Now, in SUB a frame (|vx| + |vy|): a lob about 20 (lift 34: 48 px up, 91
+  frames), a drive about 50, fire 60, your slam 72 (four presses, `FC_SLAM_CHARGE` 16;
+  the CPU's slams go at fire's 60), a gold slam 80, the power slam 88. Bots
+  (build/scratch/latebot2.mjs, speeds2.mjs, seeds 1 4242 777 99): a player pressing 2-3
+  times late wins 12 points of 56 (10 of 54 before); one that mashes 6-9 times wins 25%
+  to that one's 19%. A slower base drive (26, so a tap was slower) cost the late bot
+  half its points (the CPU mishits less off a slow ball) and was dropped.
 - **No HUD row** (2026-11-24, playtest: "do away with the persistent on-screen HUD to
   give more room for the gameplay", the score handled as Mario Tennis does): the court
   has the whole screen (`CAM_MAX` 24). The score's on a board in the court art, in the
@@ -370,3 +384,8 @@ goals. The keepers and the sideways view went in v0.2.
   one player).
 - Real art: more frames (serve, run sideways, get up, a control touch), a crowd.
 - **The name**: PocketFutsal is now a futnet game.
+- **See-through overlays** (milestone, 2026-11-24): the serve box and the point banner
+  on sprites, so the court shows round the letters (the window layer is always solid).
+  It needs a sprite budget first: about 20 of the 40 are free during a serve, but ten a
+  line is the hardware's limit, and a face plus YOU 03 is eight. Pack the text (two
+  narrow glyphs a tile), share tiles, and keep players off the box's lines.

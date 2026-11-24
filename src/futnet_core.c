@@ -122,6 +122,7 @@ void fc_step_move(uint8_t i, int8_t tx, int8_t ty, uint8_t firm) {
 uint8_t fc_charge_pal(uint8_t i, uint8_t base_pal) {
     if (!pl_shot[i]) return base_pal;
     uint8_t c = pl_charge[i];
+    if (c < CHARGE_MAX / 2) return base_pal;  // a press or two: your own colors (the flash is for power)
     uint8_t mask = c == CHARGE_MAX ? 1 : c >= CHARGE_MAX / 2 ? 3 : 7;
     if (!((uint8_t)frame_count & mask)) {
         uint8_t f = pl_flash[i] + 1;
@@ -195,6 +196,8 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
     uint8_t c = pl_charge[i], kind = pl_shot[i], speed;
     if (is_serve && c == CHARGE_MAX) c--;
     uint8_t fire = c == CHARGE_MAX;
+    // Your slam is your weapon: faster than anything; the CPU's goes at fire's pace.
+    uint8_t slam_speed = i == SIDE_YOU ? FC_SLAM_SPEED : FC_POWER_SPEED;
     fc_ball_plain();
     if (slam) {
         fire = 1;
@@ -216,7 +219,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         int16_t dist = abs16(land - by);
         dist += min16(abs16(tx - bx), dist >> 1);
         if (kind == SHOT_LOB) {
-            speed = (uint8_t)clamp16((dist * 7) >> 5, 8, 44);
+            speed = (uint8_t)clamp16((dist * 45) >> 8, 8, 40);  // 91 frames in the air
             ball_vz = move == MOVE_VOLLEY ? FC_CHIP_LIFT - 4 : FC_CHIP_LIFT;
             ball_lob = 1;
         } else {
@@ -227,7 +230,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         if (kind == SHOT_DROP) fc_arc(land, 1);
     } else if (kind == SHOT_CURVE) {
         int8_t side = aim == 0 ? -1 : aim == 2 ? 1 : PX(pl_x[i]) < CENTER_X ? 1 : -1;
-        speed = slam ? FC_POWER_SPEED : fire ? FC_POWER_SPEED - 8 : FC_CURVE_SPEED + (c >> 1);
+        speed = slam ? slam_speed : fire ? FC_POWER_SPEED - 8 : FC_CURVE_SPEED + (c >> 1);
         ball_power = fire;
         fc_launch_vel(tx - side * FC_CURVE_OFS - bx, land - by, speed);
         fc_arc(land, !scuff);
@@ -236,16 +239,17 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         ball_curve = side > 0 ? (int8_t)push : -(int8_t)push;
         ball_curve_t = t;
     } else {
-        speed = kind == SHOT_GOLD ? fc_gold_speed : fire ? FC_POWER_SPEED : FC_DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
+        speed = kind == SHOT_GOLD ? fc_gold_speed : slam ? slam_speed : fire ? FC_POWER_SPEED : FC_DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
         ball_power = fire;
         ball_gold = kind == SHOT_GOLD;
         fc_launch_vel(tx - bx, land - by, speed);
         fc_arc(land, !scuff);
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
-    if (!scuff && (ball_power || kind == SHOT_POWER || kind == SHOT_CURVE)) {
+    // Trails mark the shots that earned them: on fire, a slam, gold, a curve charged past half.
+    if (!scuff && (ball_power || ball_gold || (kind == SHOT_CURVE && c >= CHARGE_MAX / 2))) {
         ball_trail = kind == SHOT_CURVE ? TRAIL_CURVE : kind == SHOT_GOLD ? TRAIL_GOLD : TRAIL_POWER;
-        trail_len = ball_power ? FC_TRAIL_MAX : c >= CHARGE_MAX / 2 ? 3 : 2;
+        trail_len = ball_power || ball_gold ? FC_TRAIL_MAX : 3;
         trail_n = 0;
     }
     return move;

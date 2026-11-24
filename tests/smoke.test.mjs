@@ -336,7 +336,7 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB);
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the lob');
   let top = 0;
-  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 80, 'it landing');
+  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 120, 'it landing');
   assert.ok(top >= 24, `up ${top} px`);
   const y = px(emu.v('ball_y', 'i16'));
   assert.ok(y <= 24 && y >= 8, `lands at ${y}, well behind the CPU at 40`);
@@ -389,7 +389,7 @@ test('the slam zone: a ring of dots as wide as your leap while the lob is far, c
   assert.equal(oam(29)[1], 0, 'gone once it lands');
 });
 
-test('charged for a slam (two presses), you leap at a lob coming down well outside your reach', () => {
+test('charged for a slam (four presses), you leap at a lob coming down well outside your reach', () => {
   const leap = (charge) => {
     const emu = quietRally();
     incoming(emu, 104, 196, 0, -6);  // 24 px across, 6 behind you, coming down
@@ -399,11 +399,11 @@ test('charged for a slam (two presses), you leap at a lob coming down well outsi
     emu.idle(3);
     return emu;
   };
-  const yes = leap(8);
+  const yes = leap(16);
   assert.equal(at(yes, 'pl_shots', YOU), 1, 'leapt and struck it');
   assert.equal(at(yes, 'pl_last_move', YOU), MOVE_BICYCLE, 'a slam: a jumping bicycle kick');
   assert.equal(yes.v('ball_power'), 1, 'on fire');
-  assert.equal(at(leap(4), 'pl_shots', YOU), 0, 'one press: no leap');
+  assert.equal(at(leap(8), 'pl_shots', YOU), 0, 'two presses: no leap (a slam takes mashing)');
 });
 
 test('a slam by the button: A red, B blue (bending), both gold (faster; only a full meter meets it clean)', () => {
@@ -956,7 +956,7 @@ test('the power meter: clean strikes in a rally fill it; full, A+B arms the powe
   arm.idle(1);
   assert.equal(arm.v('ball_special'), 1, 'the power slam');
   assert.equal(arm.v('ball_gold'), 1);
-  assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 64, 'faster than a gold slam');
+  assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 88, 'faster than a gold slam');
   assert.ok(arm.v('ball_vy', 'i16') < 0, 'up the court');
   assert.equal(at(arm, 'pl_special', YOU), 0, 'used');
   const notFull = quietRally();
