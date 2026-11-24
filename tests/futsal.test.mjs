@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
-import {asciiTile,FUTSAL_PITCH} from '../tools/tile-art.mjs';
+import {asciiTile,FUTSAL_PITCH,FUTSAL_GOAL} from '../tools/tile-art.mjs';
 const PLAY=3;
 function startGame(pace=2,seed=4242) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
@@ -112,7 +112,7 @@ test('power shots leave a visible fading trail; player shadows stay on court',()
  for(let i=0;i<4;i++) {
   const py=at(e,'fs_pl_y',i,'i16')>>4;
   const ground=e.read8(e.symbols.addr('fs_projection_y')+py)-e.v('fs_cam_y');
-  assert.equal(e.read8(0xfe00+(22+i*2)*4),ground+12,'grounded player shadow');
+  assert.equal(e.read8(0xfe00+(21+i)*4),ground+12,'grounded player shadow');
  }
  e.tap('START');
  put(e,'fs_owner',0); e.idle(2);
@@ -165,7 +165,7 @@ test('a lofted pass clears feet, has a ground shadow, and reaches its teammate',
  assert.equal(e.v('fs_owner'),255,'airborne pass remains loose');
  assert.ok(e.v('fs_ball_z','i16')>2*16,'pass rises above the court');
  e.tap('START').idle(3);
- const ball=e.read8(0xfe00+e.v('fs_ball_oam')*4),shadow=e.read8(0xfe00+30*4);
+ const ball=e.read8(0xfe00+e.v('fs_ball_oam')*4),shadow=e.read8(0xfe00+25*4);
  assert.ok(shadow-ball>3,'visible separation from court shadow');
  e.shot('futsal-lofted-pass');e.tap('START');
  e.until(e=>e.v('fs_owner')===1,100,'teammate receiving the pass');
@@ -396,7 +396,7 @@ test('tap B delivers quickly; holding B charges a much higher lob on release',()
  assert.ok(e.v('fs_flight_left')>=62,'lob gives time to run into the zone');
  let peak=0;for(let f=0;f<33;f++){e.idle();peak=Math.max(peak,e.v('fs_ball_z','i16'));}
  assert.ok(peak>40*16,'lob clears players well above a quick pass');
- e.tap('START').idle(3);assert.ok(e.read8(0xfe00+31*4)>0,'landing ellipse is visible');
+ e.tap('START').idle(3);assert.ok(e.read8(0xfe00+26*4)>0,'landing ellipse is visible');
  e.shot('futsal-high-lob');
 });
 
@@ -428,7 +428,7 @@ test('a timed jump meets the descending lob with a bicycle kick and grounded sha
  e.idle(5).tap('START').idle(3);
  assert.ok(e.read8(0xfe03+humanActor(e)*4)&64,'bicycle uses the actual inverted character tiles');
  const ground=e.read8(e.symbols.addr('fs_projection_y')+(y>>4))-e.v('fs_cam_y');
- assert.equal(e.read8(0xfe00+22*4),ground+12,'shadow stays under the launch point');
+ assert.equal(e.read8(0xfe00+21*4),ground+12,'shadow stays under the launch point');
  e.shot('futsal-bicycle-finish');
 });
 
@@ -476,15 +476,15 @@ test('BURST FX contact flash animates at the strike point, pauses and cleans up'
  set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);set16(e,'fs_ball_z',0);
  e.tap('A');assert.ok(e.v('fs_fx_timer')>0);
  const x=e.v('fs_fx_x','i16'),y=e.v('fs_fx_y','i16'),poses=new Set();
- for(let f=0;f<4;f++){e.idle();poses.add(e.read8(0xfe02+33*4));}
+ for(let f=0;f<4;f++){e.idle();poses.add(e.read8(0xfe02+28*4));}
  assert.ok(poses.size>=2,'original pack animation advances');
  assert.equal(e.v('fs_fx_x','i16'),x);assert.equal(e.v('fs_fx_y','i16'),y,'flash stays at contact, not on moving ball');
  e.tap('START').idle(3);const timer=e.v('fs_fx_timer');
- assert.ok(e.read8(0xfe00+33*4)>0);assert.equal(e.read8(0xfe03+33*4)&7,6);
- assert.equal(e.read8(0xfe00+33*4),y-e.v('fs_cam_y'),'flash follows the camera');
+ assert.ok(e.read8(0xfe00+28*4)>0);assert.equal(e.read8(0xfe03+28*4)&7,6);
+ assert.equal(e.read8(0xfe00+28*4),y-e.v('fs_cam_y'),'flash follows the camera');
  e.idle(5);assert.equal(e.v('fs_fx_timer'),timer,'pause freezes the effect');
  e.shot('futsal-burst-contact');e.tap('START').idle(20);
- assert.equal(e.v('fs_fx_timer'),0);assert.equal(e.read8(0xfe00+33*4),0);assert.equal(e.read8(0xfe00+34*4),0);
+ assert.equal(e.v('fs_fx_timer'),0);assert.equal(e.read8(0xfe00+28*4),0);assert.equal(e.read8(0xfe00+29*4),0);
 });
 
 test('kickoff perception timing varies across seeds and reproduces the same seed',()=>{
@@ -693,10 +693,10 @@ test('pace changes reading time while preserving seeded movement, passing and ba
 });
 
 test('quick shoot and pass taps on a paced-out frame retain their original aim',()=>{
- const shot=humanSpace(0);put(shot,'fs_pace_phase',3);
+ const shot=humanSpace(0);setPlayer(shot,0,80,40);set16(shot,'fs_ball_y',33*16);put(shot,'fs_pace_phase',3);
  shot.hold('LEFT+A');assert.equal(shot.v('fs_shot_count','u16'),0,'tap lands on a held simulation frame');
  shot.idle();assert.equal(shot.v('fs_shot_count','u16'),1);
- assert.equal(shot.v('fs_target_x','i16'),64*16,'released directional aim is buffered with A');
+ assert.equal(shot.v('fs_target_x','i16'),(68+shot.v('fs_shot_error','i8'))*16,'released directional aim is buffered with A');
  const pass=humanSpace(0);put(pass,'fs_pace_phase',3);
  const x=at(pass,'fs_pl_x',1,'i16');pass.hold('LEFT+B');
  assert.equal(pass.v('fs_pass_count','u16'),0);
@@ -718,13 +718,15 @@ test('paced play buffers a jump, pauses immediately, and clears old taps when ch
 
 
 test('slower pace settings finish the same match within the per-frame budget',()=>{
- for(const pace of [0,1]){
+ let reference;
+ for(const pace of [2,0,1]){
   const e=startGame(pace,2026);let worst=0;
   for(let f=0;f<24000&&e.v('game_state')===PLAY;f++){
    e.idle();if(e.v('game_state')===PLAY&&!e.v('in_transition'))worst=Math.max(worst,e.lastFrameCycles);
   }
   settle(e,GAME_OVER,'paced Watch match');
-  assert.deepEqual([at(e,'score',0),at(e,'score',1)],[2,5],'pace preserves seeded match decisions');
+  const result=[at(e,'score',0),at(e,'score',1)];
+  if(pace===2)reference=result;else assert.deepEqual(result,reference,'pace preserves seeded match decisions');
   assert.ok(worst<65664,`pace ${pace} full-match frame budget: ${worst}`);
  }
 });
@@ -739,4 +741,92 @@ test('fast court projection preserves every horizontal pixel at every perspectiv
   const projected=e.read8(e.symbols.addr('shadow_OAM')+e.v('fs_ball_oam')*4+1);
   assert.equal(projected,84+Math.floor((x-80)*scale/128),`x ${x}, scale ${scale}`);
  }
+});
+
+
+test('shooting accuracy tightens near goal and full-court attempts target well wide',()=>{
+ const e=humanSpace(),errors=[];
+ for(const range of [24,80,128,192]){
+  let total=0;
+  for(let n=0;n<24;n++){
+   put(e,'fs_owner',0);put(e,'fs_frame_timer',0);put(e,'fs_goal_timer',0);
+   setPlayer(e,0,80,range);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',range*16);
+   for(const field of ['fs_ball_vx','fs_ball_vy','fs_ball_z','fs_ball_vz'])set16(e,field,0);
+   e.tap('A');assert.equal(e.v('fs_shot_range'),range);
+   const error=e.v('fs_shot_error','i8');total+=Math.abs(error);
+   const tx=e.v('fs_target_x','i16')/16;
+   if(range===24)assert.ok(Math.abs(error)<=1,'close finish stays precise');
+   if(range===80)assert.ok(Math.abs(error)<=7);
+   if(range===128)assert.ok(Math.abs(error)<=15);
+   if(range===192)assert.ok(tx<=32||tx>=128,'full-court attempt cannot aim inside the goal');
+  }
+  errors.push(total);
+ }
+ assert.ok(errors[2]>errors[0]*3,'distance materially increases dispersion');
+});
+
+function goalCrossing(end,{x=80,z=0,vx=0}={}){
+ const e=startGame();put(e,'fs_owner',255);put(e,'fs_pickup_lock',20);
+ set16(e,'fs_ball_x',x*16);set16(e,'fs_ball_y',end?224*16-16:16);
+ set16(e,'fs_ball_z',z*16);set16(e,'fs_ball_vz',0);
+ set16(e,'fs_ball_vx',vx);set16(e,'fs_ball_vy',end?128:-128);
+ e.idle();return e;
+}
+
+test('posts and crossbars rebound the ball, dislodge either goal, and reset without a score',()=>{
+ for(const end of [0,1])for(const [kind,setup] of [['post',{x:60,z:4}],['bar',{x:80,z:14}]]){
+  const e=goalCrossing(end,setup);
+  assert.equal(e.v('fs_frame_timer'),60,`${end} ${kind}`);
+  assert.equal(at(e,'score',end),0,'frame contact is never a goal');
+  assert.equal(e.v(kind==='post'?'fs_post_hits':'fs_bar_hits','u16'),1);
+  assert.ok(e.v('fs_ball_vy','i16')*(end?-1:1)>0,'rebound returns toward the field');
+  e.idle(25);
+  assert.ok(Math.abs(at(e,kind==='post'?'fs_goal_dx':'fs_goal_dy',end,'i8'))>=4,'hit goal really moves');
+  assert.equal(at(e,'fs_goal_dx',end^1,'i8'),0,'opposite goal stays anchored');
+  e.shot(`futsal-goal-${end}-${kind}`);
+  const timer=e.v('fs_frame_timer');e.tap('START').idle(8);
+  assert.equal(e.v('fs_frame_timer'),timer,'pause freezes the stoppage');e.tap('START');
+  e.until(e=>e.v('fs_frame_timer')===0,90,'reset after frame contact');
+  assert.equal(at(e,'fs_goal_dx',end,'i8'),0);assert.equal(at(e,'fs_goal_dy',end,'i8'),0);
+  assert.equal(e.v('fs_owner'),(end^1)*2,'defending side restarts play');
+  assert.equal(at(e,'score',end),0);
+ }
+});
+
+test('clean finishes, high misses and swept diagonal post contacts use the same geometry at both ends',()=>{
+ for(const end of [0,1]){
+  const clean=goalCrossing(end,{x:80,z:4});assert.equal(at(clean,'score',end),1);
+  assert.equal(clean.v('fs_frame_timer'),0);
+  const high=goalCrossing(end,{x:80,z:22});assert.equal(at(high,'score',end),0);
+  assert.equal(high.v('fs_frame_timer'),0,'above the bar is a miss, not a frame hit');
+  const wide=goalCrossing(end,{x:48,z:4});assert.equal(at(wide,'score',end),0);
+  assert.equal(wide.v('fs_frame_timer'),0);
+  const diagonal=goalCrossing(end,{x:59,z:4,vx:112});
+  assert.equal(diagonal.v('fs_post_hits','u16'),1,'fast shot is tested at crossing, not its overshoot endpoint');
+ }
+});
+
+test('both movable goals use the same full-size sprite frame without replacing player art or effects',()=>{
+ const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.flatMap(t=>asciiTile(t)));
+ assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(250*16,256*16)),expected);
+ put(e,'fs_goal_timer',100);e.idle(3);
+ for(let col=0;col<5;col++){
+  const a=30+col,b=35+col;
+  assert.equal(e.read8(0xfe01+a*4),e.read8(0xfe01+b*4),'identical screen-space goal width');
+  assert.equal(e.read8(0xfe02+a*4),e.read8(0xfe02+b*4),'same sprite artwork at both ends');
+ }
+ assert.equal(e.read8(0xfe01+34*4)-e.read8(0xfe01+30*4),32,'five columns form a 40-pixel goal');
+ e.shot('futsal-object-goals');
+});
+
+
+test('an unreceived delivery loses pace at its landing point and cannot roll into a distant goal',()=>{
+ const e=humanSpace();put(e,'fs_owner',255);put(e,'fs_receiver',1);put(e,'fs_is_shot',0);
+ put(e,'fs_flight_left',1);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',20*16);
+ set16(e,'fs_ball_z',1);set16(e,'fs_ball_vz',-1);set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',-64);
+ for(let i=0;i<4;i++){setPlayer(e,i,20+i*32,150);e.write8(e.symbols.addr('fs_think')+i,200);}
+ e.idle(30);
+ assert.equal(at(e,'score',0),0,'overhit pass stops short of the goal');
+ assert.ok(e.v('fs_ball_y','i16')>8*16);
+ assert.equal(e.v('fs_ball_vy','i16'),0,'landing and rolling friction stop the delivery');
 });
