@@ -431,6 +431,13 @@ static void slam_dots(int16_t hx, int16_t hy) {
     dots_on = 1;
 }
 
+// Lying and lifted, for the player being drawn: globals, not locals. As locals with
+// their addresses passed to player_move_pose, SDCC zeroed them once before the loop,
+// not each pass, so the CPU inherited your slide or knockdown: drawn lying, or split
+// in three (standing side-view tiles in the lying layout) when running sideways.
+uint8_t draw_lie;
+int8_t draw_lift;
+
 static void draw(void) {
     // The camera: after the ball, a pixel or two a frame.
     int16_t by = PX(ball_y), bz = PX(ball_z);
@@ -445,8 +452,9 @@ static void draw(void) {
 
     ball_oam = ball_y >= pl_y[SIDE_YOU] ? 0 : ball_y >= pl_y[SIDE_CPU] ? 4 : 8;
     for (uint8_t i = 0; i < 2; i++) {
-        uint8_t f = F_STAND, lie = 0, flip = pl_face[i], special = 0;
-        int8_t lift = 0;
+        uint8_t f = F_STAND, flip = pl_face[i], special = 0;
+        draw_lie = 0;
+        draw_lift = 0;
         uint8_t m = pl_move_timer[i] ? pl_move[i] : MOVE_NONE;
         if (goal_timer) f = last_scorer == i ? F_WIN : F_LOSE;
         else if (m == MOVE_KICK) f = F_KICK;
@@ -454,10 +462,10 @@ static void draw(void) {
         else if (m >= MOVE_HEADER && m <= MOVE_DOWN) special = 1;
         else if ((pl_shot[i] && !(pl_vx[i] | pl_vy[i])) || (phase == PHASE_TOSS && server == i)) f = F_READY;
         else if (pl_vx[i] || pl_vy[i]) f = (frame_count & 8) ? F_RUN_A : F_RUN_B;
-        uint8_t tile = lie ? T_LYING : (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
+        uint8_t tile = (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
         if (special) {
-            tile = player_move_pose(m, pl_move_timer[i], i == SIDE_CPU, &lie, &lift);
-            if (m == MOVE_SLIDE && lie) flip = !flip;
+            tile = player_move_pose(m, pl_move_timer[i], i == SIDE_CPU, &draw_lie, &draw_lift);
+            if (m == MOVE_SLIDE && draw_lie) flip = !flip;
         }
         // Side art follows real momentum, including the coast through a turn.
         // Existing action frames take priority over the locomotion view.
@@ -472,8 +480,8 @@ static void draw(void) {
         if (pl_shot[i]) pal = fc_charge_pal(i, pal);
         int16_t py = PX(pl_y[i]);
         int16_t sx = proj_x(PX(pl_x[i]), py);
-        int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - lift;
-        draw_player(i, tile, lie, sx, sy, pal, flip);
+        int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - draw_lift;
+        draw_player(i, tile, draw_lie, sx, sy, pal, flip);
         // Ground position never inherits the body's jump lift.
         gfx_player_shadow(OAM_PLAYER_SHADOW + (i << 1), sx,
             (int16_t)proj_y[PROJ_I(py)] - cam_y);

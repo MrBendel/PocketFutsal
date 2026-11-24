@@ -1017,6 +1017,24 @@ test('screen: the far end, the CPU sliding', () => {
   matchGolden(emu.idle(20), 'slide');
 });
 
+test('your slide or knockdown leaves the CPU standing: it is not drawn lying, nor split in three', () => {
+  const emu = quietRally();
+  emu.write8(emu.symbols.addr('pl_move') + YOU, MOVE_DOWN);
+  emu.write8(emu.symbols.addr('pl_move_timer') + YOU, 40);
+  emu.idle(3);
+  // The CPU's body in the displayed OAM: bank-1 tiles in its red palette (2).
+  const rows = (pal) => {
+    const ys = new Set();
+    for (let n = 0; n < 40; n++) {
+      const a = 0xFE00 + n * 4, y = emu.read8(a), p = emu.read8(a + 3);
+      if (y && (p & 8) && (p & 7) === pal) ys.add(y);
+    }
+    return ys.size;
+  };
+  assert.equal(rows(0), 1, 'you lie down: one row');
+  assert.equal(rows(2), 2, 'the CPU stands: two rows');
+});
+
 test('screen: a point', () => {
   const emu = quietRally();
   emu.write8(emu.symbols.addr('last_touch'), YOU);
