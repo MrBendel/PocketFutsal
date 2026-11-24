@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
 import {asciiTile,FUTSAL_PITCH,FUTSAL_GOAL} from '../tools/tile-art.mjs';
-import {GOAL_BG,goalPose,PATCH_Y,PATCH_W} from '../tools/goal-background.mjs';
+import {GOAL_H} from '../tools/goal-art.mjs';
+import {GOAL_BG,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
 const PLAY=3;
 function startGame(pace=2,seed=4242) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
@@ -781,7 +782,7 @@ test('posts and crossbars rebound the ball, dislodge either goal, and reset with
   assert.equal(at(e,'score',end),0,'frame contact is never a goal');
   assert.equal(e.v(kind==='post'?'fs_post_hits':'fs_bar_hits','u16'),1);
   assert.ok(e.v('fs_ball_vy','i16')*(end?-1:1)>0,'rebound returns toward the field');
-  e.idle(25);
+  e.idle(38);
   checkGoalPatch(e,end,goalPose(at(e,'fs_goal_dx',end,'i8'),at(e,'fs_goal_dy',end,'i8')));
   assert.ok(Math.abs(at(e,kind==='post'?'fs_goal_dx':'fs_goal_dy',end,'i8'))>=4,'hit goal really moves');
   assert.equal(at(e,'fs_goal_dx',end^1,'i8'),0,'opposite goal stays anchored');
@@ -810,13 +811,13 @@ test('clean finishes, high misses and swept diagonal post contacts use the same 
 });
 
 function checkGoalPatch(e,end,pose=0){
- const v=e.snapshot().vram,cells=PATCH_W*3,base=(end*16+pose)*cells;
+ const v=e.snapshot().vram,cells=PATCH_W*PATCH_H,base=(end*16+pose)*cells;
  for(let local=0;local<cells;local++){
   const cell=(PATCH_Y[end]+Math.floor(local/PATCH_W))*32+6+local%PATCH_W;
   const tile=v[0x1800+cell],attr=v[0x3800+cell];
   assert.equal(attr,GOAL_BG.attrs[base+local]);
   if(attr&8){
-   assert.ok(tile<96,'goal BG tile is outside OBJ character memory');
+   assert.ok(tile<128,'goal BG tile is outside OBJ character memory');
    assert.deepEqual(Buffer.from(v.subarray(0x3000+tile*16,0x3010+tile*16)),Buffer.from(asciiTile(GOAL_BG.tiles[base+local])),`goal ${end}, pose ${pose}, cell ${local}`);
   }else assert.equal(tile,GOAL_BG.map[base+local]);
  }
@@ -828,8 +829,8 @@ function backgroundPixel(e,x,y){
 }
 
 test('both movable goals are centred on the court in BG tiles and use no OBJ slots',()=>{
- const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.flatMap(t=>asciiTile(t)));
- assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(250*16,256*16)),expected,'compact shadow art stays resident');
+ const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.slice(4).flatMap(t=>asciiTile(t)));
+ assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(254*16,256*16)),expected,'compact shadow art stays resident');
  put(e,'fs_goal_timer',100);e.idle(3);
  for(const end of [0,1]){
   checkGoalPatch(e,end);
@@ -848,11 +849,11 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  const e=startGame();put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',224*16);set16(e,'fs_ball_z',0);
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,112);
  for(const n of ['fs_action','fs_tackling','fs_aerial','fs_moving','fs_side'])e.writeBytes(e.symbols.addr(n),[0,0,0,0]);
- e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=144-16-e.v('fs_cam_y');
+ e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=144-GOAL_H-e.v('fs_cam_y');
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,216);
  e.idle(3);const after=e.frameBuffer(),o=e.snapshot().oam;
  let peak=0;
- for(let y=top;y<top+16;y++){
+ for(let y=top;y<top+GOAL_H;y++){
   let count=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])count++;
   peak=Math.max(peak,count);
   for(let x=60;x<100;x++)if(x<76||x>=84){

@@ -29,8 +29,8 @@ and their aim are buffered across held simulation frames; pause stays immediate.
 
 Futsal is an arcade prototype: two outfield players per team, no dedicated
 goalkeepers, first to five goals. The court has goals at both baselines and
-rebounding walls outside the goal mouths. Both ends now use the same 40x16
-portable-goal sprite and matching collision dimensions. Posts and the crossbar
+rebounding walls outside the goal mouths. Both ends now use the same 40x24
+dimensional portable-goal artwork and matching collision dimensions. Posts and the crossbar
 rebound the ball and knock the goal out of position. A short FRAME! stoppage
 lets the rebound and displacement read, then resets the goal and gives the
 defending team the restart. A frame hit never counts as a goal. Goals are drawn with background tiles so
@@ -42,7 +42,8 @@ Shooting precision depends on distance: close finishes have very little scatter,
 medium shots spread wider, and efforts from more than 144 court pixels away are
 wild clearances aimed outside the goal mouth. Missed deliveries shed speed on
 landing so an unreceived pass does not keep rolling into a distant goal.
-Goal artwork is in `artwork/goals/v1`, generated from the native pixel tiles.
+The active goal artwork is in `artwork/goals/v3`: the approved generated study
+reduced to native pixels, with a sparse recessed net and roof/side depth.
 
 WATCH runs four AI players; PLAY gives
 you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
