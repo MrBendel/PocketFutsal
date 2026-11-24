@@ -15,7 +15,7 @@ uint8_t progress_from_save;
 // The save, at the start of SRAM bank 0: a tag, a version, the data, a checksum.
 // A new version (or a bad checksum) starts fresh: bump SAVE_VERSION when the
 // layout changes.
-#define SAVE_VERSION 2
+#define SAVE_VERSION 3
 typedef struct {
     char tag[4];  // "PFUT"
     uint8_t version;

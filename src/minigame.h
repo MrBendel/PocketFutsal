@@ -40,6 +40,7 @@
 
 // --- watchable state ---
 extern uint8_t mg_id;         // the game (MG_* in progress.h)
+extern uint8_t mg_vs;         // 0 solo, 1 vs CPU (for games with a mode toggle)
 extern uint8_t mg_phase;      // MG_PH_*
 extern uint8_t mg_run;        // MG_RUN_*, in MG_PH_PLAY
 extern uint8_t mg_paused;
@@ -63,6 +64,7 @@ void mg_finish(uint16_t score) BANKED;
 void mg_name(uint8_t id, char *buf) BANKED;
 void stat_name(uint8_t s, char *buf) BANKED;
 uint8_t mg_trains(uint8_t id, uint8_t which) BANKED;
+uint8_t mg_has_vs(uint8_t id) BANKED;
 
 // --- sprites ---
 // OAM: the ball and its shadow, three players (4 sprites each), then the game's own.
@@ -131,5 +133,7 @@ void mg_shootout_enter(void) BANKED;
 void mg_shootout_update(void) BANKED;
 void mg_slalom_enter(void) BANKED;
 void mg_slalom_update(void) BANKED;
+void mg_rally_enter(void) BANKED;
+void mg_rally_update(void) BANKED;
 
 #endif

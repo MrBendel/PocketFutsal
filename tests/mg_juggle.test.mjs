@@ -254,3 +254,42 @@ test('screen: juggle milestone celebration (NICE!, fire ball, sparkles, wind)', 
   e.tap('A').idle(8);
   matchGolden(e, 'juggle-milestone');
 });
+
+test('VS CPU mode: alternating rally with AI opponent, first to 3 points wins', () => {
+  const e = startMinigame(MG.JUGGLE, 4242, { vs: true });
+  assert.equal(e.v('mg_vs'), 1, 'launched Keepy-Uppy in VS CPU mode');
+  goLive(e);
+  e.idle(6);
+  matchGolden(e, 'juggle-vs-live');
+
+  // Opening serve sends the ball to CPU (turn === 1), and CPU returns it to YOU (turn === 0).
+  assert.equal(e.v('mg_juggle_turn'), 1, 'opening serve goes to CPU');
+  e.until((em) => em.v('mg_juggle_turn') === 0, 120, 'CPU returns the juggle');
+  assert.ok(e.v('mg_juggle_touches', 'u16') >= 1, 'CPU completed its touch');
+
+  // Return it back to CPU with an angled PERFECT kick!
+  for (let f = 0; f < 90 && e.v('mg_juggle_turn') === 0; f++) {
+    const pxPos = px(e.v('mg_juggle_px', 'i16'));
+    const bxPos = px(e.v('mg_juggle_bx', 'i16'));
+    const cue = e.v('mg_juggle_cue');
+    let btn = '';
+    if (bxPos < pxPos - 2) btn = 'LEFT';
+    else if (bxPos > pxPos + 2) btn = 'RIGHT';
+    if (cue >= GRADE.GOOD && e.v('mg_juggle_cool') === 0) btn = 'LEFT+A';
+    e.hold(btn, 1);
+  }
+  assert.equal(e.v('mg_juggle_turn'), 1, 'YOU returned ball back to CPU');
+
+  // Force CPU out of reach at 2-1 so the 3rd point wins the match and awards win XP!
+  e.write8(e.symbols.addr('mg_juggle_you_pts'), 2);
+  e.write8(e.symbols.addr('mg_juggle_cpu_pts'), 1);
+  e.write8(e.symbols.addr('mg_juggle_turn'), 1);
+  set16(e, 'mg_juggle_cx', 140 * 16);
+  placeBall(e, 20, 2, 0, -24);
+  e.until((em) => em.v('mg_run') === MG_RUN.OVER, 30, '3rd point finishes VS match');
+  assert.equal(e.v('mg_juggle_you_pts'), 3);
+  assert.equal(e.v('mg_won'), 1, 'YOU won the 1v1 Keepy-Uppy duel');
+  assert.equal(detail(e), 'YOU 3 - 1 CPU');
+  toResults(e);
+  assert.ok(e.v('mg_xp', 'u16') > 20, 'earned score + win bonus XP');
+});

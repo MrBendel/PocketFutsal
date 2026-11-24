@@ -24,7 +24,8 @@
 #define MG_JUGGLE 2    // keepy-uppy: juggle as long as you can
 #define MG_SHOOTOUT 3  // penalties: shoot, then keep, against the CPU
 #define MG_SLALOM 4    // cone slalom: dribble through timed gates
-#define MG_COUNT 5
+#define MG_RALLY 5     // wall rally: 1v1 squash vs CPU or solo streak
+#define MG_COUNT 6
 
 // --- watchable state (saved) ---
 extern uint8_t stat_lv[STAT_COUNT];    // 1 .. STAT_LV_MAX

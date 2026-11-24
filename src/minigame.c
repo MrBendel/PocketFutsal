@@ -15,18 +15,22 @@
 #include "players.h"
 #include "scene_text.h"
 
-uint8_t mg_id, mg_phase, mg_run, mg_paused, mg_hud_dirty, mg_won, mg_new_best;
+uint8_t mg_id, mg_vs, mg_phase, mg_run, mg_paused, mg_hud_dirty, mg_won, mg_new_best;
 uint16_t mg_timer, mg_score;
 uint16_t mg_xp[2];
 uint8_t mg_level_ups[2];
 char mg_detail[MG_DETAIL_MAX + 1];
 uint8_t mg_card_delay;  // frames before a card takes a button (one held through the fade)
+static uint8_t mode_tile;
 
 #define CARD_DELAY 20
 #define XP_CAP 400
 
 // --- the games' details, by MG_* id ---
-static const char *const names[MG_COUNT] = {"BALL MACHINE", "TARGET WALL", "KEEPY-UPPY", "SHOOTOUT", "CONE SLALOM"};
+static const char *const names[MG_COUNT] = {
+    "BALL MACHINE", "TARGET WALL", "KEEPY-UPPY", "SHOOTOUT", "CONE SLALOM", "WALL RALLY",
+};
+static const uint8_t has_vs[MG_COUNT] = {0, 0, 1, 0, 0, 1};
 // The stats each trains: the first takes all the XP, the second half.
 static const uint8_t trains[MG_COUNT][2] = {
     {STAT_REFLEX, STAT_CONTROL},  // the machine: get to it, put it back in
@@ -34,9 +38,10 @@ static const uint8_t trains[MG_COUNT][2] = {
     {STAT_CONTROL, STAT_REFLEX},  // keepy-uppy: touch and timing
     {STAT_POWER, STAT_REFLEX},    // the shootout: shoot, then save
     {STAT_REFLEX, STAT_CONTROL},  // cone slalom: dribble through gates
+    {STAT_REFLEX, STAT_POWER},    // wall rally: squash rebounds & power drives
 };
 // XP a point of score. Bonuses: a new best, a win.
-static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5, 3};
+static const uint8_t xp_per[MG_COUNT] = {3, 4, 2, 5, 3, 4};
 #define XP_BEST 10
 #define XP_WIN 20
 // How to play: four lines each, short enough for the compact font (about 36
@@ -46,12 +51,14 @@ static const char *const brief[MG_COUNT][4] = {
      "THREE MISSES AND YOU ARE OUT!"},
     {"PANELS OPEN HOLES IN THE GOAL!", "SHOOT THROUGH THE OPEN NET TO", "SCORE. A: POWER  B: CURVE.",
      "D-PAD AIMS. BEAT THE CLOCK!"},
-    {"KEEP THE BALL UP! A: KICK,", "UP+A: KNEE, B: HEADER FOR 2.", "TIME IT AS THE RING LIGHTS UP!",
-     "D-PAD TO STAY UNDER THE BALL."},
+    {"KEEP IT UP! SOLO OR 1V1 TO 3!", "A: KICK   UP+A: KNEE   B: HEAD.", "TIME IT AS THE RING LIGHTS UP!",
+     "D-PAD MOVES & ANGLES RETURNS."},
     {"FIVE PENALTIES EACH. SHOOTING:", "AIM WITH D-PAD, A FOR POWER.", "IN GOAL: READ THE CPU AND PRESS",
      "D-PAD + A TO DIVE. TIMING!"},
     {"DRIBBLE THROUGH THE CONE GATES!", "D-PAD STEERS, UP/DN FOR PACE.", "A: QUICK CUT   B: CLOSE TRAP.",
      "HEAVY TOUCHES KNOCK IT LOOSE!"},
+    {"REBOUND RALLY! 1V1 TO 5 OR SOLO.", "ALTERNATE SHOTS OFF THE WALL!", "A: POWER  B: CURVE  DN+B: DROP.",
+     "CLEAR RED TIN, NO 2ND BOUNCE!"},
 };
 static const char *const stat_names[STAT_COUNT] = {"POWER", "CONTROL", "AIM", "REFLEX"};
 
@@ -67,6 +74,9 @@ void stat_name(uint8_t s, char *buf) BANKED {
 }
 uint8_t mg_trains(uint8_t id, uint8_t which) BANKED {
     return trains[id][which];
+}
+uint8_t mg_has_vs(uint8_t id) BANKED {
+    return has_vs[id];
 }
 
 // "123" into buf; returns its length.
@@ -101,6 +111,7 @@ static void game_enter(void) {
         case MG_JUGGLE: mg_juggle_enter(); break;
         case MG_SHOOTOUT: mg_shootout_enter(); break;
         case MG_SLALOM: mg_slalom_enter(); break;
+        case MG_RALLY: mg_rally_enter(); break;
     }
 }
 static void game_update(void) {
@@ -110,6 +121,7 @@ static void game_update(void) {
         case MG_JUGGLE: mg_juggle_update(); break;
         case MG_SHOOTOUT: mg_shootout_update(); break;
         case MG_SLALOM: mg_slalom_update(); break;
+        case MG_RALLY: mg_rally_update(); break;
     }
 }
 
@@ -120,6 +132,15 @@ static void card_begin(void) {
     fill_bkg_rect(0, 0, 32, 32, TITLE_PAL_TEXT);
     VBK_REG = 0;
     mg_card_delay = CARD_DELAY;
+}
+
+static void draw_mode_row(void) {
+    if (!has_vs[mg_id]) return;
+    fill_bkg_rect(0, 5, SCREEN_TW, 1, 0);
+    VBK_REG = 1;
+    fill_bkg_rect(0, 5, SCREEN_TW, 1, TITLE_PAL_TEXT);
+    VBK_REG = 0;
+    draw(FONT_COMPACT, TEXT_CENTER, 5, mg_vs ? "< MODE: VS CPU >" : "< MODE: SOLO >", mode_tile, TITLE_PAL_GOLD);
 }
 
 static void brief_enter(void) {
@@ -133,6 +154,11 @@ static void brief_enter(void) {
     n = cat(line, n, " + ");
     cat(line, n, stat_names[trains[mg_id][1]]);
     t += text_draw(FONT_COMPACT, TEXT_CENTER, 4, line, t, TITLE_PAL_TEXT);
+    if (has_vs[mg_id]) {
+        mode_tile = t;
+        t += 14;
+        draw_mode_row();
+    }
     for (uint8_t i = 0; i < 4; i++) t += draw(FONT_COMPACT, TEXT_CENTER, 7 + i, brief[mg_id][i], t, TITLE_PAL_HINT);
     // BEST 12   PLAYED 3
     n = cat(line, 0, "BEST ");
@@ -184,6 +210,12 @@ static void result_enter(void) {
 static void card_update(void) {
     if (mg_card_delay) {
         mg_card_delay--;
+        return;
+    }
+    if (mg_phase == MG_PH_BRIEF && has_vs[mg_id] && (joy_pressed & (J_LEFT | J_RIGHT))) {
+        mg_vs ^= 1;
+        sfx_play(SFX_TOUCH);
+        draw_mode_row();
         return;
     }
     if (joy_pressed & (J_A | J_START)) {

@@ -82,9 +82,12 @@
 #define FIRE_FRAMES 60
 #define WIND_FRAMES 150
 #define TIER_MAX 5
+#define VS_WIN_PTS 3
+#define VS_PAUSE_FRAMES 45
 
 // --- watchable state ---
 int16_t mg_juggle_px;            // the player (sixteenths)
+int16_t mg_juggle_cx;            // CPU rival x in VS mode (sixteenths)
 int16_t mg_juggle_bx, mg_juggle_bz;  // the ball: x, height of its bottom above the grass
 int16_t mg_juggle_vx, mg_juggle_vz;  // its velocity (vz up)
 uint16_t mg_juggle_points;       // the score: the HUD's JUGGLES
@@ -112,8 +115,16 @@ uint8_t mg_juggle_moving;
 uint8_t mg_juggle_dropped;       // the ball hit the grass
 uint8_t mg_juggle_started;       // the opening kick-up happened
 uint8_t mg_juggle_fire_t, mg_juggle_star_t;
+// VS CPU alternating rally state:
+uint8_t mg_juggle_turn;          // 0 = YOU next touch, 1 = CPU next touch
+uint8_t mg_juggle_you_pts, mg_juggle_cpu_pts;
+uint8_t mg_juggle_pause;         // frames between points in VS mode
+uint8_t mg_juggle_server;        // 0 = YOU serve, 1 = CPU serves
+uint8_t mg_juggle_rally;         // touches in current VS point
+uint8_t mg_juggle_cswing, mg_juggle_cswing_t, mg_juggle_cface, mg_juggle_cmoving;
 
 static int16_t shown_points, shown_best;
+static uint8_t shown_you, shown_cpu;
 static int16_t star_x[8], star_y[8];
 static uint8_t wind_x[3];
 
@@ -202,6 +213,36 @@ static void contact(uint8_t t, uint8_t grade) {
     pop = tier_pop[mg_juggle_tier];
     if (t == TOUCH_KNEE) pop -= pop >> 3;
     else if (t == TOUCH_HEAD) pop -= pop >> 2;
+    if (mg_vs) {
+        // VS rally: send the ball toward where you aim (or away from CPU) and hand turn to CPU!
+        int16_t tx;
+        if (joy & J_LEFT) tx = 26 << 4;
+        else if (joy & J_RIGHT) tx = 134 << 4;
+        else tx = (P(mg_juggle_cx) < 80 ? (116 + (rand() & 15)) : (28 + (rand() & 15))) << 4;
+        if (grade == GRADE_PERFECT) {
+            if (pop > 52) pop -= 8;  // sharper, lower, faster pressure arc!
+            if (t == TOUCH_HEAD) mg_juggle_fire_t = 36;
+            if (mg_juggle_perfects < 255) mg_juggle_perfects++;
+            sfx_play(SFX_KICK);
+        } else {
+            sfx_play(SFX_TOUCH);
+        }
+        mg_juggle_vz = pop;
+        int16_t span = tx - mg_juggle_bx;
+        mg_juggle_vx = (span >> 6) + (grade == GRADE_PERFECT || t == TOUCH_HEAD ? (span >> 7) : 0);
+        if (t == TOUCH_HEAD && mg_juggle_headers < 255) mg_juggle_headers++;
+        mg_juggle_points++;
+        mg_juggle_touches++;
+        mg_juggle_rally++;
+        mg_juggle_turn = 1;
+        show(grade, 0);
+        if ((mg_juggle_rally & 3) == 0 && mg_juggle_tier < TIER_MAX) {
+            mg_juggle_tier++;
+            set_windows();
+        }
+        mg_juggle_below[1] = mg_juggle_below[2] = mg_juggle_below[3] = 0;
+        return;
+    }
     mg_juggle_vz = pop;
     if (grade == GRADE_PERFECT) {
         // Straight up, curling back over you.
@@ -301,6 +342,124 @@ static void drop(void) {
     mg_finish(mg_juggle_points);
 }
 
+static void vs_serve(void) {
+    mg_juggle_tier = 0;
+    set_windows();
+    mg_juggle_rally = 0;
+    mg_juggle_pending = 0;
+    mg_juggle_fire_t = 0;
+    mg_juggle_below[1] = mg_juggle_below[2] = mg_juggle_below[3] = 0;
+    mg_juggle_vz = tier_pop[0];
+    if (mg_juggle_server == 0) {
+        mg_juggle_bx = mg_juggle_px;
+        mg_juggle_bz = touch_z[TOUCH_FOOT];
+        mg_juggle_vx = (mg_juggle_cx - mg_juggle_bx) >> 6;
+        mg_juggle_swing = TOUCH_FOOT;
+        mg_juggle_swing_t = 10;
+        mg_juggle_cool = 14;
+        mg_juggle_turn = 1;
+    } else {
+        mg_juggle_bx = mg_juggle_cx;
+        mg_juggle_bz = touch_z[TOUCH_FOOT];
+        mg_juggle_vx = (mg_juggle_px - mg_juggle_bx) >> 6;
+        mg_juggle_cswing = TOUCH_FOOT;
+        mg_juggle_cswing_t = 10;
+        mg_juggle_turn = 0;
+    }
+    sfx_play(SFX_KICK);
+}
+
+static void vs_point_scored(void) {
+    uint8_t at;
+    mg_juggle_pending = 0;
+    if (mg_juggle_turn == 1) {
+        // CPU failed to keep it up -> YOUR point!
+        mg_juggle_you_pts++;
+        mg_juggle_server = 1;
+        show(GRADE_NICE, 0);
+        mg_juggle_star_t = STAR_FRAMES;
+        for (uint8_t i = 0; i < 8; i++) star_x[i] = P(mg_juggle_px), star_y[i] = FLOOR_Y - 14;
+        sfx_play(SFX_GOAL);
+    } else {
+        // YOU missed -> CPU's point!
+        mg_juggle_cpu_pts++;
+        mg_juggle_server = 0;
+        show(GRADE_MISS, 0);
+        sfx_play(SFX_PARRY);
+    }
+    if (mg_juggle_you_pts >= VS_WIN_PTS || mg_juggle_cpu_pts >= VS_WIN_PTS) {
+        mg_juggle_dropped = 1;
+        mg_won = mg_juggle_you_pts > mg_juggle_cpu_pts;
+        at = put_str(0, "YOU ");
+        at = put_num(at, mg_juggle_you_pts);
+        at = put_str(at, " - ");
+        at = put_num(at, mg_juggle_cpu_pts);
+        at = put_str(at, " CPU");
+        mg_detail[at] = 0;
+        mg_finish((uint16_t)mg_juggle_you_pts * 6 + (mg_juggle_touches >> 1));
+    } else {
+        mg_juggle_pause = VS_PAUSE_FRAMES;
+    }
+}
+
+static void cpu_step(void) {
+    int16_t cspd = 16 + (mg_juggle_tier << 1);
+    int16_t target;
+    mg_juggle_cmoving = 0;
+    if (mg_juggle_turn == 1) {
+        target = mg_juggle_bx + (mg_juggle_vz > 0 ? (mg_juggle_vx << 2) : 0);
+    } else {
+        // Hold opposite side from player while waiting.
+        target = (P(mg_juggle_px) < 80 ? 112 : 48) << 4;
+        cspd >>= 1;
+    }
+    if (mg_juggle_cx < target - 32) {
+        mg_juggle_cx += cspd;
+        if (mg_juggle_cx > X_MAX) mg_juggle_cx = X_MAX;
+        mg_juggle_cmoving = 1;
+        mg_juggle_cface = 0;
+    } else if (mg_juggle_cx > target + 32) {
+        mg_juggle_cx -= cspd;
+        if (mg_juggle_cx < X_MIN) mg_juggle_cx = X_MIN;
+        mg_juggle_cmoving = 1;
+        mg_juggle_cface = 1;
+    } else if (!mg_juggle_cswing_t) {
+        mg_juggle_cface = mg_juggle_bx < mg_juggle_cx;
+    }
+    if (mg_juggle_turn == 1 && mg_juggle_vz < 0 && !mg_juggle_cswing_t) {
+        uint8_t ct = TOUCH_NONE;
+        if (mg_juggle_bz <= touch_z[TOUCH_HEAD] + 32 && mg_juggle_bz >= touch_z[TOUCH_HEAD] - 32 &&
+            (rand() & 3) == 0) {
+            ct = TOUCH_HEAD;
+        } else if (mg_juggle_bz <= touch_z[TOUCH_FOOT] + 32) {
+            ct = TOUCH_FOOT;
+        }
+        if (ct) {
+            int16_t dx = mg_juggle_bx - mg_juggle_cx;
+            if (dx < 0) dx = -dx;
+            mg_juggle_cswing = ct;
+            mg_juggle_cswing_t = 12;
+            if (P(dx) <= touch_reach[ct]) {
+                uint8_t pop = tier_pop[mg_juggle_tier];
+                if (ct == TOUCH_HEAD) pop -= pop >> 2;
+                int16_t tx = (28 + ((uint8_t)rand() & 63) + (P(mg_juggle_px) < 80 ? 36 : 0)) << 4;
+                mg_juggle_bz = touch_z[ct];
+                mg_juggle_vz = pop;
+                mg_juggle_vx = (tx - mg_juggle_bx) >> 6;
+                mg_juggle_rally++;
+                mg_juggle_touches++;
+                mg_juggle_turn = 0;
+                if ((mg_juggle_rally & 3) == 0 && mg_juggle_tier < TIER_MAX) {
+                    mg_juggle_tier++;
+                    set_windows();
+                }
+                mg_juggle_below[1] = mg_juggle_below[2] = mg_juggle_below[3] = 0;
+                sfx_play(ct == TOUCH_HEAD ? SFX_KICK : SFX_TOUCH);
+            }
+        }
+    }
+}
+
 // The ball's flight, a frame.
 static void physics(void) {
     if (mg_juggle_wind_t) {
@@ -341,11 +500,12 @@ static void physics(void) {
     }
 }
 
-// The ring's light: what a kick now would be.
+// The ring's light: what a kick now would be (in VS mode, only lights on YOUR turn).
 static void cue(void) {
     uint8_t n;
     mg_juggle_cue = GRADE_NONE;
     if (mg_juggle_dropped || !mg_juggle_started) return;
+    if (mg_vs && (mg_juggle_turn != 0 || mg_juggle_pause)) return;
     if (mg_juggle_bz >= touch_z[TOUCH_FOOT]) n = frames_to(touch_z[TOUCH_FOOT]);
     else n = mg_juggle_below[TOUCH_FOOT] <= mg_juggle_gw ? mg_juggle_below[TOUCH_FOOT] : 0;
     if (n) mg_juggle_cue = n <= mg_juggle_pw ? GRADE_PERFECT : GRADE_GOOD;
@@ -366,7 +526,8 @@ static void draw(void) {
     int16_t feet = FLOOR_Y;
 
     // The player.
-    if (mg_juggle_dropped) f = MG_F_LOSE;
+    if (mg_juggle_dropped && (!mg_vs || !mg_won)) f = MG_F_LOSE;
+    else if (mg_juggle_dropped && mg_vs && mg_won) f = MG_F_WIN;
     else if (mg_juggle_swing_t) {
         if (mg_juggle_swing == TOUCH_HEAD) f = MG_F_HEADER, feet = FLOOR_Y - 3;
         else f = mg_juggle_swing == TOUCH_KNEE ? MG_F_VOLLEY : MG_F_KICK;
@@ -374,6 +535,21 @@ static void draw(void) {
     else if (mg_juggle_star_t) f = MG_F_WIN;
     else f = MG_F_STAND;
     mg_player(0, MG_FRAME(MG_VIEW_FRONT, f), px, feet, SPR_PAL_YOU, flip);
+
+    // CPU rival in VS mode.
+    if (mg_vs) {
+        uint8_t cf;
+        int16_t cfeet = FLOOR_Y;
+        if (mg_juggle_dropped) cf = mg_won ? MG_F_LOSE : MG_F_WIN;
+        else if (mg_juggle_cswing_t) {
+            if (mg_juggle_cswing == TOUCH_HEAD) cf = MG_F_HEADER, cfeet = FLOOR_Y - 3;
+            else cf = MG_F_KICK;
+        } else if (mg_juggle_cmoving) cf = ((uint8_t)mg_timer & 8) ? MG_F_RUN_B : MG_F_RUN_A;
+        else cf = MG_F_STAND;
+        mg_player(1, MG_FRAME(MG_VIEW_FRONT, cf), P(mg_juggle_cx), cfeet, SPR_PAL_CPU, mg_juggle_cface);
+    } else {
+        mg_player_hide(1);
+    }
 
     // The ball, spinning in the air; on fire after a milestone.
     tile = MG_T_BALL + (bz && ((uint8_t)mg_timer & 4) ? 2 : 0);
@@ -431,6 +607,7 @@ static void draw(void) {
 // Timers and effects, a frame.
 static void tick(void) {
     if (mg_juggle_swing_t) mg_juggle_swing_t--;
+    if (mg_juggle_cswing_t) mg_juggle_cswing_t--;
     if (mg_juggle_cool) mg_juggle_cool--;
     if (mg_juggle_grade_t) mg_juggle_grade_t--;
     if (mg_juggle_fire_t) mg_juggle_fire_t--;
@@ -446,6 +623,21 @@ static void tick(void) {
 }
 
 static void hud(void) {
+    if (mg_vs) {
+        if (mg_hud_dirty) {
+            mg_hud_dirty = 0;
+            fill_win_rect(0, 0, SCREEN_TW, 1, 0);
+            win_text(0, 0, "YOU");
+            win_text(7, 0, "RLY");
+            win_text(15, 0, "CPU");
+            shown_you = shown_cpu = 0xFF;
+            shown_points = -1;
+        }
+        if (mg_juggle_you_pts != shown_you) win_number(4, 0, shown_you = mg_juggle_you_pts, 1, 0);
+        if ((int16_t)mg_juggle_rally != shown_points) win_number(11, 0, shown_points = mg_juggle_rally, 2, 0);
+        if (mg_juggle_cpu_pts != shown_cpu) win_number(19, 0, shown_cpu = mg_juggle_cpu_pts, 1, 0);
+        return;
+    }
     uint16_t best = mg_best[MG_JUGGLE];
     if (mg_juggle_points > best) best = mg_juggle_points;
     if (mg_hud_dirty) {
@@ -473,8 +665,9 @@ void mg_juggle_enter(void) BANKED {
     mg_load_bg(mg_juggle_bg_tiles, MG_JUGGLE_BG_TILE_COUNT, mg_juggle_bg_map, mg_juggle_bg_attr,
                MG_JUGGLE_BG_MAP_W, MG_JUGGLE_BG_MAP_H, BANK(mg_juggle_bg));
     mg_load_spr(mg_juggle_spr_tiles, MG_JUGGLE_SPR_TILE_COUNT, BANK(mg_juggle_spr));
-    mg_juggle_px = 80 << 4;
-    mg_juggle_bx = 90 << 4;
+    mg_juggle_px = (mg_vs ? 52 : 80) << 4;
+    mg_juggle_cx = 108 << 4;
+    mg_juggle_bx = (mg_vs ? 52 : 90) << 4;
     mg_juggle_bz = mg_juggle_vx = mg_juggle_vz = 0;
     mg_juggle_points = mg_juggle_touches = 0;
     mg_juggle_next = 10;
@@ -483,6 +676,10 @@ void mg_juggle_enter(void) BANKED {
     set_windows();
     mg_juggle_speed = 20 + stat_lv[STAT_REFLEX];
     mg_juggle_swing = mg_juggle_swing_t = mg_juggle_cool = mg_juggle_pending = 0;
+    mg_juggle_cswing = mg_juggle_cswing_t = mg_juggle_cmoving = 0;
+    mg_juggle_cface = 1;
+    mg_juggle_turn = mg_juggle_you_pts = mg_juggle_cpu_pts = 0;
+    mg_juggle_pause = mg_juggle_server = mg_juggle_rally = 0;
     mg_juggle_grade = mg_juggle_grade_t = mg_juggle_bonus = mg_juggle_call = 0;
     mg_juggle_wind = 0;
     mg_juggle_wind_t = 0;
@@ -505,16 +702,23 @@ void mg_juggle_update(void) BANKED {
     if (mg_run == MG_RUN_LIVE) {
         hud();
         if (!mg_juggle_started) {
-            // The kick-up: off the grass and up over your head.
             mg_juggle_started = 1;
-            mg_juggle_swing = TOUCH_FOOT;
-            mg_juggle_swing_t = 10;
-            mg_juggle_cool = 16;
-            mg_juggle_face = 0;
-            mg_juggle_bz = touch_z[TOUCH_FOOT];
-            mg_juggle_vz = tier_pop[0];
-            mg_juggle_vx = (mg_juggle_px - mg_juggle_bx) >> 6;
-            sfx_play(SFX_KICK);
+            if (mg_vs) {
+                vs_serve();
+            } else {
+                // The kick-up: off the grass and up over your head.
+                mg_juggle_swing = TOUCH_FOOT;
+                mg_juggle_swing_t = 10;
+                mg_juggle_cool = 16;
+                mg_juggle_face = 0;
+                mg_juggle_bz = touch_z[TOUCH_FOOT];
+                mg_juggle_vz = tier_pop[0];
+                mg_juggle_vx = (mg_juggle_px - mg_juggle_bx) >> 6;
+                sfx_play(SFX_KICK);
+            }
+        } else if (mg_vs && mg_juggle_pause) {
+            mg_juggle_moving = mg_juggle_cmoving = 0;
+            if (--mg_juggle_pause == 0) vs_serve();
         } else if (!mg_juggle_dropped) {
             // Feet: the d-pad.
             mg_juggle_moving = 0;
@@ -531,21 +735,24 @@ void mg_juggle_update(void) BANKED {
                 if (mg_juggle_bx < mg_juggle_px - 32) mg_juggle_face = 1;
                 else if (mg_juggle_bx > mg_juggle_px + 32) mg_juggle_face = 0;
             }
-            // Touches.
-            if (!mg_juggle_cool) {
+            // Touches (in VS mode, only when it is YOUR turn!).
+            if (!mg_juggle_cool && (!mg_vs || mg_juggle_turn == 0)) {
                 if (joy_pressed & J_B) try_touch(TOUCH_HEAD);
                 else if (joy_pressed & J_A) try_touch((joy & J_UP) ? TOUCH_KNEE : TOUCH_FOOT);
             }
+            if (mg_vs) cpu_step();
         }
     } else {
-        mg_juggle_moving = 0;
+        mg_juggle_moving = mg_juggle_cmoving = 0;
     }
     physics();
     if (mg_juggle_pending && !mg_juggle_dropped && --mg_juggle_pending == 0) {
         contact(mg_juggle_swing, mg_juggle_pend_grade);
     }
-    if (mg_juggle_bz <= 0 && mg_run == MG_RUN_LIVE && mg_juggle_started && !mg_juggle_dropped) {
-        drop();
+    if (mg_juggle_bz <= 0 && mg_run == MG_RUN_LIVE && mg_juggle_started && !mg_juggle_dropped &&
+        (!mg_vs || !mg_juggle_pause)) {
+        if (mg_vs) vs_point_scored();
+        else drop();
     }
     cue();
     tick();

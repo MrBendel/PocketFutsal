@@ -153,18 +153,21 @@ void training_enter(void) BANKED {
     t += draw(FONT_COMPACT, TEXT_CENTER, ROW_HINT, "A: PLAY   B: BACK", t, TITLE_PAL_HINT);
     train_tile = t;
     t += 16;  // room for the longest "TRAINS CONTROL + REFLEX" line
-    // Pre-render all game rows while DISPLAY_OFF so scrolling is instant.
+    // Pre-render all game rows into VRAM bank 1 while DISPLAY_OFF so scrolling is instant
+    // and never collides with T_BAR (253) in bank 0 as MG_COUNT grows.
+    uint8_t tb1 = 1;
     for (uint8_t g = 0; g < MG_COUNT; g++) {
         fill_bkg_rect(0, ROW_GAMES, SCREEN_TW, 1, 0);
         VBK_REG = 1;
         fill_bkg_rect(0, ROW_GAMES, SCREEN_TW, 1, TITLE_PAL_TEXT);
         VBK_REG = 0;
         mg_name(g, line);
-        t += text_draw(FONT_COMPACT, 24, ROW_GAMES, line, t, TITLE_PAL_TEXT);
+        tb1 += text_draw(FONT_COMPACT, 24, ROW_GAMES, line, tb1, TITLE_PAL_TEXT | TEXT_BANK1);
         if (mg_best[g]) {
             cat(line, 0, "BEST ");
             num(line + 5, mg_best[g]);
-            t += text_draw(FONT_COMPACT, 148 - text_width(FONT_COMPACT, line), ROW_GAMES, line, t, TITLE_PAL_HINT);
+            tb1 += text_draw(FONT_COMPACT, 148 - text_width(FONT_COMPACT, line), ROW_GAMES, line, tb1,
+                             TITLE_PAL_HINT | TEXT_BANK1);
         }
         get_bkg_tiles(0, ROW_GAMES, SCREEN_TW, 1, list_map[g]);
         VBK_REG = 1;
@@ -188,6 +191,7 @@ void training_update(void) BANKED {
     if (joy_pressed & (J_A | J_START)) {
         sfx_play(SFX_START);
         mg_id = train_sel;
+        mg_vs = (train_sel == MG_RALLY) ? 1 : 0;
         mg_phase = MG_PH_BRIEF;
         state_change(STATE_MINIGAME);
     } else if (joy_pressed & J_B) {

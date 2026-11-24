@@ -2,7 +2,7 @@
 import { settle, bootToTitle, TRAINING, MINIGAME } from './helpers.mjs';
 
 // Must match src/progress.h and src/minigame.h.
-export const MG = { MACHINE: 0, WALL: 1, JUGGLE: 2, SHOOTOUT: 3, SLALOM: 4 };
+export const MG = { MACHINE: 0, WALL: 1, JUGGLE: 2, SHOOTOUT: 3, SLALOM: 4, RALLY: 5 };
 export const STAT = { POWER: 0, CONTROL: 1, AIM: 2, REFLEX: 3 };
 export const MG_PH = { BRIEF: 0, PLAY: 1, RESULT: 2 };
 export const MG_RUN = { READY: 0, LIVE: 1, OVER: 2 };
@@ -33,10 +33,13 @@ export function phaseSettled(emu, phase, frames = 400, what = `phase ${phase}`) 
 }
 
 /** Straight into a game (its countdown just started), on a fixed seed. */
-export function startMinigame(id, seed = 4242) {
+export function startMinigame(id, seed = 4242, { vs } = {}) {
   const emu = openGame(id);
   emu.writeBytes(emu.symbols.addr('test_seed'), [seed & 255, seed >> 8]);
   emu.idle(25);  // the card ignores buttons for a moment
+  if (vs !== undefined && emu.v('mg_vs') !== (vs ? 1 : 0)) {
+    emu.tap('RIGHT').idle(2);
+  }
   emu.tap('A');
   return phaseSettled(emu, MG_PH.PLAY, 200, 'the game');
 }

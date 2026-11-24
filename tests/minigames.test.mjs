@@ -28,25 +28,33 @@ test('the hub chooses a game, scrolls past four, and its brief plays or goes bac
   assert.equal(e.v('train_scroll'), 0);
   e.tap('DOWN');
   assert.equal(e.v('train_sel'), 1);
-  // Stepping down to the 5th game (Cone Slalom) scrolls the 4-row window down.
+  // Stepping down to the 5th and 6th games scrolls the 4-row window down.
   e.tap('DOWN').tap('DOWN').tap('DOWN');
   assert.equal(e.v('train_sel'), MG.SLALOM);
   assert.equal(e.v('train_scroll'), 1);
   matchGolden(e, 'training-hub-scrolled');
-  // Wrapping UP from 0 jumps to the last game and scrolls to it.
+  e.tap('DOWN');
+  assert.equal(e.v('train_sel'), MG.RALLY);
+  assert.equal(e.v('train_scroll'), 2);
+  // Wrapping DOWN from last jumps to 0; UP from 0 jumps to MG.RALLY.
   e.tap('DOWN');
   assert.equal(e.v('train_sel'), 0);
   assert.equal(e.v('train_scroll'), 0);
   e.tap('UP');
-  assert.equal(e.v('train_sel'), MG.SLALOM);
-  assert.equal(e.v('train_scroll'), 1);
+  assert.equal(e.v('train_sel'), MG.RALLY);
+  assert.equal(e.v('train_scroll'), 2);
   settle(e.tap('A'), MINIGAME, 'the brief');
-  assert.equal(e.v('mg_id'), MG.SLALOM);
+  assert.equal(e.v('mg_id'), MG.RALLY);
   assert.equal(e.v('mg_phase'), MG_PH.BRIEF);
+  assert.equal(e.v('mg_vs'), 1, 'Wall Rally defaults to VS CPU on brief');
   e.idle(25);
+  e.tap('LEFT');
+  assert.equal(e.v('mg_vs'), 0, 'LEFT toggles brief mode to SOLO');
+  e.tap('RIGHT');
+  assert.equal(e.v('mg_vs'), 1, 'RIGHT toggles brief mode back to VS CPU');
   settle(e.tap('B'), TRAINING, 'back to the hub');
-  assert.equal(e.v('train_sel'), MG.SLALOM, 'the hub remembers the choice');
-  assert.equal(e.v('train_scroll'), 1, 'the hub stays scrolled to the choice');
+  assert.equal(e.v('train_sel'), MG.RALLY, 'the hub remembers the choice');
+  assert.equal(e.v('train_scroll'), 2, 'the hub stays scrolled to the choice');
 });
 
 test('a game counts down, plays, pauses, and ends with XP and a new best', () => {

@@ -39,8 +39,10 @@ import * as MG_WALL from './art/mg_wall.mjs';
 import * as MG_JUGGLE from './art/mg_juggle.mjs';
 import * as MG_SHOOTOUT from './art/mg_shootout.mjs';
 import * as MG_SLALOM from './art/mg_slalom.mjs';
+import * as MG_RALLY from './art/mg_rally.mjs';
 const MINIGAME_ART = [
-  ['machine', MG_MACHINE], ['wall', MG_WALL], ['juggle', MG_JUGGLE], ['shootout', MG_SHOOTOUT], ['slalom', MG_SLALOM],
+  ['machine', MG_MACHINE], ['wall', MG_WALL], ['juggle', MG_JUGGLE],
+  ['shootout', MG_SHOOTOUT], ['slalom', MG_SLALOM], ['rally', MG_RALLY],
 ];
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
