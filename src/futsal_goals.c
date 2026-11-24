@@ -1,8 +1,11 @@
 #pragma bank 255
 #include <gb/gb.h>
+#include <gb/cgb.h>
+#include <string.h>
 #include "futsal.h"
 #include "futsal_goals.h"
 #include "futsal_goal.h"
+#include "futsal_goal_bg.h"
 #include "gfx.h"
 #include "sfx.h"
 #if 250 + FUTSAL_GOAL_TILE_COUNT > 256
@@ -12,31 +15,67 @@ uint8_t fs_frame_timer,fs_frame_goal;
 int8_t fs_goal_dx[2],fs_goal_dy[2];
 uint16_t fs_post_hits,fs_bar_hits;
 static int8_t knock;
-static uint8_t last_cam,dirty;
+static uint8_t dirty,last_pose[2],pending,target_end,target_pose,chunk,buffer;
+static uint8_t patch_map[24],patch_attrs[24];
+static uint16_t target_offset;
+uint16_t fs_goal_uploads;
 void futsal_goals_reset(void) BANKED{
     fs_frame_timer=0;fs_goal_dx[0]=fs_goal_dx[1]=fs_goal_dy[0]=fs_goal_dy[1]=0;dirty=1;
 }
 void futsal_goals_load(void) BANKED{
+    static const uint16_t palettes[12]={
+        RGB8(40,132,172),RGB8(24,20,32),RGB8(88,160,64),RGB8(248,248,232),
+        RGB8(48,144,184),RGB8(24,20,32),RGB8(88,160,64),RGB8(248,248,232),
+        RGB8(88,160,64),RGB8(24,20,32),RGB8(40,88,56),RGB8(248,248,232)
+    };
     banked_sprite_data(250,FUTSAL_GOAL_TILE_COUNT,futsal_goal_tiles,BANK(futsal_goal));
-    fs_post_hits=fs_bar_hits=0;last_cam=255;futsal_goals_reset();
-    for(uint8_t i=0;i<10;i++){
-        uint8_t col=i%5;
-        set_sprite_tile(30+i,col==0||col==4?250:252);
-        set_sprite_prop(30+i,SPR_PAL_BALL|(col==4?S_FLIPX:0));
-    }
+    memcpy(&pal_base_bg[16],palettes,sizeof(palettes));
+    fs_post_hits=fs_bar_hits=fs_goal_uploads=0;
+    last_pose[0]=last_pose[1]=255;pending=buffer=0;futsal_goals_reset();
+    // Normal poses stay resident. Two shared motion buffers at 48..95 let
+    // us stream a displaced frame without touching the currently visible one.
+    VBK_REG=1;
+    banked_bkg_data(0,24,futsal_goal_bg_tiles,BANK(futsal_goal_bg));
+    banked_bkg_data(24,24,futsal_goal_bg_tiles+16*24*16,BANK(futsal_goal_bg));
+    VBK_REG=0;
+    // All ten goal OBJ slots are free. Nothing in a goal uses the scanline list.
+    for(uint8_t i=30;i<40;i++)move_sprite(i,0,0);
+}
+static void prepare_patch(uint8_t end,uint8_t pose,uint8_t base){
+    target_offset=((uint16_t)end*16+pose)*24;
+    banked_memcpy(patch_map,futsal_goal_bg_map+target_offset,24,BANK(futsal_goal_bg));
+    banked_memcpy(patch_attrs,futsal_goal_bg_attr+target_offset,24,BANK(futsal_goal_bg));
+    for(uint8_t i=0;i<24;i++)if(patch_attrs[i]&8)patch_map[i]=base+patch_map[i]-end*24;
+}
+static void commit_patch(uint8_t end){
+    VBK_REG=1;set_bkg_tiles(6,end?16:1,8,3,patch_attrs);
+    VBK_REG=0;set_bkg_tiles(6,end?16:1,8,3,patch_map);
+    fs_goal_uploads++;
 }
 void futsal_goals_draw(uint8_t cam) BANKED{
-    static uint8_t g,j,x,y;
-    static OAM_item_t *o;
-    if(last_cam==cam&&!dirty)return;
-    last_cam=cam;dirty=0;o=&shadow_OAM[30];
+    static uint8_t g,amount,pose,base;
+    (void)cam; // BG goals scroll with the court automatically.
+    if(!dirty&&!pending)return;
+    dirty=0;
     for(g=0;g<2;g++){
-        // Hardware sprite coordinates include an 8px horizontal and 16px
-        // vertical origin. Centre the 40px frame at court x=80, with its
-        // bottom edge just inside the baseline.
-        x=68+fs_goal_dx[g];y=fs_projection_y[g?224:0]-cam+fs_goal_dy[g];
-        for(j=0;j<5;j++){o->x=x;o->y=y;o++;x+=8;}
+        amount=fs_goal_dy[g]<0?-fs_goal_dy[g]:fs_goal_dy[g];
+        pose=amount?1+(amount-1)*3+(fs_goal_dx[g]<0?0:fs_goal_dx[g]>0?2:1):0;
+        if(!pose){
+            if(pending&&target_end==g)pending=0;
+            if(last_pose[g]){prepare_patch(g,0,g*24);commit_patch(g);last_pose[g]=0;}
+        }else if(last_pose[g]!=pose&&!pending){
+            pending=1;target_end=g;target_pose=pose;chunk=0;
+            prepare_patch(g,pose,48+(buffer^1)*24);
+        }
     }
+    if(!pending)return;
+    base=48+(buffer^1)*24;
+    // Six tiles per frame keeps VRAM writes inside the frame budget. The map
+    // switches only after all four chunks are ready, so no partial net appears.
+    VBK_REG=1;
+    banked_bkg_data(base+chunk,6,futsal_goal_bg_tiles+((target_offset+chunk)<<4),BANK(futsal_goal_bg));
+    VBK_REG=0;chunk+=6;
+    if(chunk==24){commit_patch(target_end);last_pose[target_end]=target_pose;buffer^=1;pending=0;}
 }
 // Called only at an end-line crossing. Sweep back to the actual plane so a
 // fast diagonal cannot tunnel through a post or below the crossbar.

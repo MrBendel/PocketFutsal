@@ -33,7 +33,10 @@ rebounding walls outside the goal mouths. Both ends now use the same 40x16
 portable-goal sprite and matching collision dimensions. Posts and the crossbar
 rebound the ball and knock the goal out of position. A short FRAME! stoppage
 lets the rebound and displacement read, then resets the goal and gives the
-defending team the restart. A frame hit never counts as a goal.
+defending team the restart. A frame hit never counts as a goal. Goals are drawn with background tiles so
+the ball, players, shadows and effects cannot push their net/frame out of the
+Game Boy's ten-sprites-per-scanline list. Their collision and displacement
+remain separate from the renderer.
 
 Shooting precision depends on distance: close finishes have very little scatter,
 medium shots spread wider, and efforts from more than 144 court pixels away are
