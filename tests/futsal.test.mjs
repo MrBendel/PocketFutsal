@@ -819,8 +819,9 @@ test('both movable goals use the same full-size sprite frame without replacing p
  for(const end of [0,1]){
   const baseline=e.read8(e.symbols.addr('fs_projection_y')+(end?224:0));
   const top=e.read8(0xfe00+(30+end*5)*4)-16+e.v('fs_cam_y');
-  assert.equal(top,baseline-14,'crossbar sits above its actual projected goal line');
-  assert.equal(top+15,baseline+1,'post feet meet the court instead of sitting on the grass');
+  assert.equal(e.read8(0xfe01+(30+end*5)*4)-8+20,80,'goal centre accounts for the hardware sprite origin');
+  assert.equal(top+2,baseline-14,'white crossbar aligns with its collision height');
+  assert.equal(top+15,baseline-1,'bottom rail sits just inside the court line');
  }
  e.shot('futsal-object-goals');
 });

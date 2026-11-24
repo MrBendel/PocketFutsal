@@ -31,7 +31,10 @@ void futsal_goals_draw(uint8_t cam) BANKED{
     if(last_cam==cam&&!dirty)return;
     last_cam=cam;dirty=0;o=&shadow_OAM[30];
     for(g=0;g<2;g++){
-        x=64+fs_goal_dx[g];y=fs_projection_y[g?224:0]+2-cam+fs_goal_dy[g];
+        // Hardware sprite coordinates include an 8px horizontal and 16px
+        // vertical origin. Centre the 40px frame at court x=80, with its
+        // bottom edge just inside the baseline.
+        x=68+fs_goal_dx[g];y=fs_projection_y[g?224:0]-cam+fs_goal_dy[g];
         for(j=0;j<5;j++){o->x=x;o->y=y;o++;x+=8;}
     }
 }
