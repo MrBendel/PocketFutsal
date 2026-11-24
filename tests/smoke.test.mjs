@@ -10,6 +10,8 @@ import {
 } from './helpers.mjs';
 
 /** Mid-rally, the ball in your half and the CPU (which struck last) standing still off to one side, you at (80, 190). */
+const POWER_MAX = 64;
+
 function quietRally() {
   const emu = served(startGame());
   emu.write8(emu.symbols.addr('cpu_idle'), 1);
@@ -270,21 +272,35 @@ test('a struck ball leaves a trail: red off A, blue off B, longer charged; it fa
   }
 });
 
-test('the HUD names your shot where it says YOU: queued, then what went', () => {
-  const emu = quietRally();
-  const label = (e) => e.v('shot_shown');
+test('no HUD in a rally: the score box (faces, points) before each serve, a banner for the call, the board in the court art', () => {
+  const OAM_GAUGE = 37, BOARD_ROW = 2, BOARD_PTS = 7;
+  const win = (e) => (e.read8(0xFF40) & 0x20 ? e.read8(0xFF4A) : -1);  // the window's line, or -1: off
+  const board = (e) => [0, 1, 3, 4].map((k) => e.read8(0x9800 + BOARD_ROW * 32 + BOARD_PTS + k) - 16);  // font: '0' is 16
+  const emu = served(startGame());
   emu.idle(1);
-  assert.equal(label(emu), SHOT_NONE, 'YOU, nothing queued');
-  ballAt(emu, 80, 150, 0, 0, 30);
-  emu.tap('B');
-  assert.equal(label(emu), SHOT_CURVE, 'CRV');
+  assert.equal(win(emu), 112, 'the box, four rows at the bottom, before the serve');
+  assert.deepEqual(board(emu), [0, 0, 0, 0], 'the board: 00-00');
   emu.tap('A');
-  assert.equal(label(emu), SHOT_LOB, 'B then A: LOB');
-  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 160, 'the lob');
-  emu.idle(1);
-  assert.equal(label(emu), SHOT_LOB, 'what went, for a moment');
-  emu.idle(70);
-  assert.equal(label(emu), SHOT_NONE, 'then YOU again');
+  emu.idle(2);
+  assert.equal(win(emu), -1, 'tossed: gone, the court has the whole screen');
+  const rally = quietRally();
+  rally.idle(2);
+  assert.equal(win(rally), -1, 'none in a rally');
+  assert.equal(rally.read8(0xFE00 + OAM_GAUGE * 4), 0, 'an empty power meter: no gauge');
+  rally.write8(rally.symbols.addr('pl_power') + YOU, 40);
+  rally.idle(2);
+  assert.ok(rally.read8(0xFE00 + OAM_GAUGE * 4) > 0, 'some power: a gauge under you');
+  // A point: the call along the bottom, the board's digits swapped, then the box.
+  for (const [n, v] of [['last_touch', YOU], ['holder', CPU], ['ball_landings', 1], ['ball_netted', 0], ['ball_serve', 0]]) rally.write8(rally.symbols.addr(n), v);
+  ballAt(rally, 100, 60, 2);
+  assert.equal(pointWithin(rally, 30), YOU);
+  rally.idle(2);
+  assert.equal(win(rally), 136, 'the call: one row');
+  assert.deepEqual(board(rally), [0, 1, 0, 0], 'the board: 01-00');
+  rally.until((e) => e.v('goal_timer') === 0, 400, 'the next serve').idle(3);
+  assert.equal(win(rally), 112, 'the box again');
+  rally.tap('START').idle(1);
+  assert.equal(win(rally), 136, 'PAUSED along the bottom');
 });
 
 test('a lob (B then A) or a drop shot (A then B) is armed for a moment: struck later it is the curve or the power shot', () => {
@@ -852,12 +868,11 @@ test('between shots you jog back home; a volley right at the net stays low and l
   assert.equal(emu.v('goal_timer'), 0, 'in');
 });
 
-test('cues: the ball coming and nothing queued, you blink and the HUD says GO!; each press ticks, half and full chime', () => {
+test('cues: the ball coming and nothing queued, you blink; each press ticks, half and full chime', () => {
   const emu = quietRally();
   incoming(emu, 80, 40, 20, 30);
   emu.idle(3);
   assert.equal(emu.v('go_cue'), 1, 'press!');
-  assert.equal(emu.v('shot_shown'), 12, 'GO! on the HUD');
   emu.tap('A');
   assert.equal(emu.v('go_cue'), 0, 'queued: no more cue');
   assert.equal(emu.v('sfx_last'), 10, 'a tick');
@@ -925,6 +940,62 @@ test('screen: planted, charged full', () => {
   matchGolden(emu.idle(4), 'charged');
 });
 
+test('the power meter: clean strikes in a rally fill it; full, A+B arms the power slam (SP!), gold and fast', () => {
+  const emu = quietRally();
+  ballAt(emu, 82, 186, 0);
+  readied(emu, SHOT_POWER, 12);
+  emu.idle(2);
+  assert.equal(at(emu, 'pl_power', YOU), 1, 'a clean strike adds one');
+  const arm = quietRally();
+  arm.write8(arm.symbols.addr('pl_power') + YOU, POWER_MAX);
+  incoming(arm, 82, 130, 40, 0);
+  arm.hold('A+B', 1);
+  assert.equal(at(arm, 'pl_special', YOU), 1, 'armed');
+  assert.equal(at(arm, 'pl_power', YOU), 0, 'the meter spent');
+  arm.until((e) => { e.idle(1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
+  arm.idle(1);
+  assert.equal(arm.v('ball_special'), 1, 'the power slam');
+  assert.equal(arm.v('ball_gold'), 1);
+  assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 64, 'faster than a gold slam');
+  assert.ok(arm.v('ball_vy', 'i16') < 0, 'up the court');
+  assert.equal(at(arm, 'pl_special', YOU), 0, 'used');
+  const notFull = quietRally();
+  notFull.write8(notFull.symbols.addr('pl_power') + YOU, POWER_MAX - 1);
+  incoming(notFull, 82, 130, 40, 0);
+  notFull.hold('A+B', 1);
+  assert.equal(at(notFull, 'pl_special', YOU), 0, 'not full: no power slam');
+});
+
+test("the CPU's power slam: only a press timed to within 5 frames of it reaching you returns it; else down you go", () => {
+  const comeAt = (pressAt) => {
+    const emu = quietRally();
+    ballAt(emu, 80, 116, 4, 0, 64);
+    for (const n of ['ball_power', 'ball_gold', 'ball_special']) emu.write8(emu.symbols.addr(n), 1);
+    emu.write8(emu.symbols.addr('sp_try') + YOU, 0);
+    emu.write8(emu.symbols.addr('ball_landings'), 0);
+    for (let f = 0; f < 80; f++) {
+      const d = 190 - px(emu.v('ball_y', 'i16'));
+      for (const at_ of pressAt) if (d <= at_ && d > at_ - 4) { emu.hold('A', 1); }
+      emu.idle(1);
+      if (at(emu, 'pl_move', YOU) === MOVE_DOWN) return 'down';
+      if (at(emu, 'pl_shots', YOU)) return emu.v('ball_vy', 'i16') < 0 && emu.v('ball_power') ? 'returned' : 'touched';
+    }
+    return 'past';
+  };
+  assert.equal(comeAt([]), 'down', 'no press');
+  assert.equal(comeAt([48]), 'down', 'too early');
+  assert.equal(comeAt([20]), 'returned', 'timed: back on fire');
+  assert.equal(comeAt([48, 20]), 'down', 'one try: a second press does not count');
+});
+
+test('screen: the power meter, a gauge under you, half full', () => {
+  const emu = quietRally();
+  emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX / 2);
+  incoming(emu, 80, 40, 30, 60);
+  emu.tap('A').tap('A');
+  matchGolden(emu.idle(4), 'power-meter');
+});
+
 test('screen: a header', () => {
   const emu = quietRally();
   ballAt(emu, 82, 184, 20);
@@ -957,6 +1028,24 @@ test('screen: the far end, the CPU sliding', () => {
   emu.write8(emu.symbols.addr('pl_move') + CPU, MOVE_SLIDE);
   emu.write8(emu.symbols.addr('pl_move_timer') + CPU, 30);
   matchGolden(emu.idle(20), 'slide');
+});
+
+test('your slide or knockdown leaves the CPU standing: it is not drawn lying, nor split in three', () => {
+  const emu = quietRally();
+  emu.write8(emu.symbols.addr('pl_move') + YOU, MOVE_DOWN);
+  emu.write8(emu.symbols.addr('pl_move_timer') + YOU, 40);
+  emu.idle(3);
+  // The CPU's body in the displayed OAM: bank-1 tiles in its red palette (2).
+  const rows = (pal) => {
+    const ys = new Set();
+    for (let n = 0; n < 40; n++) {
+      const a = 0xFE00 + n * 4, y = emu.read8(a), p = emu.read8(a + 3);
+      if (y && (p & 8) && (p & 7) === pal) ys.add(y);
+    }
+    return ys.size;
+  };
+  assert.equal(rows(0), 1, 'you lie down: one row');
+  assert.equal(rows(2), 2, 'the CPU stands: two rows');
 });
 
 test('screen: a point', () => {

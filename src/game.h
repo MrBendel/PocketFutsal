@@ -36,7 +36,7 @@
 #define PROJ_K1 164
 #define PROJ_S0 111    // the width scale at the far line, /128 (128 at the near)
 #define MAP_H 168      // the background: 160 x 168, scrolled up and down
-#define CAM_MAX 32     // its scroll: MAP_H - the 136 rows above the HUD
+#define CAM_MAX 24     // its scroll: MAP_H - the screen's 144 rows (no HUD row)
 
 // Sides. You (SIDE_YOU) play the near half.
 #define SIDE_YOU 0
@@ -128,6 +128,10 @@ extern uint8_t pl_charge[2];       // 0 .. CHARGE_MAX
 extern uint8_t pl_hold[2];         // frames charged at the full meter (it gives up after a while)
 extern uint8_t pl_move[2];         // MOVE_*: the strike or dive in progress
 extern uint8_t pl_move_timer[2];   // its pose shows while this counts down; no touches meanwhile
+extern uint8_t pl_power[2];         // the power meter, 0 .. POWER_MAX: full, A+B arms the power slam
+extern uint8_t pl_special[2];       // armed: the next clean strike is the power slam
+extern uint8_t ball_special;        // the ball's a power slam: only a timed press returns it
+#define POWER_MAX 64
 extern uint8_t you_ai;             // the AI plays your side (the title's PLAYER: AI)
 extern uint8_t pl_shots[2];        // strikes this match
 extern uint8_t pl_last_move[2];    // the last strike's MOVE_*, for the tests

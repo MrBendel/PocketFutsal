@@ -47,6 +47,7 @@ extern uint8_t pl_combo[2];
 extern uint8_t pl_flash[2];
 extern uint8_t meet_slam[2];
 extern uint8_t ball_gold;
+extern uint8_t fc_gold_speed;
 extern uint8_t ball_dropped;
 extern int16_t ball_cacc;
 extern int16_t arc_t;

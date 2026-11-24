@@ -64,7 +64,7 @@ uint8_t fs_presser[2]; // One challenger per team; partner protects the outlet.
 int8_t fs_cut_dir;
 uint8_t fs_cut_window,fs_cut_count,fs_cut_cooldown,fs_stumble_player,fs_stumble_timer;
 uint16_t fs_ankle_count;
-uint8_t fs_ball_oam, fs_hud_pending,fs_goal_cam_cache;
+uint8_t fs_ball_oam, fs_hud_pending,fs_goal_refresh;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
 uint8_t fs_trail_x[16], fs_trail_y[16];
 uint8_t fs_projection_y[225], fs_projection_s[225];
@@ -200,7 +200,7 @@ static void hud(void) {
     else if (fs_frame_timer) win_text(6,0,"FRAME!");
 }
 static void kickoff(uint8_t side) {
-    futsal_goals_reset();fs_goal_cam_cache=255;
+    futsal_goals_reset();fs_goal_refresh=1;
     fs_pl_x[0]=52*16; fs_pl_y[0]=142*16;
     fs_pl_x[1]=108*16; fs_pl_y[1]=178*16;
     fs_pl_x[2]=108*16; fs_pl_y[2]=82*16;
@@ -683,8 +683,8 @@ static void draw(void) {
         move_sprite(27,zx+8,fs_projection_y[zy]-fs_cam_y+12);
     }else{move_sprite(26,0,0);move_sprite(27,0,0);}
     if(fs_fx_timer||fs_fx_frame!=255)futsal_fx_draw(fs_cam_y);
-    if(fs_frame_timer||fs_cam_y!=fs_goal_cam_cache){
-        fs_goal_cam_cache=fs_cam_y;futsal_goals_draw(fs_cam_y);
+    if(fs_goal_refresh){
+        fs_goal_refresh=0;futsal_goals_draw(fs_cam_y);
     }
 }
 void futsal_enter(void) BANKED {
@@ -737,7 +737,10 @@ void futsal_update(void) BANKED {
     if(joy_pressed&J_SELECT) { fs_spectator=!fs_spectator;fs_pass_charge=fs_pending_kick=fs_return_call=fs_cut_count=fs_cut_window=fs_input_pending=0;fs_cut_dir=0;hud();return; }
     if(fs_frame_timer){
         futsal_goals_step();
-        if(!fs_frame_timer){kickoff(fs_frame_goal^1);fs_hud_pending=1;}
+        futsal_goals_draw(fs_cam_y);
+        if(!fs_frame_timer){
+            kickoff(fs_frame_goal^1);futsal_goals_draw(fs_cam_y);fs_goal_refresh=0;fs_hud_pending=1;
+        }
         draw();return;
     }
     if(fs_goal_timer) {

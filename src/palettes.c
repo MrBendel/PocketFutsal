@@ -57,11 +57,17 @@ static const uint16_t trail_curve[4] = {0, C(208, 240, 255), C(72, 152, 248), C(
 static const uint16_t marks[4] = {0, C(255, 232, 64), C(32, 88, 104), C(32, 96, 112)};
 // The HUD row (the GB Studio font): a navy band, light letters; the meter in gold.
 static const uint16_t hud[4] = {C(24, 32, 64), C(24, 32, 64), C(254, 196, 52), C(232, 236, 255)};
+// The faces in the score box (play_hud.c), on a light card: your blue, the CPU's red.
+#define CARD C(120, 136, 184)
+static const uint16_t face_you[4] = {CARD, SKIN, C(40, 120, 232), INK};
+static const uint16_t face_cpu[4] = {CARD, SKIN, C(232, 64, 72), INK};
 
 void palettes_play(void) BANKED {
     set_bg(PLAY_PAL_FIELD, field);
     set_bg(PLAY_PAL_BOARD, boards);
-    set_bg(BG_PAL_UI, hud);  // the window: the HUD
+    set_bg(BG_PAL_UI, hud);  // the window: the score box, a banner; the board
+    set_bg(2, face_you);     // play_hud.h BG_PAL_FACE_YOU
+    set_bg(3, face_cpu);     // BG_PAL_FACE_CPU
     set_obj(SPR_PAL_YOU, you);
     set_obj(SPR_PAL_CPU, cpu);
     set_obj(SPR_PAL_FLASH, flash);

@@ -7,7 +7,15 @@ and dark open mesh for contrast on the blue court. `goals-1x.png` shows top and 
 Source: `FUTSAL_GOAL` in `tools/tile-art.mjs`. Re-export with
 `node tools/export-goal-study.mjs`. Two unique 8x16 columns build each goal;
 the right post mirrors the left. `goal.2bpp` also includes the compact player
-shadow. All six tiles occupy bank-zero sprite tiles 250..255.
+shadow. The six-tile authoring sheet remains at bank-zero tiles 250..255 (including
+the compact player shadow), but goals no longer use hardware OBJ sprites.
+`tools/goal-background.mjs` composites the goal with its underlying court into
+bank-one BG tiles. Two resident rest poses and two shared motion buffers use
+signed BG tile IDs 0..95 at 0x9000..0x95ff, separate from player OBJ data.
+Precomputed knockback poses upload six tiles per frame during the stoppage;
+the tilemap switches only once a whole pose is ready. Reset switches straight
+back to the resident normal pose. Scrolling needs no goal uploads. This avoids
+the ten-objects-per-scanline limit while preserving physical goal movement.
 
 Collision dimensions are identical at both ends: posts at court x=60 and x=100,
 crossbar at height 14, with a three-pixel ball/frame contact tolerance. A hit

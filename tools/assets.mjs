@@ -30,6 +30,7 @@
 import fs from 'node:fs';
 import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './player-art.mjs';
 import {BALL_EXTRA} from './ball-art.mjs';
+import {GOAL_BG} from './goal-background.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -58,10 +59,14 @@ export const ASSETS = [
   // 20x21 map (tile indices from mapBase on) and the tiles' palettes.
   { name: 'pitch', bank: true, ascii: PITCH.tiles, map: PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
   { name: 'futsal_pitch', bank: true, ascii: FUTSAL_PITCH.tiles, map: FUTSAL_PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
+  { name: 'futsal_goal_bg', bank: true, ascii: GOAL_BG.tiles, map: GOAL_BG, src: 'tools/goal-background.mjs', deps:['tools/tile-art.mjs'] },
   { name: 'futsal_goal', bank: true, ascii: FUTSAL_GOAL, src: 'tools/tile-art.mjs' },
   { name: 'futsal_zone', bank: true, ascii: FUTSAL_ZONE, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
+  // A face for the score box before each serve (src/play_hud.c): the front view's
+  // standing head and shoulders, 16x16 (tiles: top left, bottom left, top right, bottom right).
+  { name: 'portrait', bank: true, ascii: (() => { const t = fullTiles('spiky'); return [t[80], t[81], t[84], t[85]]; })(), src: 'artwork/players/roster/spiky/player.json' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).
   { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs', deps:['artwork/ball/v1/ball.json'] },
   { name: 'ball_extra', bank: true, ascii: BALL_EXTRA, src: 'artwork/ball/v1/ball.json' },
