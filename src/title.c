@@ -34,6 +34,7 @@ uint8_t game_mode;  // MODE_*
 
 uint8_t title_timer;
 uint8_t title_opt_tile;   // option line tiles (redrawn on mode/option change)
+uint8_t title_aux_tile;
 uint8_t title_hint_tile;  // mode hint line tiles (redrawn on mode change)
 
 #define C(r, g, b) RGB8(r, g, b)
@@ -56,12 +57,17 @@ static void draw_length(void) {
         return;
     }
     draw(FONT_COMPACT, TEXT_CENTER, ROW_OPT,
-         game_mode ? (fs_spectator ? "< WATCH FOUR AI >" : "< PLAY AS BLUE #1 >")
+         game_mode ? (fs_pace==0 ? (fs_spectator?"< CASUAL WATCH >":"< CASUAL PLAY >")
+                    :fs_pace==1 ? (fs_spectator?"< NORMAL WATCH >":"< NORMAL PLAY >")
+                    :(fs_spectator?"< EXPERT WATCH >":"< EXPERT PLAY >"))
                    : (match_sets == 1 ? "< ONE SET TO 11 >" : "< BEST OF 3 SETS >"),
          title_opt_tile, TITLE_PAL_TEXT);
 }
 
 static void draw_hint(void) {
+    fill_bkg_rect(0, ROW_OPT+1, SCREEN_TW, 1, 0);
+    if(game_mode==MODE_FUTSAL)
+        draw(FONT_COMPACT,TEXT_CENTER,ROW_OPT+1,"SELECT: WATCH / PLAY",title_aux_tile,TITLE_PAL_HINT);
     fill_bkg_rect(0, ROW_HINT1, SCREEN_TW, 1, 0);
     draw(FONT_COMPACT, TEXT_CENTER, ROW_HINT1,
          game_mode == MODE_TRAINING ? "5 DRILLS TO LEVEL UP"
@@ -96,6 +102,7 @@ void title_enter(void) BANKED {
     t += draw(FONT_COMPACT, 4, 17, "v0.3", t, TITLE_PAL_HINT);
     title_opt_tile = t;
     t += 16;  // room for the longest option line
+    title_aux_tile=t;t+=12;
     title_hint_tile = t;
     draw_length();
     draw_hint();
@@ -115,7 +122,11 @@ void title_update(void) BANKED {
         return;
     }
     if ((joy_pressed & (J_SELECT | J_LEFT | J_RIGHT)) && game_mode != MODE_TRAINING) {
-        if (game_mode) fs_spectator = !fs_spectator;
+        if (game_mode) {
+            if(joy_pressed&J_SELECT)fs_spectator=!fs_spectator;
+            else if(joy_pressed&J_LEFT)fs_pace=fs_pace?fs_pace-1:2;
+            else fs_pace=fs_pace<2?fs_pace+1:0;
+        }
         else match_sets = match_sets == 1 ? 2 : 1;
         sfx_play(SFX_TOUCH);
         draw_length();

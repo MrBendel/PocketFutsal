@@ -14,8 +14,17 @@ The design is in [docs/design/README.md](docs/design/README.md).
 
 ## Main menu and 2-on-2 futsal
 
-UP/DOWN chooses **Futnet Singles** or **2v2 Futsal**. LEFT/RIGHT or SELECT
-changes options: futnet match length, or futsal Watch/Play. START/A launches.
+UP/DOWN chooses **Futnet Singles**, **2v2 Futsal**, or **Mini Games**.
+For futsal, LEFT/RIGHT chooses **Casual / Normal / Expert** pace and SELECT
+switches **Watch / Play** independently. START/A launches. Futnet's LEFT/RIGHT
+or SELECT still changes its match length.
+
+Futsal defaults to **Casual: 75%** of the original match speed. **Normal: 87.5%**
+is the middle setting; **Expert: 100%** preserves the original pace. This scales
+players, the ball, action windows and animations together, giving more time to
+read passes and react without changing the physical relationships or AI tactics.
+These are pace settings, independent of future AI skill tiers. Quick A/B taps
+and their aim are buffered across held simulation frames; pause stays immediate.
 
 Futsal is an arcade prototype: two outfield players per team, no dedicated
 goalkeepers, first to five goals. The court has goals at both baselines and
@@ -23,8 +32,9 @@ rebounding walls outside the goal mouths. WATCH runs four AI players; PLAY gives
 you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
 in a futsal match; START pauses.
 
-With possession, A shoots; tap B for a quick pass, or hold B for at least a
-fifth of a second and release for a high lob. Holding a lob slows the carrier
+With possession, A shoots; tap B for a quick pass, or hold B for at least
+12 simulation ticks (about 0.27 seconds on Casual, 0.2 on Expert) and release
+for a high lob. Holding a lob slows the carrier
 and flashes their crouch when ready. Without possession, A slide tackles and
 B bursts; both defensive actions have a cooldown. When your teammate carries,
 tap B for a quick return, or hold/release B to call a lob into your forward run.

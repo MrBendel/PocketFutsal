@@ -7,6 +7,7 @@ const count=Math.max(1,Math.min(seeds.length,Number(process.argv[2])||12));
 const games=[];
 for(const seed of seeds.slice(0,count)){
  const e=bootToTitle();e.tap('DOWN').idle(40);
+ e.write8(e.symbols.addr('fs_pace'),2); // Audit Expert simulation ticks.
  e.writeBytes(e.symbols.addr('test_seed'),[seed&255,seed>>8]);settle(e.tap('START'),3,'futsal');
  const phase=e.v('fs_kickoff_phase'),possession=[0,0],shots=[0,0];
  let frames=0,worst=0,previousShots=0;
