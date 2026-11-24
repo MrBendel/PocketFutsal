@@ -198,8 +198,8 @@ slammed (the Captain Tsubasa feel).
   reach (not going out, up to 23 px high), you always slide for it, toward where it'll
   cross your line, at the last moment (playtest: "the player should always make the
   attempt even if they're too far... err on the side of helping the player"). What the
-  ball does is by the slide: got there in the lunge's first 8 frames (up to 40 px
-  across), you return it with the strike you readied; in its last 4 (to 52 px), at full
+  ball does is by the slide: got there in the lunge's first 10 frames (up to 46 px
+  across), you return it with the strike you readied; in its last 5 (to 61 px), at full
   stretch, it pops up; further, you miss and you're down longer. On fire without the
   meter to meet it, you're knocked down. (Before, the game ran you to the
   ball from anywhere in your half, and a slide only popped it up.) (Measured with build/scratch/misses.mjs: balls getting past within

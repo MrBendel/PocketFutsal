@@ -160,3 +160,13 @@ after the CPU strikes, walks there, presses 2-3 times), four matches: wins 36%
 (15-27), but points long, median 35 s (it gets to nearly everything, as does the
 CPU, weaker now). A bot that stands deep (posbot.mjs) wins 19%: the CPU's shorter
 returns land in front of it. Not played by hand.
+
+### 2026-11-23: a longer slide
+
+Asked for in the chat ("let's try increasing those a bit"). The slide lunges 15
+frames instead of 12 and returns the ball if it got there in the first 10 (was 8).
+Measured with build/scratch/slideprobe.mjs (ball 130 px off, vy 40): returned up
+to 44 px across (was 36), popped up 48-60 px (was 44-52), missed from 64 (was 60).
+posbot2 (stands where the ball will cross, presses 2-3 times): 50% of points (was
+36%), median point 35 s (unchanged); its lost points are mostly slides that missed
+(17 of 20). Worst frame 57,160 cycles.

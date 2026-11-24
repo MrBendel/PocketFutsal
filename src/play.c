@@ -106,8 +106,8 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define REACH_FWD 8       // in front
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
 #define SLIDE_SPEED 48
-#define SLIDE_LUNGE 12    // frames of sliding
-#define SLIDE_STRETCH 8   // got there within this many of them: a return; later, a pop-up
+#define SLIDE_LUNGE 15    // frames of sliding
+#define SLIDE_STRETCH 10  // got there within this many of them: a return; later, a pop-up
 // The furthest a slide gets you: your reach plus the lunge (16 + 36 px). No other
 // limit: you're run to the ball from anywhere; out of this at the last moment,
 // you just miss.
