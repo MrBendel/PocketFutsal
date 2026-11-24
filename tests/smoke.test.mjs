@@ -290,7 +290,10 @@ test('no HUD in a rally: the score box (faces, points) before each serve, a bann
   assert.equal(gauge(rally), 0, 'an empty power meter: no gauge');
   rally.write8(rally.symbols.addr('pl_power') + YOU, 40);
   rally.idle(2);
-  assert.equal(gauge(rally), 0xFF, 'some power: a gauge in your shadow');
+  assert.equal(gauge(rally), 0, 'filling: still nothing');
+  rally.write8(rally.symbols.addr('pl_power') + YOU, POWER_MAX);
+  rally.idle(2);
+  assert.equal(gauge(rally), 0xFF, 'full: the slam ready, a bar in your shadow');
   assert.equal(rally.read8(0xFE00 + 37 * 4), 0, 'no sprites of its own (37-39 free)');
   // A point: the call along the bottom, the board's digits swapped, then the box.
   for (const [n, v] of [['last_touch', YOU], ['holder', CPU], ['ball_landings', 1], ['ball_netted', 0], ['ball_serve', 0]]) rally.write8(rally.symbols.addr(n), v);
@@ -997,9 +1000,9 @@ test("the CPU's power slam: only a press timed to within 5 frames of it reaching
   assert.equal(comeAt([48, 20]), 'down', 'one try: a second press does not count');
 });
 
-test('screen: the power meter, a gauge under you, half full', () => {
+test('screen: the power slam ready, a bar flashing under you', () => {
   const emu = quietRally();
-  emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX / 2);
+  emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX);
   incoming(emu, 80, 40, 30, 60);
   emu.tap('A').tap('A');
   matchGolden(emu.idle(4), 'power-meter');

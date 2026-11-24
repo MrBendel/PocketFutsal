@@ -181,7 +181,7 @@ the title switch between one set and the best of three.
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
 | A flashing marker | A lob or pop-up coming to you: three rings round the spot, the lit one stepping in as it comes down (a drop shot: one small ring). Be there (queued, you're run there) and mash: with four presses you jump and bicycle-kick it, a **slam**, the fastest ball in the game (a lob floats down slowly to give you time). A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
 | A or B again while ready | Tap for more power: the meter fills only as you press, and stays. The ball's speed follows it: a drive, then on fire (eight presses, a red trail), then a slam; you flash from half a meter |
-| A + B, the power meter full | The **power slam**: your next clean strike goes gold and fast. The power meter is the gauge under your feet: each clean strike in a rally fills it a little; it flashes full (or armed). The CPU's is under its feet |
+| A + B, the power meter full | The **power slam**: your next clean strike goes gold and fast. Each clean strike in a rally fills the meter a little, unseen; when it's full a bar flashes under your feet (and stays while armed). The CPU's shows under its feet the same way |
 | A or B as a power slam reaches you | Your one try: within 5 frames of it reaching you, you send it back on fire; too early, too late or never, it knocks you down |
 | SELECT while ready | Call the strike off |
 | LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |

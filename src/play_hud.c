@@ -15,7 +15,7 @@
 extern uint8_t note_timer, set_won, hud_pending;
 uint8_t hud_mode = 0xFF;      // the overlay showing (HUD_*; 0xFF: none yet)
 uint8_t board_shown[4];       // the board's points and sets as drawn (0xFF: redraw)
-uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (fill px, 0x80: shown; 0xFF: redraw)
+uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (0: none, 0xFF: full; 0xFE: redraw)
 static uint8_t gauge_buf[4][6];  // their bars: three rows of the shadow's lower tile
 static uint8_t strip_buf[5];
 
@@ -65,7 +65,7 @@ void hud_init(void) BANKED {
     set_sprite_data(S_GAUGE + 4, 4, t);
     for (uint8_t k = 0; k < 4; k++) {
         set_sprite_tile(OAM_PLAYER_SHADOW + k, S_GAUGE + (k << 1));
-        gauge_shown[k] = 0xFF;
+        gauge_shown[k] = 0xFE;
     }
     // The board, in the UI's palette.
     bkg_frame(BOARD_X, BOARD_Y, BOARD_W, 3);
@@ -139,8 +139,8 @@ void hud_draw(void) BANKED {
 }
 
 // The bar in shadow tile k's lower half: over the columns in m, an outline row (2),
-// the fill (1) then the empty (3, the columns in e), an outline row. Copied in at the
-// next vblank when it changes (key: what's drawn).
+// the fill (1; 3 in the columns in e: empty), an outline row. Copied in at the next
+// vblank when it changes (key: what's drawn).
 static void gauge_fill(uint8_t k, uint8_t key, uint8_t m, uint8_t e) {
     if (key == gauge_shown[k]) return;
     gauge_shown[k] = key;
@@ -158,25 +158,24 @@ void hud_update(uint8_t busy) BANKED {
     // The box goes once the serve's tossed (and comes back for the next: on the
     // frame after, hud_pending, not on the serve's set-up, a full frame already).
     if (!paused && !goal_timer && !hud_pending && (phase == PHASE_SERVE) != (hud_mode == HUD_BOX)) hud_draw();
-    // The gauges, in each player's shadow: yours 16 px across both halves, a pixel
-    // for each 4 of the meter; the CPU's 8, centred (half in each). Full or armed,
-    // the shadow flashes; empty, no bar.
+    // The power slam ready (the meter full) or armed: a full bar in that player's
+    // shadow (yours 16 px across both halves, the CPU's 8, centred), the shadow
+    // flashing. Filling, nothing shows (playtest: "we don't need the power meter to
+    // be persistent, just something to indicate when your slam is ready").
     for (uint8_t i = 0; i < 2; i++) {
-        uint8_t p = pl_power[i], full = pl_special[i] || p == POWER_MAX;
+        uint8_t full = pl_special[i] || pl_power[i] == POWER_MAX;
         OAM_item_t *s = &shadow_OAM[OAM_PLAYER_SHADOW + (i << 1)];
         uint8_t pal = full && (frame_count & 8) ? SPR_PAL_POWER : SPR_PAL_UI;
         s->prop = pal;
         s[1].prop = pal;
         if (busy) continue;
-        uint8_t on = (p || full) ? 0xFF : 0;
+        uint8_t on = full ? 0xFF : 0;
         if (i == SIDE_YOU) {
-            uint8_t n = full ? 16 : p >> 2, a = n > 8 ? 8 : n, b = n > 8 ? n - 8 : 0;
-            gauge_fill(0, a | (on & 0x80), on, on & (a >= 8 ? 0 : (uint8_t)(0xFF >> a)));
-            gauge_fill(1, b | (on & 0x80), on, on & (b >= 8 ? 0 : (uint8_t)(0xFF >> b)));
+            gauge_fill(0, on, on, 0);
+            gauge_fill(1, on, on, 0);
         } else {
-            uint8_t n = full ? 8 : p >> 3, e = on & (n >= 8 ? 0 : (uint8_t)(0xFF >> n));
-            gauge_fill(2, n | (on & 0x80), on & 0x0F, e >> 4);
-            gauge_fill(3, n | (on & 0x80), on & 0xF0, (uint8_t)(e << 4));
+            gauge_fill(2, on, on & 0x0F, 0);
+            gauge_fill(3, on, on & 0xF0, 0);
         }
     }
 }

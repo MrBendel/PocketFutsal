@@ -305,6 +305,10 @@ slammed (the Captain Tsubasa feel).
   far out as your leap reaches while the ball's 64 px or more from the spot in depth,
   closing on the ring as it comes: closed, it's there. A drop shot's marker has none.
   (2026-11-24: replaced by three rings, below.)
+- **The power slam's bar only when it's ready** (2026-11-24, playtest: "we don't need
+  the power meter to be persistent, just something to indicate when your slam is
+  ready"): the meter fills unseen; full or armed, a full bar flashes in the player's
+  shadow (yours 16 px, the CPU's 8), with the shadow flashing in the fire's colors.
 - **The slam zone, by palette** (2026-11-24, the user's idea: "a single ring sprite and
   cycle the palette to make it look like it's moving"): three rings, one inside the
   other, 48x16 (six sprites in one row, the right three the left flipped; tiles from
