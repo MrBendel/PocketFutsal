@@ -157,8 +157,12 @@ slammed (the Captain Tsubasa feel).
   himself after kick to where they think the ball is landing next, they press a key to
   power up A or B or both. The player is locked, when they're near the ball at return
   distance they either return or slide and return or if they're too far they miss").
-  Getting there is yours, with the d-pad, before you press; only a ball loose in your
-  half walks you to it. The CPU plays by the same lock: it gets there, then readies
+  Getting there is yours, with the d-pad; only a ball loose in your half walks you to
+  it. **The lock starts as the ball comes over the net** into your half (2026-11-23,
+  playtest: "I keep getting stuck from the power up before I think I should"): queued
+  while it's still over their side, you still run, and the meter fills as you press;
+  over the net, you're planted and the d-pad aims. (A bot that presses as the CPU
+  strikes and then runs there wins 63% of points; it had been stuck where it pressed.) The CPU plays by the same lock: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half

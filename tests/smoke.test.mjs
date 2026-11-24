@@ -183,7 +183,8 @@ test('your meter fills only as you press (not waiting, not holding); full, the s
   assert.equal(at(emu, 'pl_charge', YOU), 4 * YOU_TAP, 'each press adds');
   for (let k = 0; k < 8; k++) emu.tap('A');
   assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX, 'pressed full: no cap on presses');
-  emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 160, 'the strike');
+  // RIGHT aims once the ball's in your half (before, it would run you).
+  emu.until((e) => { e.hold(px(e.v('ball_y', 'i16')) >= 112 ? 'RIGHT' : [], 1); return at(e, 'pl_shots', YOU) > 0; }, 160, 'the strike');
   assert.equal(emu.v('ball_power'), 1);
   assert.ok(emu.v('ball_vx', 'i16') > 0, 'to the right');
 });

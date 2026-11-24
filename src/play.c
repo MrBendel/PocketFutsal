@@ -436,7 +436,7 @@ static void draw(void) {
         else if (m == MOVE_KICK) f = F_KICK;
         else if (m == MOVE_VOLLEY || m == MOVE_CONTROL) f = F_VOLLEY;
         else if (m >= MOVE_HEADER && m <= MOVE_DOWN) special = 1;
-        else if (pl_shot[i] || (phase == PHASE_TOSS && server == i)) f = F_READY;
+        else if ((pl_shot[i] && !(pl_vx[i] | pl_vy[i])) || (phase == PHASE_TOSS && server == i)) f = F_READY;
         else if (pl_vx[i] || pl_vy[i]) f = (frame_count & 8) ? F_RUN_A : F_RUN_B;
         uint8_t tile = lie ? T_LYING : (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
         if (special) {
@@ -828,9 +828,10 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         }
         return;
     }
-    // Planted, readying a strike: still. Serving: along the line only.
-    // Queued, the d-pad only aims: it doesn't walk you off toward a sideline.
-    if ((pl_shot[i] && phase == PHASE_RALLY) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    // Planted, readying a strike: still, once the ball's over the net into your half
+    // (before, queued early, you still run: playtest, "stuck from the power up before
+    // I think I should"); the d-pad then only aims. Serving: along the line only.
+    if ((pl_shot[i] && phase == PHASE_RALLY && in_half(i)) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];
@@ -1074,7 +1075,7 @@ static void ai_input(void) {
             ai_ty = clamp16(meet_y[SIDE_YOU], 140, 205);
         }
         if (pl_shot[SIDE_YOU]) {
-            pad = ai_aim;
+            if (in_half(SIDE_YOU)) pad = ai_aim;  // aims once planted (before, it would run)
             if (ai_presses && !--ai_next) press = ai_btn, ai_presses--, ai_next = 8;
         } else if (loose_here(SIDE_YOU) && !pl_move_timer[SIDE_YOU]) {
             press = ai_btn;  // a loose ball: queue, and the game runs you to it
@@ -1324,9 +1325,9 @@ void play_update(void) BANKED {
             if (!b && (joy_pressed & J_B)) ready(SIDE_YOU, 1);  // A and B at once: both
         }
     }
-    // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and
-    // they stick.
-    if (pl_shot[SIDE_YOU]) {
+    // Queued and planted (the ball in your half) or serving, LEFT or RIGHT sets your
+    // aim, UP or DOWN how deep, and they stick. Before, the d-pad runs you.
+    if (pl_shot[SIDE_YOU] && (phase != PHASE_RALLY || in_half(SIDE_YOU))) {
         if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
         else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
         if (joy & J_UP) pl_depth[SIDE_YOU] = 2;

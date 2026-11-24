@@ -171,7 +171,7 @@ the title switch between one set and the best of three.
 
 | Button | What it does |
 |---|---|
-| D-pad | Run (eight ways) in your half. Queued, or serving: it only aims |
+| D-pad | Run (eight ways) in your half. Queued with the ball in your half, or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
