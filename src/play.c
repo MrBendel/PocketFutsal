@@ -106,7 +106,8 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define REACH_FWD 8       // in front
 #define REACH_BACK 4      // behind (a bicycle kick reaches further)
 #define SLIDE_SPEED 48
-#define SLIDE_LUNGE 12    // frames of sliding
+#define SLIDE_LUNGE 15    // frames of sliding
+#define SLIDE_STRETCH 10  // got there within this many of them: a return; later, a pop-up
 // The furthest a slide gets you: your reach plus the lunge (16 + 36 px). No other
 // limit: you're run to the ball from anywhere; out of this at the last moment,
 // you just miss.
@@ -149,6 +150,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define HOME_YOU 196      // yours: between shots, nothing queued or held, you jog back
 #define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
 #define CPU_LATE 40       // px: and this close, in place or not
+#define CPU_START 8       // its meter as it readies
 #define CONTROL_LIFT 28   // a control touch: about 32 px up, 74 frames
 #define CONTROL_FRAMES 8  // its pose: then you can ready your second touch
 
@@ -434,7 +436,7 @@ static void draw(void) {
         else if (m == MOVE_KICK) f = F_KICK;
         else if (m == MOVE_VOLLEY || m == MOVE_CONTROL) f = F_VOLLEY;
         else if (m >= MOVE_HEADER && m <= MOVE_DOWN) special = 1;
-        else if (pl_shot[i] || (phase == PHASE_TOSS && server == i)) f = F_READY;
+        else if ((pl_shot[i] && !(pl_vx[i] | pl_vy[i])) || (phase == PHASE_TOSS && server == i)) f = F_READY;
         else if (pl_vx[i] || pl_vy[i]) f = (frame_count & 8) ? F_RUN_A : F_RUN_B;
         uint8_t tile = lie ? T_LYING : (f << 3) + (i == SIDE_CPU ? VIEW_FRONT : 0);
         if (special) {
@@ -812,21 +814,24 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         keep_in(i);
         relate(i);
         if (in_half(i) && abs16(rel_x) <= REACH_X && rel_fwd >= -REACH_BACK - 2 && rel_fwd <= REACH_FWD && rel_z < SLIDE_Z) {
-            // Got there: slide and return it, the strike by its height (on fire,
-            // without the meter to meet it: down you go).
+            // Got there: slide and return it, the strike by its height; at full
+            // stretch (the lunge's last third), only a pop-up (on fire, without
+            // the meter to meet it: down you go).
             if (ball_power && pl_charge[i] < (i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
                 knock_down(i);
                 return;
             }
-            meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
+            if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_STRETCH) pop_up(i, MOVE_SLIDE, 0);
+            else meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
             pl_move[i] = MOVE_SLIDE;
             pl_move_timer[i] = SLIDE_REST;  // got there: up sooner
         }
         return;
     }
-    // Planted, readying a strike: still. Serving: along the line only.
-    // Queued, the d-pad only aims: it doesn't walk you off toward a sideline.
-    if ((pl_shot[i] && phase == PHASE_RALLY) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    // Planted, readying a strike: still, once the ball's over the net into your half
+    // (before, queued early, you still run: playtest, "stuck from the power up before
+    // I think I should"); the d-pad then only aims. Serving: along the line only.
+    if ((pl_shot[i] && phase == PHASE_RALLY && in_half(i)) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];
@@ -898,13 +903,10 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // Queued, you're locked where you stood (playtest: "position after the kick
         // to where the ball's landing, power up, locked; near it you return, a bit
         // further you slide and return, too far you miss"): only a loose ball in
-        // your half walks you to it. The CPU is still run to where to meet it (at
-        // running speed, easing in; going out, it leaves it).
-        int16_t tx = loose ? PX(ball_x) : meet_x[i];
-        int16_t ty = loose ? PX(ball_y) + (i == SIDE_YOU ? 6 : -6) : meet_y[i];  // loose: just behind it
-        int16_t dx = tx - PX(pl_x[i]), dy = ty - PX(pl_y[i]);
-        // (Only on a trace of this flight: an old one would send it the wrong way.)
-        if (loose || (i == SIDE_CPU && meet_flight[i] == ball_flight && !meet_out[i])) {
+        // your half walks you to it. The CPU too: it gets there, then readies.
+        if (loose) {
+            int16_t dx = PX(ball_x) - PX(pl_x[i]);
+            int16_t dy = PX(ball_y) + (i == SIDE_YOU ? 6 : -6) - PX(pl_y[i]);  // just behind it
             int8_t sp = pl_top[i];
             pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // a quarter of the way (SUB) a frame, near
             pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
@@ -914,10 +916,13 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // just gets there in time (the ball's frames to reach you, rel_fwd / |vy|,
         // down to the slide's frames across, (ax - REACH_X + 2) / SLIDE_SPEED).
         // Toward where it'll cross your line (its trace), not where it is now: an
-        // angled ball keeps going across while you lunge.
+        // angled ball keeps going across while you lunge. Too far for a slide to
+        // get there, you still try, at full stretch (playtest: "the player should
+        // always make the attempt even if they're too far"); a ball going out, you
+        // let go.
         int16_t sx = meet_flight[i] == ball_flight ? meet_x[i] - PX(pl_x[i]) : rel_x, asx = abs16(sx);
-        if (!loose && !meet_out[i] && asx > REACH_X && asx <= SLIDE_REACH && rel_fwd >= -REACH_BACK && rel_z < SLIDE_Z &&
-            rel_fwd * SLIDE_SPEED <= (asx - REACH_X + 2) * abs16(ball_vy))
+        if (!loose && !meet_out[i] && asx > REACH_X && rel_fwd >= -REACH_BACK && rel_z < SLIDE_Z &&
+            rel_fwd * SLIDE_SPEED <= (min16(asx, SLIDE_REACH) - REACH_X + 2) * abs16(ball_vy))
             slide(i, sx < 0 ? -SLIDE_SPEED : SLIDE_SPEED, 0);
         return;
     }
@@ -963,6 +968,9 @@ static void cpu_ready(void) {
     if (yy < 160 && (r & 3) == 0) ready(SIDE_CPU, 1), ready(SIDE_CPU, 0);
     else if (yy > 196 && (r & 3) == 1) ready(SIDE_CPU, 0), ready(SIDE_CPU, 1);
     else ready(SIDE_CPU, ((r >> 2) & 3) == 0);
+    // Readied as it gets there (locked, as you are), not as the ball sets off: two
+    // of your presses' worth to start (with less it netted half its strikes).
+    if (pl_charge[SIDE_CPU] < CPU_START) pl_charge[SIDE_CPU] = CPU_START;
 }
 
 // The CPU: get across to where the ball's coming, plant in time, tap now and
@@ -1011,13 +1019,16 @@ static void cpu_update(void) {
                     dist = abs16(by - cy);
                 }
             }
-            uint8_t there = abs16(tx - cx) <= 3 && abs16(ty - cy) <= 3;
+            // There: lined up across, near enough in depth (where to meet it moves
+            // with where it stands: exactly there, it readied late, scuffing).
+            uint8_t there = abs16(tx - cx) <= 3 && abs16(ty - cy) <= 10;
             if (meet_out[SIDE_CPU]) {
                 if (pl_shot[SIDE_CPU]) unready(SIDE_CPU);
             } else if (!pl_shot[SIDE_CPU]) {
-                // By your rules: it queues as soon as the ball's on its way (the
-                // game runs it there), with a moment's reaction.
-                if (there || dist < CPU_PLANT || !(frame_count & 3)) cpu_ready();
+                // By your rules: it gets there first, then readies (locked, as you
+                // are); the ball close and not there yet, it readies anyway and
+                // slides for it if it must.
+                if (there || dist < CPU_LATE) cpu_ready();
             } else if (!((uint8_t)frame_count & (ball_power ? 3 : 15)) && (rand() & 3)) {  // on fire: taps hard (to meet it clean)
                 ready(SIDE_CPU, pl_shot[SIDE_CPU] == SHOT_CURVE);  // a tap
             }
@@ -1028,6 +1039,65 @@ static void cpu_update(void) {
     int8_t dx = tx > cx + 1 ? 1 : tx < cx - 1 ? -1 : 0;
     int8_t dy = ty > cy + 1 ? 1 : ty < cy - 1 ? -1 : 0;
     player_update(SIDE_CPU, dx, dy);
+}
+
+// --- the AI on your side (the title's PLAYER: AI, to see how fair the match is) ---
+// It plays with your buttons and nothing else, as a fair human might: 12-27 frames
+// after the CPU strikes it picks where it'll meet the ball (the game's trace, from
+// where it stands; a ball going out it lets go), walks there on the d-pad, and once
+// there (or with the ball 40 px off) presses A, or B one time in four, then once or
+// twice more, holding the d-pad away from the CPU (its aim) three times in four.
+uint8_t you_ai;      // non-zero: the AI plays your side
+uint8_t ai_seen;     // the CPU's strikes when it last looked
+uint8_t ai_wait;     // frames until it reacts (0: not waiting)
+uint8_t ai_plan;     // non-zero: it's walking to ai_tx, ai_ty
+int16_t ai_tx, ai_ty;
+uint8_t ai_btn;      // J_A or J_B
+uint8_t ai_aim;      // J_LEFT, J_RIGHT or 0, held once queued
+uint8_t ai_presses;  // presses still to make
+uint8_t ai_next;     // frames to the next
+
+static void ai_input(void) {
+    uint8_t pad = 0, press = 0;
+    if (pl_shots[SIDE_CPU] != ai_seen) {
+        ai_seen = pl_shots[SIDE_CPU];
+        ai_wait = 12 + (rand() & 15);
+        ai_plan = ai_presses = 0;
+        ai_btn = (rand() & 3) ? J_A : J_B;
+        ai_aim = !(rand() & 3) ? 0 : PX(pl_x[SIDE_CPU]) < CENTER_X ? J_RIGHT : J_LEFT;
+    }
+    if (phase == PHASE_SERVE) {
+        if (server == SIDE_YOU && !serve_timer && !((uint8_t)frame_count & 15)) press = J_A;
+    } else if (phase == PHASE_RALLY) {
+        if (ai_wait && !--ai_wait && coming(SIDE_YOU) && !meet_out[SIDE_YOU]) {
+            ai_plan = 1;
+            ai_tx = meet_x[SIDE_YOU];
+            ai_ty = clamp16(meet_y[SIDE_YOU], 140, 205);
+        }
+        if (pl_shot[SIDE_YOU]) {
+            if (in_half(SIDE_YOU)) pad = ai_aim;  // aims once planted (before, it would run)
+            if (ai_presses && !--ai_next) press = ai_btn, ai_presses--, ai_next = 8;
+        } else if (loose_here(SIDE_YOU) && !pl_move_timer[SIDE_YOU]) {
+            press = ai_btn;  // a loose ball: queue, and the game runs you to it
+        } else if (ai_plan) {
+            if (meet_out[SIDE_YOU] || !coming(SIDE_YOU)) {
+                ai_plan = 0;
+            } else {
+                int16_t dx = ai_tx - PX(pl_x[SIDE_YOU]), dy = ai_ty - PX(pl_y[SIDE_YOU]);
+                if (dx > 3) pad = J_RIGHT; else if (dx < -3) pad = J_LEFT;
+                if (dy > 3) pad |= J_DOWN; else if (dy < -3) pad |= J_UP;
+                if ((abs16(dx) <= 4 && abs16(dy) <= 6) || abs16(PX(ball_y) - PX(pl_y[SIDE_YOU])) < 40) {
+                    pad = 0;
+                    press = ai_btn;
+                    ai_presses = 1 + (rand() & 1);
+                    ai_next = 8;
+                    ai_plan = 0;
+                }
+            }
+        }
+    }
+    joy = pad | press;
+    joy_pressed = press;
 }
 
 // --- the ball ---
@@ -1180,6 +1250,7 @@ void play_enter(void) BANKED {
     sets[0] = sets[1] = 0;
     set_won = 0;
     pl_shots[0] = pl_shots[1] = 0;
+    ai_seen = ai_wait = ai_plan = ai_presses = 0;
     pl_last_move[0] = pl_last_move[1] = MOVE_NONE;
     goal_timer = 0;
     paused = 0;
@@ -1231,6 +1302,7 @@ void play_update(void) BANKED {
         return;
     }
     if (serve_timer) serve_timer--;
+    if (you_ai) ai_input();  // the AI's buttons in place of yours
 
     // You: the d-pad runs; A and B ready a strike (and combine, and tap); SELECT
     // calls it off.
@@ -1253,9 +1325,9 @@ void play_update(void) BANKED {
             if (!b && (joy_pressed & J_B)) ready(SIDE_YOU, 1);  // A and B at once: both
         }
     }
-    // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and
-    // they stick.
-    if (pl_shot[SIDE_YOU]) {
+    // Queued and planted (the ball in your half) or serving, LEFT or RIGHT sets your
+    // aim, UP or DOWN how deep, and they stick. Before, the d-pad runs you.
+    if (pl_shot[SIDE_YOU] && (phase != PHASE_RALLY || in_half(SIDE_YOU))) {
         if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
         else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
         if (joy & J_UP) pl_depth[SIDE_YOU] = 2;

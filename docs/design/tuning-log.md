@@ -138,3 +138,35 @@ four matches: wins 33% (22-45), points median 13.6 s, 90th percentile 29.5 s.
 Lost: CPU bounce as you volleyed 18, slid 14, bicycle 12 (the ball got past).
 The late-pressing metrics bot (it never moves itself) now wins 4%: no longer
 the measure.
+
+### 2026-11-23: the CPU locked too; always slide
+
+From the playtest: the CPU plays under the same lock; "the player should always make
+the attempt even if they're too far... If they're too far away they'll just miss it
+but what the ball does is based on the slide attempt. Far away but still striking
+distance results in a pop ball."
+
+Changed: the CPU readies once it's lined up (3 px across, 10 in depth) or the ball's
+40 px off, and is no longer run there. Out of reach, you always slide; got there in
+the lunge's first 8 frames (to 40 px across) a return, its last 4 (to 52 px) a pop-up,
+further a miss.
+
+The CPU readying late had half its strikes in the net (a meter under 8, measured: 43
+of 63 points); filling its meter twice as fast swung it to 92% of points; so it starts
+at 8 (two of your presses), at the old rate: 8 nets in 54 points.
+
+Measured with build/scratch/posbot2.mjs (picks where to meet it once, 12-24 frames
+after the CPU strikes, walks there, presses 2-3 times), four matches: wins 36%
+(15-27), but points long, median 35 s (it gets to nearly everything, as does the
+CPU, weaker now). A bot that stands deep (posbot.mjs) wins 19%: the CPU's shorter
+returns land in front of it. Not played by hand.
+
+### 2026-11-23: a longer slide
+
+Asked for in the chat ("let's try increasing those a bit"). The slide lunges 15
+frames instead of 12 and returns the ball if it got there in the first 10 (was 8).
+Measured with build/scratch/slideprobe.mjs (ball 130 px off, vy 40): returned up
+to 44 px across (was 36), popped up 48-60 px (was 44-52), missed from 64 (was 60).
+posbot2 (stands where the ball will cross, presses 2-3 times): 50% of points (was
+36%), median point 35 s (unchanged); its lost points are mostly slides that missed
+(17 of 20). Worst frame 57,160 cycles.

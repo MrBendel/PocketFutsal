@@ -62,7 +62,7 @@ calls are marked *(ours)*.
 | Any part of the body but the hands and arms | Feet, volleys, headers, bicycle kicks |
 | Faults: in the net, out of the court, touching the net, a third touch | Net, out, third touch (players can't reach the net) |
 | A ball off the net can't be played again | `ball_netted`: dead, the other side's point when it lands |
-| Sets to 11 by two, at most 15 (15-14); best of three sets | One set by default; SELECT on the title for the best of three |
+| Sets to 11 by two, at most 15 (15-14); best of three sets | One set by default; LEFT/RIGHT on the title for the best of three |
 | Serve: not in the sources | *(ours)* toss and strike from your back line; it must go over; the side that lost the point serves |
 | A ball on a line: not in the sources | *(ours)* in, as in tennis |
 
@@ -157,8 +157,14 @@ slammed (the Captain Tsubasa feel).
   himself after kick to where they think the ball is landing next, they press a key to
   power up A or B or both. The player is locked, when they're near the ball at return
   distance they either return or slide and return or if they're too far they miss").
-  Getting there is yours, with the d-pad, before you press; only a ball loose in your
-  half walks you to it. The CPU is still run to where to meet it. The strike goes by itself as the ball arrives;
+  Getting there is yours, with the d-pad; only a ball loose in your half walks you to
+  it. **The lock starts as the ball comes over the net** into your half (2026-11-23,
+  playtest: "I keep getting stuck from the power up before I think I should"): queued
+  while it's still over their side, you still run, and the meter fills as you press;
+  over the net, you're planted and the d-pad aims. (A bot that presses as the CPU
+  strikes and then runs there wins 63% of points; it had been stuck where it pressed.) The CPU plays by the same lock: it gets there, then readies
+  (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
+  presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
   as far across as down the court (about 27 degrees). You only play the ball over your
   own half: no reaching over the net.
@@ -191,12 +197,20 @@ slammed (the Captain Tsubasa feel).
   "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
+- **The AI on your side** (2026-11-23): SELECT on the title (Futnet) switches YOU PLAY / AI PLAYS.
+  The AI presses your buttons and nothing else (play.c ai_input): 12-27 frames after the
+  CPU strikes it picks where it will meet the ball, walks there, presses A (B one time in
+  four) then once or twice more, holding the d-pad away from the CPU. A fairness check:
+  over four seeds it wins 65% of points, median point 45 s (build/scratch/aimatch.mjs).
 - **Return, slide and return, or miss** (2026-11-23): you reach a body width either
-  side (16 px), a header 35 px up (a jump), a bicycle kick 39. At the last moment, if a
-  slide gets there (your reach plus a 36 px lunge, toward where it'll cross your line,
-  a ball up to 23 px high), you slide for it and return it with the strike you readied
-  (on fire without the meter to meet it, you're knocked down), and you're down a short
-  while; further, you miss, and you're down longer. (Before, the game ran you to the
+  side (16 px), a header 35 px up (a jump), a bicycle kick 39. A ball going past out of
+  reach (not going out, up to 23 px high), you always slide for it, toward where it'll
+  cross your line, at the last moment (playtest: "the player should always make the
+  attempt even if they're too far... err on the side of helping the player"). What the
+  ball does is by the slide: got there in the lunge's first 10 frames (up to 46 px
+  across), you return it with the strike you readied; in its last 5 (to 61 px), at full
+  stretch, it pops up; further, you miss and you're down longer. On fire without the
+  meter to meet it, you're knocked down. (Before, the game ran you to the
   ball from anywhere in your half, and a slide only popped it up.) (Measured with build/scratch/misses.mjs: balls getting past within
   30 px of a queued player went from 32 to 15 in seven matches.)
 - **Slam spot** (2026-11-22, from the playtest: "you should be able to knock lobs out
@@ -218,7 +232,7 @@ slammed (the Captain Tsubasa feel).
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
   20-27, a row of sprites placed a frame at most (src/vfx.c).
-- **Pop-ups**: a block, or a ball on fire met with too little meter pops the
+- **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
   pops up again; slide to it, or meet it unready, and you're knocked down and it goes on.

@@ -14,17 +14,40 @@ The design is in [docs/design/README.md](docs/design/README.md).
 
 ## Main menu and 2-on-2 futsal
 
-UP/DOWN chooses **Futnet Singles** or **2v2 Futsal**. LEFT/RIGHT or SELECT
-changes options: futnet match length, or futsal Watch/Play. START/A launches.
+UP/DOWN chooses **Futnet Singles**, **2v2 Futsal**, or **Mini Games**.
+For futsal, LEFT/RIGHT chooses **Casual / Normal / Expert** pace and SELECT
+switches **Watch / Play** independently. START/A launches. Futnet's LEFT/RIGHT
+changes its match length, and SELECT switches **You play / AI plays**: the AI
+plays your side with your buttons, to watch how fair the match is.
+
+Futsal defaults to **Casual: 75%** of the original match speed. **Normal: 87.5%**
+is the middle setting; **Expert: 100%** preserves the original pace. This scales
+players, the ball, action windows and animations together, giving more time to
+read passes and react without changing the physical relationships or AI tactics.
+These are pace settings, independent of future AI skill tiers. Quick A/B taps
+and their aim are buffered across held simulation frames; pause stays immediate.
 
 Futsal is an arcade prototype: two outfield players per team, no dedicated
 goalkeepers, first to five goals. The court has goals at both baselines and
-rebounding walls outside the goal mouths. WATCH runs four AI players; PLAY gives
+rebounding walls outside the goal mouths. Both ends now use the same 40x16
+portable-goal sprite and matching collision dimensions. Posts and the crossbar
+rebound the ball and knock the goal out of position. A short FRAME! stoppage
+lets the rebound and displacement read, then resets the goal and gives the
+defending team the restart. A frame hit never counts as a goal.
+
+Shooting precision depends on distance: close finishes have very little scatter,
+medium shots spread wider, and efforts from more than 144 court pixels away are
+wild clearances aimed outside the goal mouth. Missed deliveries shed speed on
+landing so an unreceived pass does not keep rolling into a distant goal.
+Goal artwork is in `artwork/goals/v1`, generated from the native pixel tiles.
+
+WATCH runs four AI players; PLAY gives
 you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
 in a futsal match; START pauses.
 
-With possession, A shoots; tap B for a quick pass, or hold B for at least a
-fifth of a second and release for a high lob. Holding a lob slows the carrier
+With possession, A shoots; tap B for a quick pass, or hold B for at least
+12 simulation ticks (about 0.27 seconds on Casual, 0.2 on Expert) and release
+for a high lob. Holding a lob slows the carrier
 and flashes their crouch when ready. Without possession, A slide tackles and
 B bursts; both defensive actions have a cooldown. When your teammate carries,
 tap B for a quick return, or hold/release B to call a lob into your forward run.
@@ -53,6 +76,14 @@ pixels into that direction to receive in space. Try a one-two: **B to pass, run
 into space, B to call for the return, then A to finish**. You can call while your
 first pass is still airborne: your teammate returns it on receiving. The call
 expires after 48 frames (80 for a lob) or when an opponent takes possession.
+**Crossover:** while dribbling, cut left-right-left (or right-left-right).
+Let your body actually change direction between cuts; two reversals within
+28 frames can wrong-foot a presser within 28 court pixels who is still moving
+into your feint. They skid, crouch, and recover over 22 frames, opening a pass
+or shot. Stationary button spam, a single cut, and distant or balanced defenders
+do not trigger it. A 90-frame cooldown prevents repeated stuns; the ball keeps
+its normal independent movement, so an uncontrolled cut can still lose it.
+
 Only one defender presses at a time. Their partner covers the other attacker
 from the goal side and keeps a separate lane when attackers bunch up. The press
 changes hands only when the partner is clearly closer, so a small juke does not
@@ -135,12 +166,12 @@ extracted on first build.
 You're blue, at the bottom; the CPU is red, at the top; a net between. Futnet singles:
 two touches a side and one bounce, anything but your hands. Get the ball over the net
 and in (a line is in); a second bounce on their side is your point. Into the net, out,
-or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); SELECT on
-the title switches between one set and the best of three.
+or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); LEFT/RIGHT on
+the title switch between one set and the best of three.
 
 | Button | What it does |
 |---|---|
-| D-pad | Run (eight ways) in your half. Queued, or serving: it only aims |
+| D-pad | Run (eight ways) in your half. Queued with the ball in your half, or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |

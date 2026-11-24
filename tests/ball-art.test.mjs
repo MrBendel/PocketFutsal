@@ -4,7 +4,7 @@ import {assert,bootToTitle,startGame,set16,settle} from './helpers.mjs';
 import {BALL_FRAMES,BALL_EXTRA} from '../tools/ball-art.mjs';
 import {asciiTile} from '../tools/tile-art.mjs';
 import {decodePng} from '../tools/assets.mjs';
-function futsal(){const e=bootToTitle();e.tap('DOWN').idle(40);return settle(e.tap('START'),3,'futsal');}
+function futsal(){const e=bootToTitle();e.tap('DOWN').idle(40);e.write8(e.symbols.addr('fs_pace'),2);return settle(e.tap('START'),3,'futsal');}
 const put=(e,n,v)=>e.write8(e.symbols.addr(n),v);
 test('soccer ball frames keep one silhouette, six distinct panels and binary transparency',()=>{
  assert.equal(BALL_FRAMES.length,6);

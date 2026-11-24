@@ -3,6 +3,7 @@
 #define FUTSAL_H
 #include <stdint.h>
 #include "game.h"
+extern uint8_t fs_pace; // 0 Casual (75%), 1 Normal (87.5%), 2 Expert (100%).
 extern uint8_t fs_spectator, fs_paused, fs_owner, fs_goal_timer, fs_cam_y;
 extern int16_t fs_pl_x[4], fs_pl_y[4], fs_ball_x, fs_ball_y, fs_ball_vx, fs_ball_vy;
 extern int8_t fs_vx[4], fs_vy[4];

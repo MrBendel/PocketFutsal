@@ -97,9 +97,6 @@ function drawCourt(futsal = false) {
     for (const end of [FAR, NEAR]) {
       const inward = end === FAR ? 1 : -1;
       for (let t = 0; t <= 1; t += 1 / 256) {
-        line(56 + t * 48, end - inward * 12);
-        line(56, end - inward * t * 12);
-        line(104, end - inward * t * 12);
         line(40 + t * 80, end + inward * 32);
         line(40, end + inward * t * 32);
         line(120, end + inward * t * 32);
@@ -154,17 +151,7 @@ function drawCourt(futsal = false) {
     // Center circle is projected from the same flat coordinates as the ball.
     for (let a = 0; a < Math.PI * 2; a += 0.025) line(80 + Math.cos(a) * 21, HALF + Math.sin(a) * 21);
     line(80, HALF);
-    // Goal mouths match collision coordinates x=56..104. Dark net interiors
-    // and a cream frame read clearly against the bright court and grass.
-    for (const end of [FAR, NEAR]) {
-      const y = projY(end), left = projX(56, end), right = projX(104, end);
-      const back = y + (end === FAR ? -9 : 9);
-      for (let gy = Math.min(y, back); gy <= Math.max(y, back); gy++) for (let gx = left; gx <= right; gx++) {
-        const rim = gx === left || gx === right || gy === back;
-        plot(gx, gy, rim || ((gx + gy) % 5 === 0 && gy !== y) ? 3 : 1);
-      }
-      for (let gx = left; gx <= right; gx++) plot(gx, y, 3);
-    }
+    // Goals are movable sprite objects; only court markings belong here.
   }
   return px;
 }
@@ -348,3 +335,15 @@ export const FUTSAL_PITCH = buildPitch(true);
 // on the ground; futsal loads these into its final free slots below tile 128.
 const zoneLeft=['......11','...11133','.1133...','113.....','113.....','.1133...','...11133','......11'];
 export const FUTSAL_ZONE=[zoneLeft,blank,zoneLeft.map(r=>[...r].reverse().join('')),blank];
+
+
+// Movable 40x16 goals: one post column, a repeating crossbar/net column,
+// and a compact full-width player shadow. Right post uses hardware mirroring.
+export const FUTSAL_GOAL=[
+ ['33333333','31111111','31111111','3112..3.','31123...','3112..3.','31123...','3112..3.'],
+ ['31123...','3112..3.','31123...','3112..3.','31123...','3112..3.','31123333','33333333'],
+ ['33333333','11111111','11111111','..3...3.','3...3...','..3...3.','3...3...','..3...3.'],
+ ['3...3...','..3...3.','3...3...','..3...3.','3...3...','..3...3.','3.3.3.3.','33333333'],
+ ['........','........','..3333..','.333333.','33333333','.333333.','..3333..','........'],
+ Array(8).fill('........'),
+];
