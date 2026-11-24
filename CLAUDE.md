@@ -21,8 +21,10 @@
   (the strike for each ball height, a power shot knocks down an unready player, a dive
   reaches, the CPU returns a serve and scores). Try a spread of shots in a scratch
   script before and after, and a bot match against the CPU.
-- The HUD goes at the bottom, on the window layer (`HUD_WY` in `src/gfx.h`): free in hardware,
-  where a top HUD needs a scanline interrupt every frame. Don't move it to the top.
+- The match has no HUD row: the score's on a board in the court art, and the window is an
+  overlay along the bottom for a moment (`src/play_hud.c`). Overlays and other scenes' HUDs
+  go at the bottom, on the window layer: free in hardware, where the top needs a scanline
+  interrupt every frame. Don't move them to the top.
 - Keep watchable game state in global, non-static variables.
 - Positions are int16 in sixteenths of a pixel (`SUB`, `PX()`, `TO_SUB()` in game.h).
 - Bank 0 is for hot code; cold code/data goes in `#pragma bank 255` files or `bank: true`

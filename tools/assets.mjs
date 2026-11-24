@@ -34,7 +34,7 @@ import {GOAL_BG} from './goal-background.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { FUTSAL_PITCH, FUTSAL_ZONE, FUTSAL_GOAL, PITCH, HUD_TILES, POWER_HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
+import { FUTSAL_PITCH, FUTSAL_ZONE, FUTSAL_GOAL, PITCH, HUD_TILES, SPRITE_TILES, asciiTile } from './tile-art.mjs';
 import * as MG_MACHINE from './art/mg_machine.mjs';
 import * as MG_WALL from './art/mg_wall.mjs';
 import * as MG_JUGGLE from './art/mg_juggle.mjs';
@@ -62,7 +62,9 @@ export const ASSETS = [
   { name: 'futsal_zone', bank: true, ascii: FUTSAL_ZONE, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
   { name: 'hud', bank: true, ascii: HUD_TILES, src: 'tools/tile-art.mjs' },
-  { name: 'power_hud', bank: true, ascii: POWER_HUD_TILES, src: 'tools/tile-art.mjs' },
+  // A face for the score box before each serve (src/play_hud.c): the front view's
+  // standing head and shoulders, 16x16 (tiles: top left, bottom left, top right, bottom right).
+  { name: 'portrait', bank: true, ascii: (() => { const t = fullTiles('spiky'); return [t[80], t[81], t[84], t[85]]; })(), src: 'artwork/players/roster/spiky/player.json' },
   // The ball and its shadow (8x16 sprite mode, VRAM bank 0).
   { name: 'sprites', bank: true, ascii: SPRITE_TILES, src: 'tools/tile-art.mjs', deps:['artwork/ball/v1/ball.json'] },
   { name: 'ball_extra', bank: true, ascii: BALL_EXTRA, src: 'artwork/ball/v1/ball.json' },

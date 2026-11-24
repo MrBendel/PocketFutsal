@@ -36,7 +36,6 @@
 #include "vfx.h"
 #include "proj.h"
 #include "trace.h"
-#include "power_hud.h"
 #include "sprites.h"
 #include "players.h"
 
@@ -82,7 +81,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_AIM 10    // where your queued strike will land
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing): a ring,
 #define OAM_SLAM_R 28 // its right half
-#define OAM_PLAYER_SHADOW 15  // two columns per player, below the body
+// OAM_PLAYER_SHADOW 15, two, and OAM_GAUGE 37, three: play_hud.h.
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
@@ -249,7 +248,6 @@ uint8_t ball_serve;
 uint8_t set_won;  // this point won the set
 uint8_t ball_fall;  // counts frames in the air: gravity acts on 3 in 4
 
-uint8_t meter_shown;  // the meter's value on screen (0xFF: redraw)
 // Your shot on the HUD, where it says YOU (a debugging aid): the one queued, or for a
 // moment after a strike what went (SEEN_*), else YOU.
 #define SEEN_POP 6
@@ -268,7 +266,6 @@ int16_t cpu_from_x, cpu_from_y;
 uint8_t cpu_rattled;  // the CPU's mishits so far (a pop-up, or scuffed)
 uint8_t shot_seen;    // what your last touch was (SHOT_* or SEEN_*)
 uint8_t shot_seen_t;  // frames left showing it
-uint8_t shot_shown = 0xFF;  // the label on screen (0xFF: redraw)
 uint8_t note_timer;    // the HUD shows a note (GOAL!) while this counts down
 uint8_t hud_pending;   // redraw the HUD at the start of the next frame
 
@@ -486,6 +483,9 @@ static void draw(void) {
         gfx_player_shadow(OAM_PLAYER_SHADOW + (i << 1), sx,
             (int16_t)proj_y[PROJ_I(py)] - cam_y);
     }
+    // The overlay, and the power gauges under the shadows just placed (play_hud.c;
+    // their bars redrawn only off a strike's busy frame).
+    hud_update(flight_frame == (uint8_t)frame_count);
     // The ball, up at its height, and its shadow on the court.
     int16_t sx = proj_x(PX(ball_x), by) + 4;
     int16_t sy = (int16_t)proj_y[PROJ_I(by)] - cam_y + 10;
@@ -1302,7 +1302,6 @@ void play_enter(void) BANKED {
     gfx_player_shadow_init(OAM_PLAYER_SHADOW);
     gfx_player_shadow_init(OAM_PLAYER_SHADOW + 2);
     banked_bkg_data(SCENE_TILES, PITCH_TILE_COUNT, pitch_tiles, BANK(pitch));
-    banked_bkg_data((uint8_t)T_METER, POWER_HUD_TILE_COUNT, power_hud_tiles, BANK(power_hud));
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
     vfx_load();
     set_sprite_data(S_RING, 4, ring_tiles);
@@ -1314,6 +1313,7 @@ void play_enter(void) BANKED {
     dots_on = 0;
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
+    hud_init();  // the score board in the court art, the faces, the gauges
     proj_init();
     initrand(game_seed);
     for (uint8_t i = 0; i < 2; i++) {
@@ -1333,11 +1333,9 @@ void play_enter(void) BANKED {
     winner = NOBODY;
     last_scorer = NOBODY;
     cam_y = CAM_MAX;
-    // The HUD on the window, at the bottom (gfx.h HUD_WY). Its attributes are
-    // BG_PAL_UI everywhere (gfx_init).
-    move_win(7, HUD_WY);
-    SHOW_WIN;
-    gfx_sprite_split(HUD_WY);  // sprites stop above the HUD
+    // No HUD row: the window is play_hud.c's overlay, shown before each serve and
+    // for a point's call, sprites free to draw over it.
+    HIDE_WIN;
     serve_setup(SIDE_YOU);
     ball_update();
     sfx_play(SFX_WHISTLE);
@@ -1445,10 +1443,5 @@ void play_update(void) BANKED {
     want_predict((uint8_t)frame_count & 1);
     go_cue = last_touch == SIDE_CPU && !pl_shot[SIDE_YOU] && !pl_move_timer[SIDE_YOU] && phase == PHASE_RALLY &&
              !goal_timer && coming(SIDE_YOU);
-    // The meter and your shot's label: not on a strike's frame (it's busy, and both
-    // change then): the next.
-    if (flight_frame != (uint8_t)frame_count) {
-        hud_update();  // the meter and your shot's label (play_hud.c)
-    }
     draw();
 }

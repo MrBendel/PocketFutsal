@@ -70,7 +70,7 @@ The two touches give the game its set-up-and-attack move: reached unready, your 
 touch **controls** the ball up in front of you (not over the net); ready a strike as
 it comes down, and with two presses your second touch is a **slam**, on fire.
 
-The HUD says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
+A banner along the bottom says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
 that didn't go over), and SET TO ... at the end of a set.
 
 ## v0.2 (2026-11-21): the tennis-style rebuild
@@ -321,7 +321,19 @@ slammed (the Captain Tsubasa feel).
   and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
   from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
   fades out at the bounce or the next touch.
-- **Shot label** (2026-11-22, a debugging aid: "I'm hitting lobs when I mean curves"): the
+- **No HUD row** (2026-11-24, playtest: "do away with the persistent on-screen HUD to
+  give more room for the gameplay", the score handled as Mario Tennis does): the court
+  has the whole screen (`CAM_MAX` 24). The score's on a board in the court art, in the
+  floor above the far end (YOU 03-09 CPU, SETS 1-0 on its top edge in a best of three),
+  background tiles swapped through the vblank queue when it changes. Before each serve,
+  until the toss, a box in the bottom-right corner shows each player's face (the front
+  view's head, on a card in their colors), name, sets and points, a > by the server. A
+  point's call (NET! POINT YOU ...) and PAUSED are a one-row banner along the bottom.
+  Sprites draw over both. The power meter's a gauge under your feet (16 px, a pixel
+  for every 4) and the CPU's under its (8 px), flashing full or armed. Gone with the
+  row: the charge bar (your player flashes brighter as it fills), the shot label, GO!
+  (you blink) and SP! (the gauge flashes).
+- **Shot label** (2026-11-22, until the HUD row went on 2026-11-24, a debugging aid: "I'm hitting lobs when I mean curves"): the
   HUD says your shot where it says YOU: PWR, CRV, LOB or DRP while queued, then for a
   second what went (HDR and BIK go straight, SLM a slam, POP a pop-up, CTL a control).
 - **Serve**: the side that lost the point serves (you first). A or B tosses it up; it's

@@ -36,7 +36,7 @@
 #define PROJ_K1 164
 #define PROJ_S0 111    // the width scale at the far line, /128 (128 at the near)
 #define MAP_H 168      // the background: 160 x 168, scrolled up and down
-#define CAM_MAX 32     // its scroll: MAP_H - the 136 rows above the HUD
+#define CAM_MAX 24     // its scroll: MAP_H - the screen's 144 rows (no HUD row)
 
 // Sides. You (SIDE_YOU) play the near half.
 #define SIDE_YOU 0

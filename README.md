@@ -180,16 +180,16 @@ the title switch between one set and the best of three.
 | B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
 | A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and, with half a meter, jump and bicycle-kick it: a **slam**. A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
 | A or B again while ready | Tap for more power: the meter fills only as you press, and stays |
-| A + B, the power meter full | The **power slam** (SP! on the HUD): your next clean strike goes gold and fast. The white bar under your charge is the power meter: each clean strike in a rally fills it a little; it flashes full. A ! by CPU: its meter is full |
+| A + B, the power meter full | The **power slam**: your next clean strike goes gold and fast. The power meter is the gauge under your feet: each clean strike in a rally fills it a little; it flashes full (or armed). The CPU's is under its feet |
 | A or B as a power slam reaches you | Your one try: within 5 frames of it reaching you, you send it back on fire; too early, too late or never, it knocks you down |
 | SELECT while ready | Call the strike off |
-| You blink, **GO!** on the HUD | The CPU's struck it to you and nothing's queued: press A or B now |
+| You blink | The CPU's struck it to you and nothing's queued: press A or B now |
 | LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short; neutral, away from the CPU: short of it at the back, past it up close |
 | START | Pause |
 
-Press A or B to queue a strike, any time in a rally: each press fills the meter in the
-HUD (holding doesn't, and it doesn't drain); once the ball comes your way, the game runs you
+Press A or B to queue a strike, any time in a rally: each press fills the meter (you
+flash brighter; holding doesn't, and it doesn't drain); once the ball comes your way, the game runs you
 to it, then it goes by itself as the ball arrives. The ball's height picks the strike: a **kick** on the ground, a **volley** at
 the waist, a **header**, or a **bicycle kick** for one that's just gone over your head.
 Not ready when it reaches you, your first touch **controls** it, up in front of you:
@@ -207,7 +207,8 @@ struck on the way down, and must go over.
 | `src/main.c` | Boot and the main loop. One scene update per frame; scene changes fade out, `enter()` the new scene, fade in |
 | `src/state.h` | Scene IDs (`STATE_TITLE`, `STATE_PLAY`, `STATE_GAME_OVER`), `state_change()`, `wait_frame()` |
 | `src/game.h` | The match's watchable state, the court's measurements and its perspective |
-| `src/play.c` | The match: the perspective, players, strikes, the CPU, the ball's physics, the futnet rules and scoring, the HUD |
+| `src/play.c` | The match: the perspective, players, strikes, the CPU, the ball's physics, the futnet rules and scoring |
+| `src/play_hud.c` | The score: the board in the court art, the box with the faces before each serve, the banner for a point's call, the power gauges |
 | `src/title.c` | Title screen. START seeds the match from the frame it lands on |
 | `src/game_over.c` | Full time: who won and the score; START returns to the title |
 | `src/input.c` | Reads the joypad once per frame: `joy` (held), `joy_pressed`, `joy_released` |
@@ -246,10 +247,13 @@ use the bank-0 helpers `banked_memcpy`, `banked_sprite_data`, `banked_bkg_data`.
 Text drawing reads strings from RAM: banked scenes copy their constants first
 (`scene_text.h`). The build fails if bank 0 overflows or passes 90%.
 
-**HUD at the bottom.** The HUD is the window layer at line 136 (`HUD_WY` in `gfx.h`),
-over the bottom of a 160×168 court that scrolls up and down after the ball (`cam_y`). The hardware draws the window to the bottom of the screen
-for free; a top HUD would need a scanline interrupt every frame. `gfx_sprite_split`
-keeps sprites off it.
+**No HUD row in a match.** The court (160×168, scrolling up and down after the ball,
+`cam_y`) has the whole screen. The score is on a board in the court's art, above the far
+end, its digits swapped through the vblank queue (as Mario Tennis has it). The window
+layer is an overlay along the bottom only for a moment: the score box with each
+player's face before each serve, a banner for a point's call or PAUSED (`play_hud.c`).
+The hardware draws the window to the bottom of the screen for free; at the top it would
+need a scanline interrupt every frame. Other scenes keep a HUD row at `HUD_WY` (`gfx.h`).
 
 **Palettes.** Scenes set `pal_base_bg`/`pal_base_obj` (via `palettes.c`) and call
 `gfx_set_fade`; the vblank handler uploads them. The DMG palette registers do
