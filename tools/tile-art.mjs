@@ -190,6 +190,14 @@ const meterHalf = ['33333333', '2222....', '2222....', '2222....', '2222....', '
 const meterFull = ['33333333', '22222222', '22222222', '22222222', '22222222', '22222222', '22222222', '33333333'];
 export const HUD_TILES = [meterEmpty, meterHalf, meterFull];
 
+// The match's meter (src/play_hud.c): the charge (2) over the power meter (3), each
+// empty, half or full: tile T_METER + charge * 3 + power.
+const chargeRows = ['........', '2222....', '22222222'];
+const powerRows = ['........', '3333....', '33333333'];
+export const POWER_HUD_TILES = [];
+for (const c of chargeRows) for (const p of powerRows)
+  POWER_HUD_TILES.push(['33333333', c, c, c, c, '33333333', p, p]);
+
 // ---------------------------------------------------------------------------
 // The players: 16 x 24, Mario Tennis's size (its players are 14-16 x 23). In 8x16
 // sprite mode a frame is 4 sprites: two columns, each a 16-row top and an 8-row

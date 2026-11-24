@@ -184,6 +184,8 @@ void fc_net_clear(void) {
     ball_vz = (TO_SUB(NET_H + 3) + drop - ball_z) / tn8;
 }
 
+uint8_t fc_gold_speed = FC_GOLD_SPEED;  // a gold strike's speed (play.c's power slam sets it for a frame)
+
 uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_t flags) {
     uint8_t aim = flags & 3;
     uint8_t scuff = (flags & FC_F_SCUFF) != 0;
@@ -234,7 +236,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         ball_curve = side > 0 ? (int8_t)push : -(int8_t)push;
         ball_curve_t = t;
     } else {
-        speed = kind == SHOT_GOLD ? FC_GOLD_SPEED : fire ? FC_POWER_SPEED : FC_DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
+        speed = kind == SHOT_GOLD ? fc_gold_speed : fire ? FC_POWER_SPEED : FC_DRIVE_SPEED + (c >> 1) + (move == MOVE_VOLLEY ? 4 : 0);
         ball_power = fire;
         ball_gold = kind == SHOT_GOLD;
         fc_launch_vel(tx - bx, land - by, speed);

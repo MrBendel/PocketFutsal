@@ -1,14 +1,14 @@
 {
   "title": "f890fa2f",
   "serve": "93e83283",
-  "charged": "f0c9ab94",
-  "header": "6a2fa620",
-  "slide": "1b974dad",
+  "charged": "9d61e59f",
+  "header": "9cb51c2c",
+  "slide": "ed0df7a1",
   "point": "364c7036",
   "paused": "ef4f29c6",
   "full-time": "c14fc3c9",
-  "trail-power": "804d40b7",
-  "trail-curve": "d6fa6584",
+  "trail-power": "76d7fabb",
+  "trail-curve": "2060df88",
   "menu-training": "27cd2bc9",
   "training-hub": "945e8db4",
   "minigame-results": "4b3a4c05",
@@ -28,5 +28,6 @@
   "slalom-live": "581f03ac",
   "slalom-clear": "af371e7b",
   "slalom-hit": "ca96b473",
-  "slam-zone": "53fef69b"
+  "slam-zone": "a5644c97",
+  "power-meter": "485392ea"
 }

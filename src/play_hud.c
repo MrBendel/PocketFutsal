@@ -5,28 +5,45 @@
 #include "gfx.h"
 #include "game.h"
 #include "play_hud.h"
+#include "state.h"
 
 extern uint8_t note_timer, set_won, meter_shown, shot_shown, shot_seen, shot_seen_t, go_cue;
+uint8_t power_shown = 0xFF;      // the power meter on screen (0xFF: redraw)
+uint8_t cpu_power_shown = 0xFF;  // the CPU's full-meter mark on screen
+static uint8_t mark_buf[1];
 
 // Each frame: the meter (8 tiles, 2 steps each, for your charge) and your shot's
 // label, where it says YOU (the one queued, or for a moment what went, SEEN_* in
 // play.c), each queued to the window's map when it changes.
-static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMISGO!";
+static const char seen_names[] = "YOUPWRCRVLOBDRPGLDPOPCTLSLMHDRBIKMISGO!SP!";
 uint8_t meter_buf[8];
 static uint8_t shot_buf[3];
 
 void hud_update(void) BANKED {
     if (paused || note_timer) return;
     uint8_t m = pl_charge[SIDE_YOU] >> 1;  // 0 .. 16
-    if (m != meter_shown) {
+    // The power meter under it: full (or armed), it flashes.
+    uint8_t p = pl_power[SIDE_YOU] >> 2;
+    if (pl_special[SIDE_YOU] || p == (POWER_MAX >> 2)) p = (frame_count & 8) ? POWER_MAX >> 2 : 0;
+    if (m != meter_shown || p != power_shown) {
         meter_shown = m;
+        power_shown = p;
         for (uint8_t k = 0; k < 8; k++) {
             uint8_t full = (k << 1) + 2;
-            meter_buf[k] = T_METER + (m >= full ? 2 : m + 1 == full ? 1 : 0);
+            uint8_t c = m >= full ? 6 : m + 1 == full ? 3 : 0;
+            meter_buf[k] = T_METER + c + (p >= full ? 2 : p + 1 == full ? 1 : 0);
         }
         gfx_vram_copy(get_win_xy_addr(6, 0), meter_buf, 8, 0);
     }
+    // The CPU's power meter full (or armed): a ! by its name.
+    uint8_t cf = pl_special[SIDE_CPU] || pl_power[SIDE_CPU] == POWER_MAX;
+    if (cf != cpu_power_shown) {
+        cpu_power_shown = cf;
+        mark_buf[0] = FONT_TILES + (uint8_t)((cf ? '!' : ' ') - ' ');
+        gfx_vram_copy(get_win_xy_addr(16, 0), mark_buf, 1, 0);
+    }
     uint8_t k = pl_shot[SIDE_YOU];
+    if (k && pl_special[SIDE_YOU]) k = 13;  // SP!
     if (shot_seen_t) {
         shot_seen_t--;
         if (!k) k = shot_seen;
@@ -63,5 +80,6 @@ void hud_draw(void) BANKED {
     win_number(14, 0, score[SIDE_CPU], 2, 0);
     win_text(17, 0, "CPU");
     meter_shown = 0xFF;  // the meter's tiles were cleared: draw them again
+    cpu_power_shown = 0xFF;
     shot_shown = 0xFF;
 }

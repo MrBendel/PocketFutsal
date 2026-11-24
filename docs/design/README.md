@@ -197,6 +197,19 @@ slammed (the Captain Tsubasa feel).
   "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
+- **The power meter and the power slam** (2026-11-23, playtest: "fill it up for successful
+  rallies. When it's full you can press A + B to unleash a powerful slam that requires
+  super precise timing to hit"). Each clean strike in a rally adds 1 to pl_power (64
+  full: about one power slam a side every five points in the bot matches); the white
+  bar under your charge on the HUD, flashing when full; a ! by CPU when its is. Full,
+  A + B together (one pressed, the other held) arms it, SP! on the HUD; the next clean
+  strike is the power slam: a gold bicycle kick at speed 64 (a gold slam is 56), deep.
+  Reaching the other player it knocks them down unless their first press since it was
+  struck came within 5 frames of it reaching them (one try: no mashing), when they
+  send it back on fire. The CPU arms it one time in two as it readies with a full
+  meter, and times the return 2 times in 8; the player AI one in two or so (it times
+  its press, 0-7 frames out). Later: equippable power slams (pl_special holds which;
+  fc_gold_speed already takes the speed).
 - **The AI on your side** (2026-11-23): SELECT on the title (Futnet) switches YOU PLAY / AI PLAYS.
   The AI presses your buttons and nothing else (play.c ai_input): 12-27 frames after the
   CPU strikes it picks where it will meet the ball, walks there, presses A (B one time in
