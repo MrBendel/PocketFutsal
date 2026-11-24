@@ -68,6 +68,8 @@ static void draw_hint(void) {
     fill_bkg_rect(0, ROW_OPT+1, SCREEN_TW, 1, 0);
     if(game_mode==MODE_FUTSAL)
         draw(FONT_COMPACT,TEXT_CENTER,ROW_OPT+1,"SELECT: WATCH / PLAY",title_aux_tile,TITLE_PAL_HINT);
+    else if(game_mode==MODE_FUTNET)
+        draw(FONT_COMPACT,TEXT_CENTER,ROW_OPT+1,you_ai?"SELECT: AI PLAYS":"SELECT: YOU PLAY",title_aux_tile,TITLE_PAL_HINT);
     fill_bkg_rect(0, ROW_HINT1, SCREEN_TW, 1, 0);
     draw(FONT_COMPACT, TEXT_CENTER, ROW_HINT1,
          game_mode == MODE_TRAINING ? "5 DRILLS TO LEVEL UP"
@@ -127,9 +129,11 @@ void title_update(void) BANKED {
             else if(joy_pressed&J_LEFT)fs_pace=fs_pace?fs_pace-1:2;
             else fs_pace=fs_pace<2?fs_pace+1:0;
         }
+        else if (joy_pressed & J_SELECT) you_ai = !you_ai;  // Futnet: you or the AI play
         else match_sets = match_sets == 1 ? 2 : 1;
         sfx_play(SFX_TOUCH);
         draw_length();
+        draw_hint();
     }
     if (joy_pressed & (J_START | J_A)) {
         // The frame START lands on seeds the match: different every time for a

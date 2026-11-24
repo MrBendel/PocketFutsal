@@ -86,15 +86,35 @@ test('boots to the title screen and runs one loop per frame', () => {
   assert.ok(fc >= 59 && fc <= 61, `frame_count advanced ${fc} in 60 frames`);
 });
 
-test('the title waits for START; SELECT switches between one set and the best of three', () => {
+test('the title waits for START; LEFT/RIGHT switch one set and the best of three, SELECT you or the AI', () => {
   const emu = bootToTitle();
   assert.equal(emu.v('match_sets'), 1);
-  emu.tap('SELECT');
+  emu.tap('RIGHT');
   assert.equal(emu.v('match_sets'), 2);
-  emu.tap('SELECT');
+  emu.tap('LEFT');
   assert.equal(emu.v('match_sets'), 1);
+  assert.equal(emu.v('you_ai'), 0);
+  emu.tap('SELECT');
+  assert.equal(emu.v('you_ai'), 1);
+  assert.equal(emu.v('match_sets'), 1, 'SELECT leaves the sets alone');
+  emu.tap('SELECT');
+  assert.equal(emu.v('you_ai'), 0);
   emu.hold('UP+B', 60).idle(5);
   assert.equal(emu.v('game_state'), TITLE);
+});
+
+test('PLAYER: AI: the AI plays your side by your buttons, serving and returning', () => {
+  const emu = startGame();
+  emu.write8(emu.symbols.addr('you_ai'), 1);
+  let points = 0, yours = 0;
+  for (let f = 0; f < 6000; f++) {
+    const g = emu.v('goal_timer');
+    emu.idle(1);
+    if (!g && emu.v('goal_timer')) points++;
+  }
+  yours = at(emu, 'pl_shots', YOU);
+  assert.ok(points >= 1, `points played: ${points}`);
+  assert.ok(yours >= 10, `your side struck it ${yours} times`);
 });
 
 test('START begins a match seeded by press timing', () => {
@@ -742,7 +762,7 @@ test('a set is first to 11 by two, 15 at most; one set is the match; START at fu
 });
 
 test('the best of three: a set won starts the next from 0-0', () => {
-  const emu = settle(bootToTitle().tap('SELECT'), TITLE);
+  const emu = settle(bootToTitle().tap('RIGHT'), TITLE);
   startGame(emu);
   assert.equal(emu.v('match_sets'), 2);
   emu.write8(emu.symbols.addr('score') + YOU, 10);

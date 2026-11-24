@@ -17,7 +17,8 @@ The design is in [docs/design/README.md](docs/design/README.md).
 UP/DOWN chooses **Futnet Singles**, **2v2 Futsal**, or **Mini Games**.
 For futsal, LEFT/RIGHT chooses **Casual / Normal / Expert** pace and SELECT
 switches **Watch / Play** independently. START/A launches. Futnet's LEFT/RIGHT
-or SELECT still changes its match length.
+changes its match length, and SELECT switches **You play / AI plays**: the AI
+plays your side with your buttons, to watch how fair the match is.
 
 Futsal defaults to **Casual: 75%** of the original match speed. **Normal: 87.5%**
 is the middle setting; **Expert: 100%** preserves the original pace. This scales
@@ -165,8 +166,8 @@ extracted on first build.
 You're blue, at the bottom; the CPU is red, at the top; a net between. Futnet singles:
 two touches a side and one bounce, anything but your hands. Get the ball over the net
 and in (a line is in); a second bounce on their side is your point. Into the net, out,
-or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); SELECT on
-the title switches between one set and the best of three.
+or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); LEFT/RIGHT on
+the title switch between one set and the best of three.
 
 | Button | What it does |
 |---|---|

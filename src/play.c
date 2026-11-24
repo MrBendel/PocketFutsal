@@ -1040,6 +1040,65 @@ static void cpu_update(void) {
     player_update(SIDE_CPU, dx, dy);
 }
 
+// --- the AI on your side (the title's PLAYER: AI, to see how fair the match is) ---
+// It plays with your buttons and nothing else, as a fair human might: 12-27 frames
+// after the CPU strikes it picks where it'll meet the ball (the game's trace, from
+// where it stands; a ball going out it lets go), walks there on the d-pad, and once
+// there (or with the ball 40 px off) presses A, or B one time in four, then once or
+// twice more, holding the d-pad away from the CPU (its aim) three times in four.
+uint8_t you_ai;      // non-zero: the AI plays your side
+uint8_t ai_seen;     // the CPU's strikes when it last looked
+uint8_t ai_wait;     // frames until it reacts (0: not waiting)
+uint8_t ai_plan;     // non-zero: it's walking to ai_tx, ai_ty
+int16_t ai_tx, ai_ty;
+uint8_t ai_btn;      // J_A or J_B
+uint8_t ai_aim;      // J_LEFT, J_RIGHT or 0, held once queued
+uint8_t ai_presses;  // presses still to make
+uint8_t ai_next;     // frames to the next
+
+static void ai_input(void) {
+    uint8_t pad = 0, press = 0;
+    if (pl_shots[SIDE_CPU] != ai_seen) {
+        ai_seen = pl_shots[SIDE_CPU];
+        ai_wait = 12 + (rand() & 15);
+        ai_plan = ai_presses = 0;
+        ai_btn = (rand() & 3) ? J_A : J_B;
+        ai_aim = !(rand() & 3) ? 0 : PX(pl_x[SIDE_CPU]) < CENTER_X ? J_RIGHT : J_LEFT;
+    }
+    if (phase == PHASE_SERVE) {
+        if (server == SIDE_YOU && !serve_timer && !((uint8_t)frame_count & 15)) press = J_A;
+    } else if (phase == PHASE_RALLY) {
+        if (ai_wait && !--ai_wait && coming(SIDE_YOU) && !meet_out[SIDE_YOU]) {
+            ai_plan = 1;
+            ai_tx = meet_x[SIDE_YOU];
+            ai_ty = clamp16(meet_y[SIDE_YOU], 140, 205);
+        }
+        if (pl_shot[SIDE_YOU]) {
+            pad = ai_aim;
+            if (ai_presses && !--ai_next) press = ai_btn, ai_presses--, ai_next = 8;
+        } else if (loose_here(SIDE_YOU) && !pl_move_timer[SIDE_YOU]) {
+            press = ai_btn;  // a loose ball: queue, and the game runs you to it
+        } else if (ai_plan) {
+            if (meet_out[SIDE_YOU] || !coming(SIDE_YOU)) {
+                ai_plan = 0;
+            } else {
+                int16_t dx = ai_tx - PX(pl_x[SIDE_YOU]), dy = ai_ty - PX(pl_y[SIDE_YOU]);
+                if (dx > 3) pad = J_RIGHT; else if (dx < -3) pad = J_LEFT;
+                if (dy > 3) pad |= J_DOWN; else if (dy < -3) pad |= J_UP;
+                if ((abs16(dx) <= 4 && abs16(dy) <= 6) || abs16(PX(ball_y) - PX(pl_y[SIDE_YOU])) < 40) {
+                    pad = 0;
+                    press = ai_btn;
+                    ai_presses = 1 + (rand() & 1);
+                    ai_next = 8;
+                    ai_plan = 0;
+                }
+            }
+        }
+    }
+    joy = pad | press;
+    joy_pressed = press;
+}
+
 // --- the ball ---
 // A point to `side`. A set is first to SET_POINTS by two, or SET_CAP; set_won
 // notes it for the end of the celebration.
@@ -1190,6 +1249,7 @@ void play_enter(void) BANKED {
     sets[0] = sets[1] = 0;
     set_won = 0;
     pl_shots[0] = pl_shots[1] = 0;
+    ai_seen = ai_wait = ai_plan = ai_presses = 0;
     pl_last_move[0] = pl_last_move[1] = MOVE_NONE;
     goal_timer = 0;
     paused = 0;
@@ -1241,6 +1301,7 @@ void play_update(void) BANKED {
         return;
     }
     if (serve_timer) serve_timer--;
+    if (you_ai) ai_input();  // the AI's buttons in place of yours
 
     // You: the d-pad runs; A and B ready a strike (and combine, and tap); SELECT
     // calls it off.

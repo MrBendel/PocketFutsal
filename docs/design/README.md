@@ -62,7 +62,7 @@ calls are marked *(ours)*.
 | Any part of the body but the hands and arms | Feet, volleys, headers, bicycle kicks |
 | Faults: in the net, out of the court, touching the net, a third touch | Net, out, third touch (players can't reach the net) |
 | A ball off the net can't be played again | `ball_netted`: dead, the other side's point when it lands |
-| Sets to 11 by two, at most 15 (15-14); best of three sets | One set by default; SELECT on the title for the best of three |
+| Sets to 11 by two, at most 15 (15-14); best of three sets | One set by default; LEFT/RIGHT on the title for the best of three |
 | Serve: not in the sources | *(ours)* toss and strike from your back line; it must go over; the side that lost the point serves |
 | A ball on a line: not in the sources | *(ours)* in, as in tennis |
 
@@ -193,6 +193,11 @@ slammed (the Captain Tsubasa feel).
   "every shot I shoot is a lob"). The first button again taps the charge up.
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
+- **The AI on your side** (2026-11-23): SELECT on the title (Futnet) switches YOU PLAY / AI PLAYS.
+  The AI presses your buttons and nothing else (play.c ai_input): 12-27 frames after the
+  CPU strikes it picks where it will meet the ball, walks there, presses A (B one time in
+  four) then once or twice more, holding the d-pad away from the CPU. A fairness check:
+  over four seeds it wins 65% of points, median point 45 s (build/scratch/aimatch.mjs).
 - **Return, slide and return, or miss** (2026-11-23): you reach a body width either
   side (16 px), a header 35 px up (a jump), a bicycle kick 39. A ball going past out of
   reach (not going out, up to 23 px high), you always slide for it, toward where it'll
