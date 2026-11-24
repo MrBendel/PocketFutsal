@@ -816,6 +816,12 @@ test('both movable goals use the same full-size sprite frame without replacing p
   assert.equal(e.read8(0xfe02+a*4),e.read8(0xfe02+b*4),'same sprite artwork at both ends');
  }
  assert.equal(e.read8(0xfe01+34*4)-e.read8(0xfe01+30*4),32,'five columns form a 40-pixel goal');
+ for(const end of [0,1]){
+  const baseline=e.read8(e.symbols.addr('fs_projection_y')+(end?224:0));
+  const top=e.read8(0xfe00+(30+end*5)*4)-16+e.v('fs_cam_y');
+  assert.equal(top,baseline-14,'crossbar sits above its actual projected goal line');
+  assert.equal(top+15,baseline+1,'post feet meet the court instead of sitting on the grass');
+ }
  e.shot('futsal-object-goals');
 });
 

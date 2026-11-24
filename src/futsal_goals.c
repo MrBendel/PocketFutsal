@@ -31,7 +31,7 @@ void futsal_goals_draw(uint8_t cam) BANKED{
     if(last_cam==cam&&!dirty)return;
     last_cam=cam;dirty=0;o=&shadow_OAM[30];
     for(g=0;g<2;g++){
-        x=64+fs_goal_dx[g];y=(g?162:34)-cam+fs_goal_dy[g];
+        x=64+fs_goal_dx[g];y=fs_projection_y[g?224:0]+2-cam+fs_goal_dy[g];
         for(j=0;j<5;j++){o->x=x;o->y=y;o++;x+=8;}
     }
 }
