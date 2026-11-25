@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
+import {REACTION_TILES} from '../tools/reaction-art.mjs';
 import {asciiTile,FUTSAL_GOAL,FUTSAL_ZONE} from '../tools/tile-art.mjs';
 import {STADIUM_PITCH as FUTSAL_PITCH,STADIUM_OFFSET,pitchTile,SCORE_TILES} from '../tools/stadium-art.mjs';
 import {GOAL_H} from '../tools/goal-art.mjs';
@@ -14,6 +15,37 @@ function startGame(pace=2,seed=4242) {
  return settle(e.tap('START'),PLAY,'futsal mode');
 }
 const put=(e,n,v)=>e.write8(e.symbols.addr(n),v);
+test('each player animates the correct win or lose reaction after either team wins',()=>{
+ for(const winner of [0,1]){
+  const e=startGame();e.write8(e.symbols.addr('score')+winner,5);e.write8(e.symbols.addr('score')+(winner^1),2);
+  put(e,'fs_goal_timer',1);settle(e.idle(2),GAME_OVER,'animated futsal results');
+  const v=e.snapshot().vram;
+  for(let i=0;i<4;i++){
+   const outcome=(i>>1)===winner?0:1;
+   assert.equal(at(e,'fs_result_outcome',i),outcome);
+   const expected=REACTION_TILES.slice(i*48+outcome*24,i*48+outcome*24+24).flatMap(t=>asciiTile(t));
+   assert.deepEqual(Buffer.from(v.subarray(0x2000+i*384,0x2000+(i+1)*384)),Buffer.from(expected),'all three poses stay resident');
+  }
+  const seen=Array.from({length:4},()=>new Set()),ground=[];let peak=0;
+  for(let f=0;f<64;f++){
+   e.idle();const o=e.snapshot().oam;
+   for(let i=0;i<4;i++){
+    seen[i].add(at(e,'fs_result_frame',i));
+    assert.equal(o[i*16+3]&15,8|i,'body keeps character palette and sprite bank');
+    if(!f)ground[i]=o[(16+i)*4];else assert.equal(o[(16+i)*4],ground[i],'shadow stays grounded');
+   }
+   for(let y=0;y<144;y++){
+    let n=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])n++;
+    peak=Math.max(peak,n);
+   }
+  }
+  for(const poses of seen)assert.equal(poses.size,3,'every character loops through all three poses');
+  assert.ok(peak<=10,`results fit sprite scanline budget: ${peak}`);
+  assert.equal(e.v('game_over_timer'),30,'reactions continue after the input delay');
+  e.shot(winner?'futsal-red-win-reactions':'futsal-blue-win-reactions');
+  settle(e.tap('START'),0,'results return to menu');
+ }
+});
 test('four AI players pass, shoot, and finish a match',()=>{
  const e=startGame();
  assert.equal(e.v('fs_spectator'),1);

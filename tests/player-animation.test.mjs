@@ -3,6 +3,22 @@ import fs from 'node:fs';
 import {assert,startGame,set16,at} from './helpers.mjs';
 import {encodePng} from '../harness/node.mjs';
 import {CHARACTERS,character,fullTiles,sideTiles,sideAtlas} from '../tools/player-art.mjs';
+import {reactionFrames,REACTION_TILES} from '../tools/reaction-art.mjs';
+
+test('each roster character has distinct native win and lose cycles with their original head',()=>{
+ assert.equal(REACTION_TILES.length,192,'four characters, two outcomes, three eight-tile frames');
+ for(const id of CHARACTERS){
+  const r=reactionFrames(id),head=character(id).basic[0];
+  for(const outcome of ['win','lose']){
+   assert.equal(r[outcome].length,3);assert.equal(new Set(r[outcome].map(p=>p.join(''))).size,3);
+   for(const pose of r[outcome]){assert.equal(pose.length,24);for(const row of pose){assert.equal(row.length,16);assert.match(row,/^[.123]+$/);}}
+  }
+  for(const outcome of ['win','lose'])for(let f=0;f<3;f++){
+   const dy=outcome==='lose'?f:f===1||(id==='bandana'&&f===2)?-1:0;
+   for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')assert.equal(r[outcome][f][y+dy][x],head[y][x],'original head pixels move intact, without redrawn features');
+  }
+ }
+});
 
 test('side cycles preserve each approved profile head and fit the sprite budget',()=>{
  assert.equal(sideAtlas().length,28,'packed roster fits outside the court tile range');

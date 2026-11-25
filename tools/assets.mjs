@@ -32,6 +32,7 @@ import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './pla
 import {BALL_EXTRA} from './ball-art.mjs';
 import {GOAL_BG_ENDS} from './goal-background.mjs';
 import {STADIUM_PITCH,STADIUM_MAP,SCORE_TILES} from './stadium-art.mjs';
+import {REACTION_TILES} from './reaction-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -77,6 +78,7 @@ export const ASSETS = [
   { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
   ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),
   ...CHARACTERS.map(id => ({ name: `action_${id}`, bank: true, ascii: actionTiles(id), src: `artwork/players/roster/${id}/player.json` })),
+  {name:'futsal_reactions',bank:true,ascii:REACTION_TILES,src:'tools/reaction-art.mjs',deps:CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`)},
   { name: 'side_roster', bank: true, ascii: sideAtlas(), src: 'tools/player-art.mjs', deps: CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`) },
   // The mini games (src/mg_*.c): each a background (map from SCENE_TILES on) and
   // its own sprite tiles, drawn in tools/art/mg_*.mjs.
