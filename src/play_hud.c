@@ -15,7 +15,7 @@
 extern uint8_t note_timer, set_won, hud_pending;
 uint8_t hud_mode = 0xFF;      // the overlay showing (HUD_*; 0xFF: none yet)
 uint8_t board_shown[4];       // the board's points and sets as drawn (0xFF: redraw)
-uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (0: none, 0xFF: full; 0xFE: redraw)
+uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (0: none, 0x7F: dark, 0xFF: gold; 0xFE: redraw)
 static uint8_t gauge_buf[4][6];  // their bars: three rows of the shadow's lower tile
 static uint8_t strip_buf[5];
 
@@ -158,24 +158,22 @@ void hud_update(uint8_t busy) BANKED {
     // The box goes once the serve's tossed (and comes back for the next: on the
     // frame after, hud_pending, not on the serve's set-up, a full frame already).
     if (!paused && !goal_timer && !hud_pending && (phase == PHASE_SERVE) != (hud_mode == HUD_BOX)) hud_draw();
-    // The power slam ready (the meter full) or armed: a full bar in that player's
-    // shadow (yours 16 px across both halves, the CPU's 8, centred), the shadow
-    // flashing. Filling, nothing shows (playtest: "we don't need the power meter to
-    // be persistent, just something to indicate when your slam is ready").
+    // The power slam ready (the meter full) or armed: a bar in that player's shadow
+    // (yours 16 px across both halves, the CPU's 8, centred), blinking gold and dark
+    // (its tiles redrawn every 8 frames; the shadow stays grey: "I liked the grey
+    // shadows better"). Filling, nothing shows (playtest: "we don't need the power
+    // meter to be persistent, just something to indicate when your slam is ready").
+    if (busy) return;
+    uint8_t lit = (frame_count & 8) ? 0xFF : 0;
     for (uint8_t i = 0; i < 2; i++) {
-        uint8_t full = pl_special[i] || pl_power[i] == POWER_MAX;
-        OAM_item_t *s = &shadow_OAM[OAM_PLAYER_SHADOW + (i << 1)];
-        uint8_t pal = full && (frame_count & 8) ? SPR_PAL_POWER : SPR_PAL_UI;
-        s->prop = pal;
-        s[1].prop = pal;
-        if (busy) continue;
-        uint8_t on = full ? 0xFF : 0;
+        uint8_t on = (pl_special[i] || pl_power[i] == POWER_MAX) ? 0xFF : 0, e = on & ~lit;
+        uint8_t key = on & (lit | 0x7F);  // 0 none, 0x7F dark, 0xFF gold
         if (i == SIDE_YOU) {
-            gauge_fill(0, on, on, 0);
-            gauge_fill(1, on, on, 0);
+            gauge_fill(0, key, on, e);
+            gauge_fill(1, key, on, e);
         } else {
-            gauge_fill(2, on, on & 0x0F, 0);
-            gauge_fill(3, on, on & 0xF0, 0);
+            gauge_fill(2, key, on & 0x0F, e & 0x0F);
+            gauge_fill(3, key, on & 0xF0, e & 0xF0);
         }
     }
 }
