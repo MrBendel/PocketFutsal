@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {assert,startGame,set16,at} from './helpers.mjs';
 import {encodePng} from '../harness/node.mjs';
 import {CHARACTERS,character,fullTiles,sideTiles,sideAtlas} from '../tools/player-art.mjs';
-import {reactionFrames,REACTION_TILES} from '../tools/reaction-art.mjs';
+import {reactionFrames,reactionHeadOffsets,REACTION_TILES} from '../tools/reaction-art.mjs';
 
 test('each roster character has distinct native win and lose cycles with their original head',()=>{
  assert.equal(REACTION_TILES.length,192,'four characters, two outcomes, three eight-tile frames');
@@ -14,8 +14,8 @@ test('each roster character has distinct native win and lose cycles with their o
    for(const pose of r[outcome]){assert.equal(pose.length,24);for(const row of pose){assert.equal(row.length,16);assert.match(row,/^[.123]+$/);}}
   }
   for(const outcome of ['win','lose'])for(let f=0;f<3;f++){
-   const dy=outcome==='lose'?f:f===1||(id==='bandana'&&f===2)?-1:0;
-   for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')assert.equal(r[outcome][f][y+dy][x],head[y][x],'original head pixels move intact, without redrawn features');
+   const [dx,dy]=reactionHeadOffsets(id)[outcome][f];
+   for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')assert.equal(r[outcome][f][y+dy][x+dx],head[y][x],'original head pixels move intact, without redrawn features');
   }
  }
 });

@@ -26,11 +26,13 @@ test('each player animates the correct win or lose reaction after either team wi
    const expected=REACTION_TILES.slice(i*48+outcome*24,i*48+outcome*24+24).flatMap(t=>asciiTile(t));
    assert.deepEqual(Buffer.from(v.subarray(0x2000+i*384,0x2000+(i+1)*384)),Buffer.from(expected),'all three poses stay resident');
   }
-  const seen=Array.from({length:4},()=>new Set()),ground=[];let peak=0;
+  const seen=Array.from({length:4},()=>new Set()),bodyY=Array.from({length:4},()=>new Set()),ground=[];let peak=0;
   for(let f=0;f<64;f++){
    e.idle();const o=e.snapshot().oam;
+   if(!winner&&f===20)e.shot('futsal-win-jump-apex');
    for(let i=0;i<4;i++){
     seen[i].add(at(e,'fs_result_frame',i));
+    bodyY[i].add(o[i*16]);
     assert.equal(o[i*16+3]&15,8|i,'body keeps character palette and sprite bank');
     if(!f)ground[i]=o[(16+i)*4];else assert.equal(o[(16+i)*4],ground[i],'shadow stays grounded');
    }
@@ -40,6 +42,10 @@ test('each player animates the correct win or lose reaction after either team wi
    }
   }
   for(const poses of seen)assert.equal(poses.size,3,'every character loops through all three poses');
+  for(let i=0;i<4;i++){
+   const ys=[...bodyY[i]];
+   assert.equal(Math.max(...ys)-Math.min(...ys),(i>>1)===winner?6:0,'winners jump six pixels; crouched losers stay grounded');
+  }
   assert.ok(peak<=10,`results fit sprite scanline budget: ${peak}`);
   assert.equal(e.v('game_over_timer'),30,'reactions continue after the input delay');
   e.shot(winner?'futsal-red-win-reactions':'futsal-blue-win-reactions');

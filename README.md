@@ -49,9 +49,9 @@ The lob landing ring reserves the first two sprite slots so its complete
 outline survives crowded scanlines. Players and the ball retain their depth
 order behind the targeting cue; shadows, trails and contact effects follow.
 
-At full time, all four players have subtle win/lose reactions: small shoulder
-lifts and arm shifts for the winning pair, slumped shoulders and head dips for
-the losing pair. The original faces and outfits stay intact. Three frames per
+At full time, all four players have win/lose reactions: one fist lifted and a
+short up/down jump for the winning pair, a duck and head shake for the losing
+pair. The original faces and outfits stay intact. Three frames per
 outcome loop on the results screen, with fixed ground shadows. The native art
 and animated study are in `artwork/players/roster/reactions`.
 
