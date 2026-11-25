@@ -6,12 +6,15 @@
 BANKREF_EXTERN(vfx_tiles)
 extern const uint8_t vfx_tiles[];
 #define VFX_FIRST_TILE 32
-#define VFX_TILE_COUNT 94
+#define VFX_TILE_COUNT 150
+#define VFX_LO_TILES 96  // from VFX_FIRST_TILE; the rest from VFX_HI_TILE
+#define VFX_HI_TILE 160
 #define VFX_SLAM 0
 #define VFX_FIRE 1
 #define VFX_DUST 2
 #define VFX_SPARK 3
-#define VFX_COUNT 4
+#define VFX_SPRAY 4
+#define VFX_COUNT 5
 #define VFX_SPRITES_MAX 8
 #endif
 
@@ -23,11 +26,13 @@ static const uint8_t vfx_fx[][6] = {
     {32, 4, 2, 1, 3, SPR_PAL_POWER},  // FIRE
     {40, 3, 3, 1, 5, SPR_PAL_BALL},  // DUST
     {49, 5, 2, 1, 3, SPR_PAL_BALL},  // SPARK
+    {59, 5, 5, 2, 4, SPR_PAL_POWER},  // SPRAY
 };
 static const uint8_t vfx_cells[] = {
     255, 32, 34, 255, 255, 36, 38, 255, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 255, 255, 255, 255, 255, 255, 74,  // SLAM
     76, 78, 80, 82, 84, 86, 88, 90,  // FIRE
     92, 255, 255, 94, 96, 98, 100, 102, 104,  // DUST
     106, 108, 110, 112, 114, 116, 118, 120, 122, 124,  // SPARK
+    255, 126, 160, 255, 255, 162, 164, 166, 255, 255, 255, 168, 170, 172, 255, 174, 176, 178, 180, 255, 255, 255, 182, 184, 255, 186, 188, 190, 180, 255, 255, 192, 194, 196, 198, 168, 200, 202, 255, 255, 255, 204, 255, 255, 206, 208, 210, 255, 212, 255,  // SPRAY
 };
 #endif

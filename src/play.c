@@ -8,8 +8,8 @@
 // The ball is always loose: you strike it rather than carry it. With the ball
 // coming your way (or loose in your half), A readies a power shot, straight where
 // the d-pad points, and B a curve, bending in to the side the d-pad holds; B then
-// A is a lob, A then B a drop shot. Readying plants you: each press fills the meter (only presses,
-// and it stays; SELECT calls it off), and the strike goes by itself as
+// A in a quick roll is a lob, A then B a drop shot. Readying plants you: each press fills the meter (only presses,
+// and it stays; the other button or SELECT calls it off), and the strike goes by itself as
 // the ball arrives. Which strike depends on the ball's height: a kick on the
 // ground, a volley at the waist, a header, or a bicycle kick for one that's just
 // gone over your head. Planted out of reach, you slide for it, and lie there a
@@ -330,9 +330,12 @@ static void seen(uint8_t what) {
 }
 
 // --- setting up ---
+#define ROLL_FRAMES 12  // the other button this soon after the first: a lob or a drop shot, not a cancel
+uint8_t you_first;      // the button you readied with (0 A, 1 B)
+uint8_t you_roll;       // frames left for the other button to make a lob or a drop shot
 static void unready(uint8_t i) {
     fc_unready(i);
-    if (i == SIDE_YOU) you_leap = 0;
+    if (i == SIDE_YOU) you_leap = you_roll = 0;
 }
 static void ball_plain(void) { fc_ball_plain(); }
 
@@ -644,9 +647,11 @@ static void dust(uint8_t i) {
     vfx_start(VFX_DUST, proj_x(PX(pl_x[i]), py) + 8, (int16_t)proj_y[PROJ_I(py)] + 20);
 }
 
+uint8_t ball_slammed;  // struck as a slam, not landed yet: sparks fly where it lands
 static void new_flight(void) {
     ball_flight++;
     ball_trail = 0;
+    ball_slammed = 0;
     flight_frame = (uint8_t)frame_count;
 }
 
@@ -789,6 +794,7 @@ static void strike(uint8_t i, uint8_t move) {
             pl_power[i] = POWER_MAX;  // (yours: the ready moment's sound, play_hud.c)
         }
     }
+    ball_slammed = slam;
     if (slam) burst(VFX_SLAM);  // an impact star: big for a slam, small on fire
     else if (ball_power) burst(VFX_FIRE);
     if (i == SIDE_YOU)
@@ -921,7 +927,8 @@ static uint8_t in_reach(void) {
 // A player's frame: move (dx, dy: -1, 0 or 1) unless planted, charge, then strike,
 // slide, or take it unready.
 static void player_update(uint8_t i, int8_t dx, int8_t dy) {
-    fc_combo_tick(i);
+    // (No fc_combo_tick: a lob or a drop shot is made in a quick roll off the first
+    // press now, and stays one till it's struck.)
     if (pl_move_timer[i]) {
         pl_vx[i] = pl_vy[i] = 0;  // mid-move: stopped (it starts again from still)
         pl_move_timer[i]--;
@@ -950,10 +957,11 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         }
         return;
     }
-    // Planted, readying a strike: still, once the ball's over the net into your half
-    // (before, queued early, you still run: playtest, "stuck from the power up before
-    // I think I should"); the d-pad then only aims. Serving: along the line only.
-    if ((pl_shot[i] && phase == PHASE_RALLY && in_half(i)) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    // Planted, readying a strike: still, and the d-pad only aims. You from the press
+    // (playtest: "powering up doesn't feel like it's locking correctly"; the other
+    // button calls it off, so pressing early no longer leaves you stuck); the CPU
+    // once the ball's over the net into its half. Serving: along the line only.
+    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU || in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];
@@ -1212,7 +1220,7 @@ static void ai_input(void) {
             ai_ty = clamp16(meet_y[SIDE_YOU], 140, 205);
         }
         if (pl_shot[SIDE_YOU]) {
-            if (in_half(SIDE_YOU)) pad = ai_aim;  // aims once planted (before, it would run)
+            pad = ai_aim;
             if (ai_presses && !--ai_next && !ball_special) press = ai_btn, ai_presses--, ai_next = 8;
         } else if (loose_here(SIDE_YOU) && !pl_move_timer[SIDE_YOU] && !ball_special) {
             press = ai_btn;  // a loose ball: queue, and the game runs you to it
@@ -1320,6 +1328,11 @@ static void ball_update(void) {
         if (ball_z <= 0) {
             int16_t up = (-ball_vz * 3) >> 2;
             uint8_t first = !ball_landings;
+            if (ball_slammed) {
+                // A slam lands: sparks fly up off the court (the spray's foot at the ball).
+                ball_slammed = 0;
+                vfx_start(VFX_SPRAY, ball_hx + 10, ball_hwy - 10);
+            }
             ball_z = 0;
             ball_pop = 0;
             if (ball_drop) {
@@ -1451,6 +1464,7 @@ void play_update(void) BANKED {
     // You: the d-pad runs; A and B ready a strike (and combine, and tap); SELECT
     // calls it off.
     if (joy_pressed & J_SELECT && phase == PHASE_RALLY) unready(SIDE_YOU);
+    if (you_roll) you_roll--;
     if (sp_age[SIDE_YOU] != 255) sp_age[SIDE_YOU]++;
     if ((joy_pressed & (J_A | J_B)) && ball_special && last_touch == SIDE_CPU && !sp_try[SIDE_YOU]) {
         sp_try[SIDE_YOU] = 1;  // your one try at timing the power slam
@@ -1479,14 +1493,37 @@ void play_update(void) BANKED {
                 ball_vz = TOSS_LIFT;
                 sfx_play(SFX_TOUCH);
             }
-        } else if (pl_shot[SIDE_YOU] || (phase == PHASE_RALLY && !pl_move_timer[SIDE_YOU])) {
+        } else if (pl_shot[SIDE_YOU] && phase == PHASE_RALLY) {
+            // Readied: the same button again fills the meter (a lob or a drop shot stays
+            // one). The other, in a quick roll off the first (ROLL_FRAMES), makes it a lob
+            // (B, A) or a drop shot (A, B); any later it calls the strike off (playtest:
+            // "if you're locked into an A power up, B cancels and vice versa").
+            uint8_t s = pl_shot[SIDE_YOU];
+            if (joy_pressed & (you_first ? J_B : J_A)) {
+                ready(SIDE_YOU, you_first);
+                if (s == SHOT_LOB || s == SHOT_DROP) pl_shot[SIDE_YOU] = s;
+            } else if (you_roll) {
+                you_roll = 0;
+                ready(SIDE_YOU, !you_first);
+            } else {
+                unready(SIDE_YOU);
+                sfx_play(SFX_TOUCH);
+            }
+        } else if (pl_shot[SIDE_YOU]) {
+            ready(SIDE_YOU, b);  // the serve's toss: it charges
+        } else if (phase == PHASE_RALLY && !pl_move_timer[SIDE_YOU]) {
             ready(SIDE_YOU, b);  // queue it any time: it charges once the ball's coming
-            if (!b && (joy_pressed & J_B)) ready(SIDE_YOU, 1);  // A and B at once: both
+            you_first = b;
+            you_roll = ROLL_FRAMES;
+            if (!b && (joy_pressed & J_B)) {
+                ready(SIDE_YOU, 1);  // A and B at once: a drop shot
+                you_roll = 0;
+            }
         }
     }
-    // Queued and planted (the ball in your half) or serving, LEFT or RIGHT sets your
-    // aim, UP or DOWN how deep, and they stick. Before, the d-pad runs you.
-    if (pl_shot[SIDE_YOU] && (phase != PHASE_RALLY || in_half(SIDE_YOU))) {
+    // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and
+    // they stick.
+    if (pl_shot[SIDE_YOU]) {
         if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
         else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
         if (joy & J_UP) pl_depth[SIDE_YOU] = 2;
