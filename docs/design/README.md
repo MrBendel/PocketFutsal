@@ -158,11 +158,14 @@ slammed (the Captain Tsubasa feel).
   power up A or B or both. The player is locked, when they're near the ball at return
   distance they either return or slide and return or if they're too far they miss").
   Getting there is yours, with the d-pad; only a ball loose in your half walks you to
-  it. **The lock starts as the ball comes over the net** into your half (2026-11-23,
-  playtest: "I keep getting stuck from the power up before I think I should"): queued
-  while it's still over their side, you still run, and the meter fills as you press;
-  over the net, you're planted and the d-pad aims. (A bot that presses as the CPU
-  strikes and then runs there wins 63% of points; it had been stuck where it pressed.) The CPU plays by the same lock: it gets there, then readies
+  it. **The lock starts at the press** again (2026-11-24, playtest: "powering up
+  doesn't feel like it's locking correctly. I think the rules we added broke it"). For a
+  day it started as the ball came over the net (2026-11-23, playtest: "I keep getting
+  stuck from the power up before I think I should"): queued while it was still over
+  their side, you still ran. Now **the other button calls the strike off** instead
+  ("if you're locked into an A power up, B cancels and vice versa"), so pressing too
+  early costs a press, not the point. The CPU plays by the same lock, from the ball
+  crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
@@ -189,12 +192,14 @@ slammed (the Captain Tsubasa feel).
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B then A: lob**, over the other player and deep: 24 px behind them, at least 60
-  past the net (a lob at a player up at the net sends them back for it). **A then B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.) The second
-  button arms it for 24 frames (about 0.4 s), so press it just before the ball arrives;
-  struck later it's the curve or the power shot again (2026-11-22, from the playtest:
-  "every shot I shoot is a lob"). The first button again taps the charge up.
+- **B, A: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **A, B: drop shot**,
+  dying just past halfway. (Mario Tennis has these the other way round.) A quick roll:
+  the second button within 12 frames (0.2 s) of the first (2026-11-24, when the other
+  button became the cancel); it stays a lob or a drop shot till it's struck, and the
+  first button again taps the charge up. The other button any later calls the strike
+  off. (Before, the second button armed it for 24 frames, pressed just before the
+  ball arrived, from the playtest: "every shot I shoot is a lob".)
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **The power meter and the power slam** (2026-11-23, playtest: "fill it up for successful
@@ -244,7 +249,10 @@ slammed (the Captain Tsubasa feel).
   fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
-  20-27, a row of sprites placed a frame at most (src/vfx.c).
+  20-27, a row of sprites placed a frame at most (src/vfx.c). Where a slam lands, sparks
+  fly up off the court (2026-11-24, playtest: "the second row when it hits the ground",
+  Sparks Medium A): 40 x 32, wider than 8 sprites, so a frame's sprites go only to its
+  drawn columns (7 at most); its tiles go on past 159, after the HUD's.
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
