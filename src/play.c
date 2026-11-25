@@ -1329,9 +1329,9 @@ static void ball_update(void) {
             int16_t up = (-ball_vz * 3) >> 2;
             uint8_t first = !ball_landings;
             if (ball_slammed) {
-                // A slam lands: sparks fly up off the court (the spray's foot at the ball).
+                // A slam lands: sparks fly off the court, just over the ball.
                 ball_slammed = 0;
-                vfx_start(VFX_SPRAY, ball_hx + 10, ball_hwy - 10);
+                vfx_start(VFX_SPRAY, ball_hx, ball_hwy - 6);
             }
             ball_z = 0;
             ball_pop = 0;

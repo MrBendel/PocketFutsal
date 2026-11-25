@@ -250,9 +250,10 @@ slammed (the Captain Tsubasa feel).
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
   20-27, a row of sprites placed a frame at most (src/vfx.c). Where a slam lands, sparks
-  fly up off the court (2026-11-24, playtest: "the second row when it hits the ground",
-  Sparks Medium A): 40 x 32, wider than 8 sprites, so a frame's sprites go only to its
-  drawn columns (7 at most); its tiles go on past 159, after the HUD's.
+  fly off the court (2026-11-24, Sparks Small B, the playtest's pick: "there's another
+  that has distinct lines"; Sparks Medium A was tried first). A frame's sprites go only
+  to its drawn columns, and tiles past 127 go on from 160, after the HUD's, so a wider
+  effect can come later.
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
