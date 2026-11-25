@@ -865,6 +865,34 @@ test('running side to side costs you: a turn skids first', () => {
   assert.ok(vx() < -8, `then off the other way: ${vx()}`);
 });
 
+test('rushing the net: a ball over it high, mashed four times, is smashed down short, and the CPU can only pop it up', () => {
+  const shot = (youY, presses) => {
+    const emu = quietRally();
+    placePlayer(emu, YOU, 78, youY);
+    placePlayer(emu, CPU, 80, 30);
+    ballAt(emu, 80, 70, 16, 0, 44);
+    set16(emu, 'ball_vz', 8);
+    for (let k = 0; k < presses; k++) emu.tap('A').idle(1);
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 60, 'the strike');
+    emu.idle(1);
+    return emu;
+  };
+  const speed = (e) => Math.abs(e.v('ball_vx', 'i16')) + Math.abs(e.v('ball_vy', 'i16'));
+  const emu = shot(132, 4);
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_BICYCLE, 'a bicycle kick');
+  assert.equal(speed(emu), 72, "at your slam's speed");
+  assert.equal(emu.v('ball_smash'), 1);
+  emu.until((e) => e.v('ball_landings') > 0, 30, 'it landing');
+  const landY = px(emu.v('ball_y', 'i16'));
+  assert.ok(landY > HALFWAY - 48 && landY < HALFWAY, `down short, past the net: ${landY}`);
+  assert.ok(emu.v('ball_vz', 'i16') >= 28, 'and it kicks up high');
+  emu.write8(emu.symbols.addr('cpu_idle'), 0);
+  emu.until((e) => at(e, 'pl_shots', CPU) > 0 || e.v('goal_timer'), 200, 'the CPU at it');
+  if (!emu.v('goal_timer')) assert.equal(emu.v('ball_pop'), 1, 'only a full meter meets it clean: the CPU pops it up');
+  assert.ok(speed(shot(132, 2)) < 72, 'two presses: no smash');
+  assert.ok(speed(shot(160, 4)) < 72, 'back from the net: no smash');
+});
+
 test('between shots you stay where you are; a volley right at the net stays low and lands in', () => {
   let emu = quietRally();
   placePlayer(emu, YOU, 40, 124);  // up at the net, off to the left

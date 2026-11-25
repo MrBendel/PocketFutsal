@@ -605,8 +605,22 @@ static int16_t other_y(uint8_t i, int16_t from_halfway) {
 // A press of A (b 0) or B (b 1): the first readies a power shot or a curve; the
 // other button next makes it a drop shot (A, B) or a lob (B, A); after that, or
 // the same button again, it's a tap: more charge.
+// Rushing the net (playtest: "when you rush the net you should be able to bicycle
+// kick to knock the ball out of the air for a smash"): up within NET_RUSH px of it,
+// a ball of the CPU's over it at NET_SMASH_Z or higher is a slam at the slam's
+// charge, as a lob or a pop-up is, leaping for it as for those. Not a power slam.
+#define NET_RUSH 30
+#define NET_SMASH_Z 14
+#define NET_SMASH_LAND 36  // px past the net: steep, in front of a CPU back at its home
+#define SMASH_BOUNCE 30    // SUB a frame up off its bounce: over the head of anyone near (a header reaches 36 px)
+uint8_t ball_smash;        // smashed at the net (1; 2 bounced): it kicks up high off its bounce, and like gold only a full meter meets it clean
+static uint8_t at_net(uint8_t i) {
+    return i == SIDE_YOU && phase == PHASE_RALLY && last_touch != i && !ball_special &&
+           PX(pl_y[i]) <= HALFWAY + NET_RUSH;
+}
+
 static void ready(uint8_t i, uint8_t b) {
-    fc_ready(i, b, meet_slam[i] && (ball_lob || ball_pop));
+    fc_ready(i, b, (meet_slam[i] && (ball_lob || ball_pop)) || at_net(i));
 }
 
 // --- strikes ---
@@ -720,13 +734,15 @@ static void aim_point(uint8_t i) {
 
 // A clean strike: the readied shot, shaped by the ball's height (move).
 static void strike(uint8_t i, uint8_t move) {
+    ball_smash = 0;
     uint8_t was_pop = ball_pop, was_lob = ball_lob;
     aim_point(i);
     uint8_t aim = i == SIDE_YOU ? (aim_tx < CENTER_X ? 0 : aim_tx > CENTER_X ? 2 : 1) : cpu_aim;
     uint8_t c = pl_charge[i], kind = pl_shot[i], frames = KICK_FRAMES;
     uint8_t scuff = c < SCUFF && phase == PHASE_RALLY;
     int16_t land = scuff ? other_y(i, -10) : aim_land;
-    uint8_t slam = move != MOVE_KICK && (was_pop || was_lob) && c >= (i == SIDE_YOU ? SLAM_CHARGE : CHARGE_MAX / 2);
+    uint8_t smash = at_net(i) && ball_z >= TO_SUB(NET_SMASH_Z);  // at the net, out of the air
+    uint8_t slam = move != MOVE_KICK && (was_pop || was_lob || smash) && c >= (i == SIDE_YOU ? SLAM_CHARGE : CHARGE_MAX / 2);
     uint8_t special = pl_special[i] && phase == PHASE_RALLY;
     if (special) {
         // The power slam: gold, at SPECIAL_SPEED, deep (a bicycle kick, whatever the height).
@@ -738,11 +754,27 @@ static void strike(uint8_t i, uint8_t move) {
         fc_gold_speed = SPECIAL_SPEED;
         frames = BICYCLE_FRAMES;
     } else if (slam) {
-        land = other_y(i, 64);
+        land = other_y(i, smash && !was_pop && !was_lob ? NET_SMASH_LAND : 64);  // from the net: down, short
         frames = BICYCLE_FRAMES;
     } else if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
     move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
+    if (slam && smash && !special && !was_pop && !was_lob) {
+        // Out of the air at the net: driven down onto where it's aimed, steep, but over
+        // the net still. Gravity's 3/4 a frame.
+        int16_t vy = abs16(ball_vy), dy = abs16(land - PX(ball_y));
+        int16_t t = vy ? (int16_t)(((uint16_t)dy << 4) / (uint16_t)vy) : 12;
+        t = clamp16(t, 6, 24);
+        ball_vz = ((3 * (t + 1)) >> 3) - ball_z / t;
+        arc_clear = 0;
+        ball_smash = 1;
+        if ((ball_vy < 0) == (PX(ball_y) > HALFWAY)) {
+            // Not over yet: as much lift as clears the net, n frames on, and no more.
+            int16_t n = (int16_t)(((uint16_t)abs16(HALFWAY - PX(ball_y)) << 4) / (uint16_t)vy) + 1;
+            int16_t need = TO_SUB(NET_H + 2) + ((3 * n * (n + 1)) >> 3) - ball_z;
+            if (ball_vz * n < need) ball_vz = need / n;
+        }
+    }
     uint8_t trail = ball_trail;  // struck() calls new_flight() which clears ball_trail
     struck(i, move, frames);
     ball_trail = trail;
@@ -833,7 +865,7 @@ static void meet(uint8_t i, uint8_t move) {
         else knock_down(i);
         return;
     }
-    if (ball_power && pl_charge[i] < (ball_gold ? CHARGE_MAX : i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
+    if (ball_power && pl_charge[i] < (ball_gold || ball_smash ? CHARGE_MAX : i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
         pop_up(i, move, KICK_FRAMES);
         return;
     }
@@ -966,7 +998,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         // one frame were the busiest frame of a match).
         if (i == SIDE_YOU && you_leap) {
             you_leap = 0;
-            if ((ball_lob || ball_pop) && rel_z < REACH_Z + 8) {
+            if ((ball_lob || ball_pop || at_net(i)) && rel_z < REACH_Z + 8) {
                 meet(i, MOVE_HEADER);
                 return;
             }
@@ -977,9 +1009,11 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
             return;
         }
         // Your slam, charged: a leap at a lob or a pop-up coming down near you (the
-        // ring's a zone, not a spot: playtest, "near impossible to get there").
-        if (i == SIDE_YOU && (ball_lob || ball_pop) && ball_vz < 0 && pl_charge[i] >= SLAM_CHARGE && in_half(i) &&
-            rel_z >= 4 && rel_z < REACH_Z + 8 && ax <= SLAM_LEAP_X && abs16(rel_fwd) <= SLAM_LEAP_FWD) {
+        // ring's a zone, not a spot: playtest, "near impossible to get there"), or at
+        // the net, at a ball going over high enough.
+        if (i == SIDE_YOU && pl_charge[i] >= SLAM_CHARGE && in_half(i) &&
+            (((ball_lob || ball_pop) && ball_vz < 0 && rel_z >= 4) || (at_net(i) && rel_z >= NET_SMASH_Z)) &&
+            rel_z < REACH_Z + 8 && ax <= SLAM_LEAP_X && abs16(rel_fwd) <= SLAM_LEAP_FWD) {
             pl_x[i] += TO_SUB(clamp16(rel_x, -12, 12));
             pl_y[i] -= TO_SUB(clamp16(rel_fwd, -12, 12));
             keep_in(i);
@@ -1301,6 +1335,12 @@ static void ball_update(void) {
                 if (up < LOB_BOUNCE) up = LOB_BOUNCE;
                 ball_vx >>= 2;
                 ball_vy >>= 2;
+            } else if (ball_smash == 1) {
+                // Smashed down at the net: it kicks up high, over the head of anyone near.
+                ball_smash = 2;
+                up = SMASH_BOUNCE;
+                ball_vx -= ball_vx >> 2;
+                ball_vy -= ball_vy >> 2;
             } else {
                 if (first && up < BOUNCE_MIN) up = BOUNCE_MIN;
                 ball_vx -= ball_vx >> 2;  // the court takes a quarter of its pace

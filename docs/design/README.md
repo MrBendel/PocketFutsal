@@ -310,6 +310,18 @@ slammed (the Captain Tsubasa feel).
   ready"): the meter fills unseen; full or armed, a bar shows in the player's
   shadow (yours 16 px, the CPU's 8), blinking gold and dark; the shadow stays grey.
   (Later that day: your bar became pips, below.)
+- **The net smash** (2026-11-24, playtest: "when you rush the net you should be able to
+  bicycle kick to knock the ball out of the air for a smash"): within NET_RUSH (30 px)
+  of the net, a ball of the CPU's at NET_SMASH_Z (14 px) or higher, met with a slam's
+  charge (four presses), is a slam, leapt for as a lob is (SLAM_LEAP_X/FWD). Before,
+  the same ball came back a header at 26-34 or a bicycle kick on fire at 60. The
+  smash goes at your slam's 72, aimed NET_SMASH_LAND (36 px) past the net and driven
+  down onto it (its own vz: fc_arc's net lift left it flat, landing 59 past), with
+  only the lift that clears the net. Off its bounce it kicks up SMASH_BOUNCE (30). At
+  first the CPU returned all 18 smashes of build/scratch/netsmash.mjs (it slid across
+  and met it rising); now, like gold, only a full meter meets it clean, so it pops all
+  18 up, a ball for you to slam. Two presses, or deeper than 30 px: as before. The
+  late bot (which never comes to the net): the same scores either way.
 - **A more modern power meter** (2026-11-24, playtest: "what else we can do to improve
   the power meter so it feels a little more modern"), all of it in play_hud.c:
   - Pips: your bar's four 3 px pips (16 strikes each), shown for a second when a
