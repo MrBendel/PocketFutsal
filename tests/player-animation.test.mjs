@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {assert,startGame,set16,at} from './helpers.mjs';
 import {encodePng} from '../harness/node.mjs';
 import {CHARACTERS,character,fullTiles,sideTiles,sideAtlas} from '../tools/player-art.mjs';
-import {reactionFrames,reactionHeadOffsets,REACTION_TILES} from '../tools/reaction-art.mjs';
+import {reactionFrames,reactionHeads,REACTION_TILES} from '../tools/reaction-art.mjs';
 
 test('each roster character has distinct native win and lose cycles with their original head',()=>{
  assert.equal(REACTION_TILES.length,192,'four characters, two outcomes, three eight-tile frames');
@@ -13,9 +13,14 @@ test('each roster character has distinct native win and lose cycles with their o
    assert.equal(r[outcome].length,3);assert.equal(new Set(r[outcome].map(p=>p.join(''))).size,3);
    for(const pose of r[outcome]){assert.equal(pose.length,24);for(const row of pose){assert.equal(row.length,16);assert.match(row,/^[.123]+$/);}}
   }
-  for(const outcome of ['win','lose'])for(let f=0;f<3;f++){
-   const [dx,dy]=reactionHeadOffsets(id)[outcome][f];
-   for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')assert.equal(r[outcome][f][y+dy][x+dx],head[y][x],'original head pixels move intact, without redrawn features');
+  for(const pose of r.win)for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')assert.equal(pose[y][x],head[y][x],'winning face stays intact');
+  const heads=reactionHeads(id),count=rows=>[1,2,3].map(c=>[...rows.join('')].filter(v=>v===String(c)).length);
+  assert.equal(new Set(heads.map(p=>p.join(''))).size,3,'front and two tilted three-quarter views');
+  for(let f=0;f<3;f++){
+   const original=character(id).basic[f?3:0].slice(0,13);
+   assert.deepEqual(count(heads[f]),count(original),'tilt retains every approved head pixel');
+   for(let y=0;y<16;y++)for(let x=0;x<16;x++)if(heads[f][y][x]!=='.')assert.equal(r.lose[f][y][x],heads[f][y][x]);
+   assert.deepEqual(r.lose[f].slice(16),r.lose[0].slice(16),'crouched body stays still while the head turns');
   }
  }
 });

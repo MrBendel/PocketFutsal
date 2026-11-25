@@ -1,13 +1,26 @@
-// Restrained reactions: translate original pixels, preserving faces and outfits.
+// Reuse approved character pixels, including the existing three-quarter heads.
 import fs from 'node:fs';
 import {CHARACTERS,upright} from './player-art.mjs';
 export const REACTION_FRAMES=3;
 export const WIN_CYCLE=[0,1,2,2,1,0,0,0];
 export const WIN_LIFT=[0,2,5,6,3,0,0,0];
-export const LOSE_CYCLE=[0,0,1,1,2,2,1,2];
-export const reactionHeadOffsets=id=>({win:[[0,0],[0,0],[0,0]],lose:[[0,1],[id==='bandana'?0:-1,2],[1,2]]});
+export const LOSE_CYCLE=[0,1,1,0,2,2,0,0];
+function headPoses(front,turned){
+ return [front,turned,turned.map(r=>[...r].reverse().join(''))].map((head,pose)=>{
+  const out=Array.from({length:16},()=>Array(16).fill('.'));
+  // The middle columns stay rooted above the neck. A one-pixel roll at
+  // either side tilts the yawed head rather than sliding it sideways.
+  for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.'){
+   const roll=pose?(x<6?-1:x>9?1:0)*(pose===1?1:-1):0;
+   out[y+2+roll][x]=head[y][x];
+  }
+  return out.map(r=>r.join(''));
+ });
+}
+export function reactionHeads(id){const f=JSON.parse(fs.readFileSync(new URL(`../artwork/players/roster/${id}/player.json`,import.meta.url))).frames;return headPoses(f[0].rows,f[3].rows);}
 export function reactionFrames(id){
- const src=JSON.parse(fs.readFileSync(new URL(`../artwork/players/roster/${id}/player.json`,import.meta.url))).frames[0].rows;
+ const data=JSON.parse(fs.readFileSync(new URL(`../artwork/players/roster/${id}/player.json`,import.meta.url))).frames;
+ const src=data[0].rows;
  const copy=()=>src.map(r=>[...r]);
  function shoulders(dy){const p=copy();
   for(let y=0;y<19;y++)p[y]=Array(16).fill('.');
@@ -24,11 +37,10 @@ export function reactionFrames(id){
  const airborne=raised.map(r=>[...r]);
  // Extend the existing feet one pixel into a pointed-toe airborne pose.
  airborne[23]=[...src[22]];airborne[22]=[...src[21]];
- const offsets=reactionHeadOffsets(id).lose;
- const loss=offsets.map(([dx,dy])=>{
-  const p=shoulders(dy);
-  for(let y=0;y<13+dy;y++)p[y]=Array(16).fill('.');
-  for(let y=0;y<13;y++)for(let x=0;x<16;x++)if(src[y][x]!=='.')p[y+dy][x+dx]=src[y][x];
+ const loss=headPoses(src,data[3].rows).map(head=>{
+  const p=shoulders(2);
+  for(let y=0;y<15;y++)p[y]=Array(16).fill('.');
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++)if(head[y][x]!=='.')p[y][x]=head[y][x];
   return p;
  });
  const rows=p=>p.map(r=>r.join(''));

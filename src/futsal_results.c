@@ -12,7 +12,7 @@ uint8_t fs_result_tick,fs_result_frame[4],fs_result_outcome[4];
 void futsal_results_update(void) BANKED {
     static const uint8_t win_cycle[8]={0,1,2,2,1,0,0,0};
     static const uint8_t win_lift[8]={0,2,5,6,3,0,0,0};
-    static const uint8_t lose_cycle[8]={0,0,1,1,2,2,1,2};
+    static const uint8_t lose_cycle[8]={0,1,1,0,2,2,0,0};
     for(uint8_t i=0;i<4;i++){
         uint8_t phase=((fs_result_tick+i*5)>>3)&7;
         uint8_t won=fs_result_outcome[i]==0;
