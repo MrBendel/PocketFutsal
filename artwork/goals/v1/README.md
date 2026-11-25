@@ -12,7 +12,8 @@ sheet supplies only its compact player shadow at OBJ tiles 254..255.
 Goals do not use hardware OBJ sprites.
 `tools/goal-background.mjs` composites the goal with its underlying court into
 bank-one BG tiles. Two resident rest poses and two shared motion buffers use
-signed BG tile IDs 0..127 at 0x9000..0x97ff, separate from player OBJ data.
+signed BG tile IDs 0..95, separate from player OBJ data. The stadium uses
+IDs 96..127; compact goal buffers hold only inked cells of each pose.
 Precomputed knockback poses upload six tiles per frame during the stoppage;
 the tilemap switches only once a whole pose is ready. Reset switches straight
 back to the resident normal pose. Scrolling needs no goal uploads. This avoids

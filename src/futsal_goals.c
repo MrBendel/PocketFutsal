@@ -8,7 +8,8 @@
 #include "futsal_goal_far_bg.h"
 #include "futsal_goal_near_bg.h"
 #define GOAL_CELLS 32
-#if 4 * GOAL_CELLS > 128
+#define GOAL_TILES 24
+#if 4 * GOAL_TILES > 96
 #error Goal buffers exceed the safe signed BG range in bank one
 #endif
 #include "gfx.h"
@@ -39,11 +40,11 @@ void futsal_goals_load(void) BANKED{
     memcpy(&pal_base_bg[16],palettes,sizeof(palettes));
     fs_post_hits=fs_bar_hits=fs_goal_uploads=0;
     last_pose[0]=last_pose[1]=255;pending=buffer=0;futsal_goals_reset();
-    // Two normal goals and two motion buffers fill signed BG IDs 0..127,
+    // Two normal goals and two compact motion buffers use BG IDs 0..95,
     // at 0x9000..0x97ff, separate from the player OBJ character data.
     VBK_REG=1;
-    banked_bkg_data(0,GOAL_CELLS,futsal_goal_far_bg_tiles,BANK(futsal_goal_far_bg));
-    banked_bkg_data(GOAL_CELLS,GOAL_CELLS,futsal_goal_near_bg_tiles,BANK(futsal_goal_near_bg));
+    banked_bkg_data(0,GOAL_TILES,futsal_goal_far_bg_tiles,BANK(futsal_goal_far_bg));
+    banked_bkg_data(GOAL_TILES,GOAL_TILES,futsal_goal_near_bg_tiles,BANK(futsal_goal_near_bg));
     VBK_REG=0;
     // All ten goal OBJ slots are free. Nothing in a goal uses the scanline list.
     for(uint8_t i=30;i<40;i++)move_sprite(i,0,0);
@@ -54,11 +55,11 @@ static void prepare_patch(uint8_t end,uint8_t pose,uint8_t base){
     target_tiles=end?futsal_goal_near_bg_tiles:futsal_goal_far_bg_tiles;
     banked_memcpy(patch_map,(end?futsal_goal_near_bg_map:futsal_goal_far_bg_map)+target_offset,GOAL_CELLS,target_bank);
     banked_memcpy(patch_attrs,(end?futsal_goal_near_bg_attr:futsal_goal_far_bg_attr)+target_offset,GOAL_CELLS,target_bank);
-    for(uint8_t i=0;i<GOAL_CELLS;i++)if(patch_attrs[i]&8)patch_map[i]=base+patch_map[i]-end*GOAL_CELLS;
+    for(uint8_t i=0;i<GOAL_CELLS;i++)if((patch_attrs[i]&8)&&(patch_attrs[i]&7)>=4&&(patch_attrs[i]&7)<=6)patch_map[i]=base+patch_map[i]-end*GOAL_TILES;
 }
 static void commit_patch(uint8_t end){
-    VBK_REG=1;set_bkg_tiles(6,end?15:0,8,4,patch_attrs);
-    VBK_REG=0;set_bkg_tiles(6,end?15:0,8,4,patch_map);
+    VBK_REG=1;set_bkg_tiles(6,end?19:4,8,4,patch_attrs);
+    VBK_REG=0;set_bkg_tiles(6,end?19:4,8,4,patch_map);
     fs_goal_uploads++;
 }
 void futsal_goals_draw(uint8_t cam) BANKED{
@@ -71,19 +72,19 @@ void futsal_goals_draw(uint8_t cam) BANKED{
         pose=amount?1+(amount-1)*3+(fs_goal_dx[g]<0?0:fs_goal_dx[g]>0?2:1):0;
         if(!pose){
             if(pending&&target_end==g)pending=0;
-            if(last_pose[g]){prepare_patch(g,0,g*GOAL_CELLS);commit_patch(g);last_pose[g]=0;}
+            if(last_pose[g]){prepare_patch(g,0,g*GOAL_TILES);commit_patch(g);last_pose[g]=0;}
         }else if(last_pose[g]!=pose&&!pending){
             pending=1;target_end=g;target_pose=pose;chunk=0;
-            prepare_patch(g,pose,2*GOAL_CELLS+(buffer^1)*GOAL_CELLS);
+            prepare_patch(g,pose,2*GOAL_TILES+(buffer^1)*GOAL_TILES);
         }
     }
     if(!pending)return;
-    base=2*GOAL_CELLS+(buffer^1)*GOAL_CELLS;
-    count=GOAL_CELLS-chunk;if(count>6)count=6;
+    base=2*GOAL_TILES+(buffer^1)*GOAL_TILES;
+    count=GOAL_TILES-chunk;if(count>6)count=6;
     VBK_REG=1;
-    banked_bkg_data(base+chunk,count,target_tiles+((target_offset+chunk)<<4),target_bank);
+    banked_bkg_data(base+chunk,count,target_tiles+(((uint16_t)target_pose*GOAL_TILES+chunk)<<4),target_bank);
     VBK_REG=0;chunk+=count;
-    if(chunk==GOAL_CELLS){commit_patch(target_end);last_pose[target_end]=target_pose;buffer^=1;pending=0;}
+    if(chunk==GOAL_TILES){commit_patch(target_end);last_pose[target_end]=target_pose;buffer^=1;pending=0;}
 }
 // Called only at an end-line crossing. Sweep back to the actual plane so a
 // fast diagonal cannot tunnel through a post or below the crossbar.

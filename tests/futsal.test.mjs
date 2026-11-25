@@ -2,9 +2,10 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
-import {asciiTile,FUTSAL_PITCH,FUTSAL_GOAL} from '../tools/tile-art.mjs';
+import {asciiTile,FUTSAL_GOAL} from '../tools/tile-art.mjs';
+import {STADIUM_PITCH as FUTSAL_PITCH,STADIUM_OFFSET,pitchTile,SCORE_TILES} from '../tools/stadium-art.mjs';
 import {GOAL_H} from '../tools/goal-art.mjs';
-import {GOAL_BG,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
+import {GOAL_BG,GOAL_TILES,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
 const PLAY=3;
 function startGame(pace=2,seed=4242) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
@@ -334,7 +335,7 @@ test('all four side cycles are resident in VRAM without replacing front/back or 
  const expected=Buffer.from(sideAtlas().flatMap(t=>asciiTile(t))),vram=e.snapshot().vram;
  assert.deepEqual(Buffer.from(vram.subarray(214*16,242*16)),expected);
  for(let n=0;n<FUTSAL_PITCH.tiles.length;n++){
-  const tile=80+n,offset=0x1000+(tile<128?tile:tile-256)*16;
+  const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
   assert.deepEqual(Buffer.from(vram.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])),'court tile survives sprite uploads');
  }
 });
@@ -816,9 +817,10 @@ function checkGoalPatch(e,end,pose=0){
   const cell=(PATCH_Y[end]+Math.floor(local/PATCH_W))*32+6+local%PATCH_W;
   const tile=v[0x1800+cell],attr=v[0x3800+cell];
   assert.equal(attr,GOAL_BG.attrs[base+local]);
-  if(attr&8){
-   assert.ok(tile<128,'goal BG tile is outside OBJ character memory');
-   assert.deepEqual(Buffer.from(v.subarray(0x3000+tile*16,0x3010+tile*16)),Buffer.from(asciiTile(GOAL_BG.tiles[base+local])),`goal ${end}, pose ${pose}, cell ${local}`);
+  if((attr&8)&&(attr&7)>=4&&(attr&7)<=6){
+   assert.ok(tile<96,'goal BG tile is outside stadium and OBJ character memory');
+   const ink=(end*16+pose)*GOAL_TILES+GOAL_BG.map[base+local]-end*GOAL_TILES;
+   assert.deepEqual(Buffer.from(v.subarray(0x3000+tile*16,0x3010+tile*16)),Buffer.from(asciiTile(GOAL_BG.tiles[ink])),`goal ${end}, pose ${pose}, cell ${local}`);
   }else assert.equal(tile,GOAL_BG.map[base+local]);
  }
 }
@@ -827,6 +829,25 @@ function backgroundPixel(e,x,y){
  const offset=(attr&8?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16+(y&7)*2;
  return ((v[offset]>>(7-(x&7)))&1)|(((v[offset+1]>>(7-(x&7)))&1)<<1);
 }
+
+test('stadium background scores update both teams without changing the housing or player tiles',()=>{
+ for(const end of [0,1]){
+  const e=goalCrossing(end,{x:80,z:4});e.idle(8);
+  const v=e.snapshot().vram;
+  for(let team=0;team<2;team++){
+   assert.equal(at(e,'fs_board_score',team),team===end?1:0);
+   const pose=(team===end?1:0)*8+team*4;
+   for(let tile=0;tile<4;tile++)assert.deepEqual(Buffer.from(v.subarray(0x1500+team*64+tile*16,0x1510+team*64+tile*16)),Buffer.from(asciiTile(SCORE_TILES[pose+tile])));
+  }
+  // Fence and housing data stay resident through scoring and scrolling.
+  for(let n=8;n<FUTSAL_PITCH.tiles.length;n++){
+   const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
+   assert.deepEqual(Buffer.from(v.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])));
+  }
+  assert.equal(e.read8(e.symbols.addr('fs_projection_y')),64,'court has stadium headroom');
+  if(end===0)e.shot('futsal-stadium-scoreboard');
+ }
+});
 
 test('both movable goals are centred on the court in BG tiles and use no OBJ slots',()=>{
  const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.slice(4).flatMap(t=>asciiTile(t)));
@@ -849,7 +870,7 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  const e=startGame();put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',224*16);set16(e,'fs_ball_z',0);
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,112);
  for(const n of ['fs_action','fs_tackling','fs_aerial','fs_moving','fs_side'])e.writeBytes(e.symbols.addr(n),[0,0,0,0]);
- e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=144-GOAL_H-e.v('fs_cam_y');
+ e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=STADIUM_OFFSET+144-GOAL_H-e.v('fs_cam_y');
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,216);
  e.idle(3);const after=e.frameBuffer(),o=e.snapshot().oam;
  let peak=0;

@@ -22,6 +22,7 @@
 #include "futsal_zone.h"
 #include "futsal_fx.h"
 #include "futsal_goals.h"
+#include "futsal_stadium.h"
 #if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
 #error Futsal court overlaps side sprite atlas
 #endif
@@ -191,6 +192,7 @@ static void place(uint8_t n, int16_t x, int16_t y) {
     else move_sprite(n,(uint8_t)x,(uint8_t)y);
 }
 static void hud(void) {
+    futsal_stadium_score();
     char line[] = "BLUE 0 - 0 RED  WATCH";
     line[5] += score[0]; line[9] += score[1];
     if (!fs_spectator) { line[15]='P'; line[16]='L'; line[17]='A'; line[18]='Y'; line[19]=' '; }
@@ -605,7 +607,7 @@ static void draw(void) {
     static int16_t marker_y;
     by=(uint16_t)fs_ball_y>>4;bx=(uint16_t)fs_ball_x>>4;
     uint8_t row=fs_projection_y[by];
-    fs_cam_y=row<=68?0:row>=100?32:row-68;scroll_y=fs_cam_y;
+    fs_cam_y=row<=68?0:row>=132?64:row-68;scroll_y=fs_cam_y;
     ball_sx=sx(bx,by)+4;ball_wy=fs_projection_y[by]+12;
     // Assign nearer players lower OAM indexes so overlapping bodies sort by depth.
     static uint8_t order[4]={0,1,2,3};
@@ -693,6 +695,7 @@ void futsal_enter(void) BANKED {
     gfx_ball_init(116);
     futsal_fx_load();
     futsal_goals_load();
+    futsal_stadium_load();
     banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
     set_sprite_tile(26,124);set_sprite_tile(27,126);
     for(uint8_t k=0;k<3;k++){set_sprite_tile(18+k,8+(k<<1));set_sprite_prop(18+k,4);move_sprite(18+k,0,0);}
@@ -713,7 +716,7 @@ void futsal_enter(void) BANKED {
     banked_memcpy(buf,futsal_pitch_map,sizeof(buf),BANK(futsal_pitch)); set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf);
     banked_memcpy(buf,futsal_pitch_attr,sizeof(buf),BANK(futsal_pitch)); VBK_REG=1; set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf); VBK_REG=0;
     for(int16_t y=0;y<=224;y++) {
-        fs_projection_y[y]=32+((int32_t)92*y*448+(int32_t)72*y*y)/114688L;
+        fs_projection_y[y]=64+((int32_t)92*y*448+(int32_t)72*y*y)/114688L;
         fs_projection_s[y]=111+17*y/224;
     }
     initrand(game_seed); score[0]=score[1]=sets[0]=sets[1]=0;

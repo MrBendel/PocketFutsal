@@ -14,6 +14,8 @@ add depth behind it. Width, centre and physics remain unchanged.
 
 `tools/goal-art.mjs` reads the native pixels and `tools/goal-background.mjs`
 composites them into the court for both goals. Normal and motion buffers use
-BG bank-one tile IDs 0..127, outside player OBJ memory. Far and near pose tables
+BG bank-one tile IDs 0..95, outside player OBJ memory. Only the at-most-24 inked
+tiles of each 32-cell patch occupy goal VRAM; IDs 96..127 are reserved for the
+stadium background. Far and near pose tables
 occupy separate ROM assets. Motion uploads six tiles per frame and swaps only
 a complete goal pose, preserving the scanline-clipping fix.

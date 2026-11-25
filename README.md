@@ -38,6 +38,13 @@ the ball, players, shadows and effects cannot push their net/frame out of the
 Game Boy's ten-sprites-per-scanline list. Their collision and displacement
 remain separate from the renderer.
 
+A stadium stand and centered scoreboard sit behind the far goal. The board is
+part of the scrolling background and uses the original Pocket Sports numerals
+in muted gold. Each score changes through a queued four-tile update; the main
+score/control strip stays separate. The extra 32 pixels of stadium headroom
+leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
+`artwork/scoreboard/v3`.
+
 Shooting precision depends on distance: close finishes have very little scatter,
 medium shots spread wider, and efforts from more than 144 court pixels away are
 wild clearances aimed outside the goal mouth. Missed deliveries shed speed on
