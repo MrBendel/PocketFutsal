@@ -10,14 +10,17 @@
 uint8_t fs_result_tick,fs_result_frame[4],fs_result_outcome[4];
 
 void futsal_results_update(void) BANKED {
-    static const uint8_t cycle[4]={0,1,2,1};
+    static const uint8_t win_cycle[8]={0,1,2,2,1,0,0,0};
+    static const uint8_t win_lift[8]={0,2,5,6,3,0,0,0};
+    static const uint8_t lose_cycle[8]={0,1,1,0,2,2,0,0};
     for(uint8_t i=0;i<4;i++){
-        uint8_t phase=((fs_result_tick+i*5)>>4)&3;
-        uint8_t f=cycle[phase],x=(i&1)?104:64;
+        uint8_t phase=((fs_result_tick+i*5)>>3)&7;
+        uint8_t won=fs_result_outcome[i]==0;
+        uint8_t f=won?win_cycle[phase]:lose_cycle[phase],x=(i&1)?104:64;
         uint8_t ground=i<2?86:120;
         fs_result_frame[i]=f;
-        gfx_actor(i*4,i*24+f*8,0,x,ground,S_BANK|i,0);
-        // Feet and shadow stay planted through the small shoulder/head changes.
+        gfx_actor(i*4,i*24+f*8,0,x,ground-(won?win_lift[phase]:0),S_BANK|i,0);
+        // The shadow stays on the floor throughout the winner's jump.
         move_sprite(16+i,x+4,ground+12);
     }
     fs_result_tick++;

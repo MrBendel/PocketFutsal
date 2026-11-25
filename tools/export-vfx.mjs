@@ -23,7 +23,7 @@ const EFFECTS = [
   { id: 'FIRE', file: 'Hit/Hit_Small_A_GBS', w: 16, h: 16, hold: 3, pal: 'SPR_PAL_POWER' },    // a strike on fire
   { id: 'DUST', file: 'Dust/Dust_Small_A_GBS', w: 24, h: 16, hold: 5, pal: 'SPR_PAL_BALL' },   // a slide, a knockdown
   { id: 'SPARK', file: 'Sparks/Sparks_Small_A_GBS', w: 16, h: 16, hold: 3, pal: 'SPR_PAL_BALL' }, // the net
-  { id: 'SPRAY', file: 'Sparks/Sparks_Medium_A_GBS', w: 48, h: 32, crop: 40, hold: 4, pal: 'SPR_PAL_POWER' }, // a slam lands
+  { id: 'SPRAY', file: 'Sparks/Sparks_Small_B_GBS', w: 16, h: 16, hold: 4, pal: 'SPR_PAL_POWER' }, // a slam lands
 ];
 
 const color = (r, g, b) => (r === 101 && g === 255 && b === 0) ? 0 : r > 200 ? 1 : r > 100 ? 2 : 3;

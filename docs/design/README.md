@@ -250,9 +250,10 @@ slammed (the Captain Tsubasa feel).
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
   20-27, a row of sprites placed a frame at most (src/vfx.c). Where a slam lands, sparks
-  fly up off the court (2026-11-24, playtest: "the second row when it hits the ground",
-  Sparks Medium A): 40 x 32, wider than 8 sprites, so a frame's sprites go only to its
-  drawn columns (7 at most); its tiles go on past 159, after the HUD's.
+  fly off the court (2026-11-24, Sparks Small B, the playtest's pick: "there's another
+  that has distinct lines"; Sparks Medium A was tried first). A frame's sprites go only
+  to its drawn columns, and tiles past 127 go on from 160, after the HUD's, so a wider
+  effect can come later.
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
@@ -358,6 +359,14 @@ slammed (the Captain Tsubasa feel).
   the outer ring no longer lit, the outer ring's two ends go: four sprites there. Rally
   frames past ten sprites a line: 101 with all six, 33 with that (0.24%), from 358 with
   the dots; what's left is both players on the same lines with an effect playing.
+  **Smaller, and chasing in** (2026-11-25, playtest: "a smaller circle with 3 concentric
+  rings and we can cycle the palette to make it look like it's moving inward"): 32x16,
+  four sprites (build/scratch/zoneart2.mjs), so no ends to drop. The lit ring (yellow)
+  steps in, outer, middle, the spot, and round again, the one it left orange behind it
+  and the third dim: a step every 8 frames while the ball's more than 48 px deep from
+  the spot, 6 past 20, then 4. Then smaller again, the rings 1 px apart (2026-11-25,
+  playtest: "a smaller ring where the rings are all connected, 1px apart"): 16x11, two
+  sprites (build/scratch/zoneart3.mjs).
 - **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
   seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
