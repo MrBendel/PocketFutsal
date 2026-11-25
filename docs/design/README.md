@@ -309,6 +309,24 @@ slammed (the Captain Tsubasa feel).
   the power meter to be persistent, just something to indicate when your slam is
   ready"): the meter fills unseen; full or armed, a bar shows in the player's
   shadow (yours 16 px, the CPU's 8), blinking gold and dark; the shadow stays grey.
+  (Later that day: your bar became pips, below.)
+- **A more modern power meter** (2026-11-24, playtest: "what else we can do to improve
+  the power meter so it feels a little more modern"), all of it in play_hud.c:
+  - Pips: your bar's four 3 px pips (16 strikes each), shown for a second when a
+    clean strike adds to it, gold up to where it's filled (12 px at full), dark past;
+    each pip filled plays a blip a step higher than the last (SFX_PIP).
+  - Ready: the pips stay, your outline (colour 3 of your palette: it's your hair too)
+    pulses dark to gold every 64 frames; a four-note run up (SFX_READY); a sparkle on
+    you, once the strike's own burst is done (one effect plays at a time); and the
+    first time in a match, "A+B" over your head for two seconds (sprites 35-37,
+    tiles 154-159, drawn from a 5x6 font with an outline at the match's start).
+  - Armed: the pips blink and the outline pulses fast and brighter; the power slam
+    struck, it flashes white for 6 frames and snaps back to ink.
+  - The CPU's stays a blinking bar, ready or armed.
+  - A pulsing colour costs the vblank 8 bytes, not 128: gfx_obj_color sets one
+    colour and marks its sprite palette, and the vblank uploads only marked ones
+    (pal_write_obj in vram_queue.s). The slam zone uses it too. Worst Futnet frame:
+    60,500 cycles (of 65,664), from 57,940.
 - **The slam zone, by palette** (2026-11-24, the user's idea: "a single ring sprite and
   cycle the palette to make it look like it's moving"): three rings, one inside the
   other, 48x16 (six sprites in one row, the right three the left flipped; tiles from

@@ -224,3 +224,36 @@ _pal_write::
     dec b
     jr nz, 2$
     ret
+
+; void pal_write_obj(uint8_t mask): only the sprite palettes in mask (bit p: palette
+; p), 8 bytes each. Vblank only.
+_pal_write_obj::
+    ld e, a             ; the mask
+    ld hl, #_pal_obj
+    ld c, #0x80         ; palette 0's index, auto-incrementing
+3$:
+    ld a, e
+    or a
+    ret z
+    srl e
+    jr nc, 5$
+    ld a, c
+    ld (OCPS), a
+    ld b, #8
+4$:
+    ld a, (hl+)
+    ld (OCPD), a
+    dec b
+    jr nz, 4$
+    jr 6$
+5$:
+    ld a, #8            ; skip this palette's 8 bytes
+    add a, l
+    ld l, a
+    jr nc, 6$
+    inc h
+6$:
+    ld a, #8
+    add a, c
+    ld c, a
+    jr 3$

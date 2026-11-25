@@ -106,6 +106,9 @@ extern uint16_t pal_base_bg[PAL_COUNT * 4], pal_base_obj[PAL_COUNT * 4];
 // Put the base palettes on screen at fade step `step` (0 = as they are,
 // FADE_STEPS = white); uploaded at the next vblank.
 void gfx_set_fade(uint8_t step) BANKED;
+// Colour k of sprite palette p, as it is and on screen: only that palette's uploaded,
+// at the next vblank (a colour that pulses costs 8 bytes of the vblank, not 128).
+void gfx_obj_color(uint8_t p, uint8_t k, uint16_t c);
 
 // Sprites stop above a HUD: the window can't cover sprites, so from screen
 // line `line` down they're switched off (an LCD interrupt at the line before,

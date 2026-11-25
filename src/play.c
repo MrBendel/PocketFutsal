@@ -220,6 +220,7 @@ uint8_t predict_frame;  // the frame a trace last ran on
 uint8_t cpu_aim;
 uint8_t pl_power[2];    // the power meter (game.h)
 uint8_t pl_special[2];  // the power slam armed
+int16_t you_sx, you_sy;  // where you're drawn this frame (play_hud.c: the meter's sparkle and hint)
 uint8_t ball_special;   // the ball's a power slam
 uint8_t sp_try[2];      // pressed since the power slam was struck at you (one try)
 uint8_t sp_age[2];      // frames since that press
@@ -411,16 +412,12 @@ static uint8_t coming(uint8_t i);  // (the rules, below)
 // The lit ring steps in as the ball comes (by its depth from the spot: past 48 px the
 // outer, past 20 the middle, then the spot), flashing; the others dim. Its palette's
 // the curve trail's, borrowed while it shows and given back after.
-extern uint16_t pal_obj[];
-extern volatile uint8_t pal_dirty;
 uint8_t zone_on;        // showing (the palette borrowed)
 uint8_t zone_lit;       // the lit ring: 0 outer, 1 middle, 2 the spot
 static uint8_t zone_key;  // the palette as set: zone_lit and the flash
 static uint16_t zone_saved[4];
 static void zone_colors(const uint16_t *c) {
-    uint16_t *b = &pal_base_obj[ZONE_PAL << 2], *o = &pal_obj[ZONE_PAL << 2];
-    for (uint8_t k = 1; k < 4; k++) b[k] = o[k] = c[k];
-    pal_dirty = 1;
+    for (uint8_t k = 1; k < 4; k++) gfx_obj_color(ZONE_PAL, k, c[k]);
 }
 static void zone_off(void) {
     for (uint8_t k = 0; k < 6; k++) move_sprite(OAM_ZONE + k, 0, 0);
@@ -507,6 +504,7 @@ static void draw(void) {
         int16_t sx = proj_x(PX(pl_x[i]), py);
         int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - draw_lift;
         draw_player(i, tile, draw_lie, sx, sy, pal, flip);
+        if (i == SIDE_YOU) you_sx = sx, you_sy = sy;
         // Ground position never inherits the body's jump lift.
         gfx_player_shadow(OAM_PLAYER_SHADOW + (i << 1), sx,
             (int16_t)proj_y[PROJ_I(py)] - cam_y);
@@ -757,8 +755,7 @@ static void strike(uint8_t i, uint8_t move) {
     } else if (phase == PHASE_RALLY && !scuff && pl_power[i] < POWER_MAX) {
         pl_power[i] += POWER_GAIN;  // a clean strike in a rally fills the power meter
         if (pl_power[i] >= POWER_MAX) {
-            pl_power[i] = POWER_MAX;
-            if (i == SIDE_YOU) sfx_play(SFX_CHARGE);
+            pl_power[i] = POWER_MAX;  // (yours: the ready moment's sound, play_hud.c)
         }
     }
     if (slam) burst(VFX_SLAM);  // an impact star: big for a slam, small on fire

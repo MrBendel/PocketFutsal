@@ -290,11 +290,21 @@ test('no HUD in a rally: the score box (faces, points) before each serve, a bann
   assert.equal(gauge(rally), 0, 'an empty power meter: no gauge');
   rally.write8(rally.symbols.addr('pl_power') + YOU, 40);
   rally.idle(2);
-  assert.equal(gauge(rally), 0, 'filling: still nothing');
+  assert.equal(gauge(rally), 0xEE, 'a strike added to it: four pips show a moment');
+  assert.equal(rally.read8(0x8000 + 141 * 16 + 3), 0, 'the first two filled (40 of 64: gold to 7 of 12 px)');
+  rally.idle(70);
+  assert.equal(gauge(rally), 0, 'then gone till the next');
+  const hint = () => rally.read8(0xFE00 + 35 * 4);
+  assert.equal(hint(), 0, 'no hint yet');
   rally.write8(rally.symbols.addr('pl_power') + YOU, POWER_MAX);
   rally.idle(2);
-  assert.equal(gauge(rally), 0xFF, 'full: the slam ready, a bar in your shadow');
-  assert.equal(rally.read8(0xFE00 + 37 * 4), 0, 'no sprites of its own (37-39 free)');
+  assert.equal(gauge(rally), 0xEE, 'full: the slam ready, the pips in your shadow while it lasts');
+  assert.equal(rally.read8(rally.symbols.addr('sfx_last')), 15, 'the ready sound (SFX_READY)');
+  assert.ok(hint() > 0, 'the first time in a match: A+B over you');
+  assert.ok(rally.read8(rally.symbols.addr('glow_level')) <= 3, 'your outline pulsing gold');
+  rally.idle(130);
+  assert.equal(hint(), 0, 'the hint gone after a moment');
+  assert.equal(gauge(rally), 0xEE, 'the pips still there: ready');
   // A point: the call along the bottom, the board's digits swapped, then the box.
   for (const [n, v] of [['last_touch', YOU], ['holder', CPU], ['ball_landings', 1], ['ball_netted', 0], ['ball_serve', 0]]) rally.write8(rally.symbols.addr(n), v);
   ballAt(rally, 100, 60, 2);
@@ -964,6 +974,8 @@ test('the power meter: clean strikes in a rally fill it; full, A+B arms the powe
   arm.hold('A+B', 1);
   assert.equal(at(arm, 'pl_special', YOU), 1, 'armed');
   assert.equal(at(arm, 'pl_power', YOU), 0, 'the meter spent');
+  arm.idle(1);
+  assert.ok(arm.v('glow_level') >= 1, 'armed: your outline glowing (a fast pulse, brighter)');
   arm.until((e) => { e.idle(1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
   arm.idle(1);
   assert.equal(arm.v('ball_special'), 1, 'the power slam');
@@ -971,6 +983,10 @@ test('the power meter: clean strikes in a rally fill it; full, A+B arms the powe
   assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 88, 'faster than a gold slam');
   assert.ok(arm.v('ball_vy', 'i16') < 0, 'up the court');
   assert.equal(at(arm, 'pl_special', YOU), 0, 'used');
+  arm.idle(2);
+  assert.equal(arm.v('glow_level'), 5, 'struck: the glow snaps off in a white flash');
+  arm.idle(8);
+  assert.equal(arm.v('glow_level'), 0, 'then the outline as it was');
   const notFull = quietRally();
   notFull.write8(notFull.symbols.addr('pl_power') + YOU, POWER_MAX - 1);
   incoming(notFull, 82, 130, 40, 0);
@@ -1000,7 +1016,7 @@ test("the CPU's power slam: only a press timed to within 5 frames of it reaching
   assert.equal(comeAt([48, 20]), 'down', 'one try: a second press does not count');
 });
 
-test('screen: the power slam ready, a bar flashing under you', () => {
+test('screen: the power slam ready: the pips, your outline gold, A+B over you', () => {
   const emu = quietRally();
   emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX);
   incoming(emu, 80, 40, 30, 60);
