@@ -52,20 +52,20 @@
 static const uint8_t ring_tiles[32] = {
     0x0f, 0x00, 0x3f, 0x0f, 0x60, 0x20, 0xc0, 0x40, 0xc0, 0x40, 0x60, 0x20, 0x3f, 0x0f, 0x0f, 0x00,
 };
-// The slam zone: three rings, one inside the other, 32x16 (build/scratch/zoneart2.mjs),
-// 1 the outer, 2 the middle, 3 the inner (the spot). Its left two columns; the
-// right two are them flipped. Four sprites, one row of them. It moves by palette, not
+// The slam zone: three rings, one inside the other, 1 px apart, 16x11
+// (build/scratch/zoneart3.mjs), 1 the outer, 2 the middle, 3 the inner (the spot).
+// Its left column; the right is it flipped. Two sprites. It moves by palette, not
 // by moving: the lit ring steps in, outer to the spot, over and over (2026-11-25,
 // playtest: "a smaller circle with 3 concentric rings ... cycle the palette to make
-// it look like it's moving inward"), quicker as the ball comes down.
-#define S_ZONE 148   // 4 tiles (sprite tiles past the gauges: play_hud.h)
-#define OAM_ZONE 29  // 4
+// it look like it's moving inward", then "a smaller ring where the rings are all
+// connected, 1px apart"), quicker as the ball comes down.
+#define S_ZONE 148   // 2 tiles (sprite tiles past the gauges: play_hud.h)
+#define OAM_ZONE 29  // 2
+#define ZONE_N 2
 #define ZONE_PAL SPR_PAL_TRAIL_CURVE  // borrowed: a lob or a pop-up leaves no trail
-static const uint8_t zone_tiles[64] = {
-    0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x18, 0x00, 0x20, 0x00, 0x40, 0x03, 0x40, 0x02, 0x80, 0x04,
-    0x40, 0x02, 0x40, 0x03, 0x20, 0x00, 0x18, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0xe0, 0x07, 0x07, 0x18, 0x18, 0x20, 0x20,
-    0x18, 0x18, 0x07, 0x07, 0x00, 0xe0, 0x00, 0x1f, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00,
+static const uint8_t zone_tiles[32] = {
+    0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x1c, 0x00, 0x20, 0x03, 0x40, 0x0c, 0x43, 0x13, 0x8c, 0x2c,
+    0x43, 0x13, 0x40, 0x0c, 0x20, 0x03, 0x1c, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 #define ZONE_DIM RGB8(32, 96, 112)   // the rings not lit: a shade darker than the court
 #define ZONE_LIT RGB8(255, 232, 64)  // the lit one
@@ -93,7 +93,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_AIM 10    // where your queued strike will land
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing): a ring,
 #define OAM_SLAM_R 28 // its right half
-// OAM_PLAYER_SHADOW 15, two a player (with the power gauge in them): play_hud.h. 33-34 and 37-39 free.
+// OAM_PLAYER_SHADOW 15, two a player (with the power gauge in them): play_hud.h. 31-34 and 37-39 free.
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
@@ -422,7 +422,7 @@ static void zone_colors(const uint16_t *c) {
     for (uint8_t k = 1; k < 4; k++) gfx_obj_color(ZONE_PAL, k, c[k]);
 }
 static void zone_off(void) {
-    for (uint8_t k = 0; k < 4; k++) move_sprite(OAM_ZONE + k, 0, 0);
+    for (uint8_t k = 0; k < ZONE_N; k++) move_sprite(OAM_ZONE + k, 0, 0);
     zone_colors(zone_saved);
     zone_on = 0;
 }
@@ -450,8 +450,8 @@ static void zone_draw(int16_t rx, int16_t ry) {
         c[zone_lit + 1] = ZONE_LIT;
         zone_colors(c);
     }
-    // Four sprites on its lines: with you, your shadow, the ball and its shadow, eight.
-    for (uint8_t k = 0; k < 4; k++) place(OAM_ZONE + k, rx - 8 + (k << 3), ry - 4);
+    place(OAM_ZONE, rx, ry - 4);
+    place(OAM_ZONE + 1, rx + 8, ry - 4);
 }
 
 // Lying and lifted, for the player being drawn: globals, not locals. As locals with
@@ -1385,10 +1385,10 @@ void play_enter(void) BANKED {
     banked_sprite_data(0, SPRITES_TILE_COUNT, sprites_tiles, BANK(sprites));
     vfx_load();
     set_sprite_data(S_RING, 2, ring_tiles);
-    set_sprite_data(S_ZONE, 4, zone_tiles);
-    for (uint8_t k = 0; k < 4; k++) {  // set once: a frame only moves them
-        set_sprite_tile(OAM_ZONE + k, S_ZONE + ((k < 2 ? k : 3 - k) << 1));
-        set_sprite_prop(OAM_ZONE + k, k < 2 ? ZONE_PAL : ZONE_PAL | S_FLIPX);
+    set_sprite_data(S_ZONE, 2, zone_tiles);
+    for (uint8_t k = 0; k < ZONE_N; k++) {  // set once: a frame only moves them
+        set_sprite_tile(OAM_ZONE + k, S_ZONE);
+        set_sprite_prop(OAM_ZONE + k, k ? ZONE_PAL | S_FLIPX : ZONE_PAL);
         move_sprite(OAM_ZONE + k, 0, 0);
     }
     zone_on = 0;

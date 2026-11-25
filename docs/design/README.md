@@ -364,7 +364,9 @@ slammed (the Captain Tsubasa feel).
   four sprites (build/scratch/zoneart2.mjs), so no ends to drop. The lit ring (yellow)
   steps in, outer, middle, the spot, and round again, the one it left orange behind it
   and the third dim: a step every 8 frames while the ball's more than 48 px deep from
-  the spot, 6 past 20, then 4.
+  the spot, 6 past 20, then 4. Then smaller again, the rings 1 px apart (2026-11-25,
+  playtest: "a smaller ring where the rings are all connected, 1px apart"): 16x11, two
+  sprites (build/scratch/zoneart3.mjs).
 - **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
   seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the

@@ -384,8 +384,8 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
 
 test('a lob coming down to you: a flashing marker where to meet it; there and queued, you slam it out of the air', () => {
   const emu = quietRally();
-  // The marker: the slam zone's middle sprite (29-34) for a slam, the small ring (19) for a drop shot.
-  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 31) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  // The marker: the slam zone's left sprite (29-30) for a slam, the small ring (19) for a drop shot.
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 29) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
@@ -410,7 +410,7 @@ test('a lob coming down to you: a flashing marker where to meet it; there and qu
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
-test('the slam zone: three rings, 32 px across, the lit one stepping in to the spot over and over, quicker as the lob comes; its palette borrowed and given back', () => {
+test('the slam zone: three rings 1 px apart, 16 px across, the lit one stepping in to the spot over and over, quicker as the lob comes; its palette borrowed and given back', () => {
   const emu = quietRally();
   const oam = (n) => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n + 1), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n)];
   const pal = () => [1, 2, 3].map((k) => at(emu, 'pal_base_obj', 4 * 4 + k, 'u16'));  // the curve trail's, palette 4
@@ -421,8 +421,9 @@ test('the slam zone: three rings, 32 px across, the lit one stepping in to the s
   emu.idle(6);
   assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
   assert.equal(emu.v('zone_on'), 1, 'the zone shows');
-  assert.equal(oam(32)[0] - oam(29)[0], 24, 'four sprites in a row: 32 px across');
-  assert.equal(oam(29)[1], oam(32)[1], 'one row: four on its lines');
+  assert.equal(oam(30)[0] - oam(29)[0], 8, 'two sprites: 16 px across');
+  assert.equal(oam(29)[1], oam(30)[1], 'one row');
+  assert.equal(oam(31)[1], 0, 'no more');
   assert.notDeepEqual(pal(), before, 'the palette borrowed');
   matchGolden(emu, 'slam-zone');
   const steps = (n) => {  // frames between steps in, over n frames
