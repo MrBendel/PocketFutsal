@@ -40,7 +40,7 @@ remain separate from the renderer.
 
 A stadium stand and centered scoreboard sit behind the far goal. The board is
 part of the scrolling background and uses the original Pocket Sports numerals
-in muted gold. Each score changes through a queued four-tile update; the main
+in muted gold. Each score changes through a queued six-tile update; the main
 score/control strip stays separate. The extra 32 pixels of stadium headroom
 leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
 `artwork/scoreboard/v3`.

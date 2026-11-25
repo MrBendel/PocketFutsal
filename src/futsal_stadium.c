@@ -20,11 +20,11 @@ void futsal_stadium_load(void) BANKED {
     fs_board_score[0]=fs_board_score[1]=0;
 }
 void futsal_stadium_score(void) BANKED {
-    // The first eight court tiles are distinct, bank-zero score cells. Only
+    // The first twelve court tiles are distinct, bank-zero score cells. Only
     // queue changed fields; normal rally frames perform no scoreboard work.
     for(uint8_t i=0;i<2;i++)if(score[i]!=fs_board_score[i]){
         uint8_t n=score[i]>5?5:score[i];
-        gfx_vram_copy((uint8_t *)(0x9500+(uint16_t)i*64),futsal_score_tiles+((uint16_t)n*8+i*4)*16,64,BANK(futsal_score));
+        gfx_vram_copy((uint8_t *)(0x9500+(uint16_t)i*96),futsal_score_tiles+((uint16_t)n*12+i*6)*16,96,BANK(futsal_score));
         fs_board_score[i]=score[i];
     }
 }

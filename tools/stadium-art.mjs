@@ -14,12 +14,14 @@ const font=JSON.parse(fs.readFileSync(new URL('../artwork/fonts/sports-v1/sports
 const source=JSON.parse(fs.readFileSync(new URL('../artwork/scoreboard/v3/stadium-scoreboard.json',import.meta.url)));
 const board=source.pixels.map(r=>[...r].map(Number));
 function rect(px,x,y,w,h,v){for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)px[j][i]=v;}
-// Tile-align the fields so score changes upload exactly four tiles per team.
+// Keep the housing fixed; center the visible number faces inside each recess.
 for(const x of [5,44]){rect(board,x,12,31,18,2);rect(board,x+1,13,29,16,1);}
 function withScore(blue,red){const px=board.map(r=>[...r]);
- for(const [n,x0]of [[blue,16],[red,48]]){let pen=x0;
-  for(const ch of String(n).padStart(2,'0')){const g=font.glyphs[ch],dx=(8-g[0].length)>>1;
-   for(let y=0;y<16;y++)for(let x=0;x<g[y].length;x++)if(g[y][x]==='1'||g[y][x]==='2')px[16+y][pen+dx+x]=3;
+ for(const [n,x0]of [[blue,12],[red,52]]){let pen=x0;
+  // Right-align a narrow 1 in its fixed cell so the visible two-digit block
+  // keeps the same outer bounds as 00, rather than leaning toward the zero.
+  for(const ch of String(n).padStart(2,'0')){const g=font.glyphs[ch],dx=8-g[0].length;
+   for(let y=0;y<16;y++)for(let x=0;x<g[y].length;x++)if(g[y][x]==='1'||g[y][x]==='2')px[14+y][pen+dx+x]=3;
    pen+=8;
   }
  }return px;
@@ -49,17 +51,18 @@ function makePitch(){
   const pal=attrs[ty*20+tx],rows=Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>nearest(rgb[ty*8+y][tx*8+x],COURT_PALETTES[pal])).join(''));
   const key=rows.join('');if(!keys.has(key)){keys.set(key,tiles.length);tiles.push(rows);}map.push(keys.get(key));
  }
- // Always give the eight changing tiles distinct storage, even at 0–0.
+ // Units change in this first-to-five mode; tens stay zero. Give each units
+ // region six distinct tiles, including the adjacent static art in those cells.
  const scoreBase=tiles.length;
- for(const x0 of [7,11])for(let y=2;y<4;y++)for(let x=x0;x<x0+2;x++){tiles.push(tiles[map[y*20+x]]);map[y*20+x]=tiles.length-1;}
+ for(const x0 of [7,12])for(let y=1;y<4;y++)for(let x=x0;x<x0+2;x++){tiles.push(tiles[map[y*20+x]]);map[y*20+x]=tiles.length-1;}
  if(tiles.length>166)throw new Error(`Stadium needs ${tiles.length} tiles; only 166 safe background tiles`);
- return {tiles:[...tiles.slice(scoreBase),...tiles.slice(0,scoreBase)],map:map.map(n=>n>=scoreBase?n-scoreBase:n+8),attrs,w:20,h:25,scoreBase:0};
+ return {tiles:[...tiles.slice(scoreBase),...tiles.slice(0,scoreBase)],map:map.map(n=>n>=scoreBase?n-scoreBase:n+12),attrs,w:20,h:25,scoreBase:0};
 }
 export const STADIUM_PITCH=makePitch();
 export const pitchTile=n=>n<134?80+n:96+n-134;
 export const STADIUM_MAP={...STADIUM_PITCH,map:STADIUM_PITCH.map.map(pitchTile),attrs:STADIUM_PITCH.attrs.map((p,i)=>p|(STADIUM_PITCH.map[i]>=134?8:0))};
 export const SCORE_TILES=Array.from({length:6},(_,n)=>{
  const px=withScore(n,n),tiles=[];
- for(const x0 of [16,48])for(let y=16;y<32;y+=8)for(let x=x0;x<x0+16;x+=8)tiles.push(px.slice(y,y+8).map(r=>r.slice(x,x+8).join('')));
+ for(const x0 of [16,56])for(let y=8;y<32;y+=8)for(let x=x0;x<x0+16;x+=8)tiles.push(px.slice(y,y+8).map(r=>r.slice(x,x+8).join('')));
  return tiles;
 }).flat();

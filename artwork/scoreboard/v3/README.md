@@ -22,11 +22,14 @@ screen. `far-stands-5x.png` is a detail crop, `scoreboard-6x.png` the board alon
 and `after-goal-4x.png` changes the scenic score from 2–1 to 3–1.
 
 The active integration adds this headroom to projection and camera scrolling.
-The game board is at (40,0), with local score fields at (16,16) and (48,16).
-The first eight court tiles are distinct bank-zero digit cells. Each changed
-team score queues four tiles; ordinary rally frames do no scoreboard work.
-The main score/control strip stays separate. The background uses 156 unique
-tiles: 134 in bank zero and 22 at bank-one BG IDs 96..117. Compact goal buffers
+The game board is at (40,0). Number faces are centered in their recesses at
+local glyph origins (12,14) and (52,14), with narrow 1s aligned within fixed
+digit cells to keep the whole number block centered. Twelve bank-zero tiles
+cover the changing units and adjacent static art. Each changed team score
+queues six tiles; ordinary rally frames do no scoreboard work. The leading
+zero remains static in this first-to-five mode.
+The main score/control strip stays separate. The background uses 163 unique
+tiles: 134 in bank zero and 29 at bank-one BG IDs 96..124. Compact goal buffers
 occupy bank-one IDs 0..95; player OBJ data remains untouched. BG palette 7 is
 the stadium's four colors. The board scrolls with the venue.
 

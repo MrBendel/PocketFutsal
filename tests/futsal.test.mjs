@@ -836,11 +836,16 @@ test('stadium background scores update both teams without changing the housing o
   const v=e.snapshot().vram;
   for(let team=0;team<2;team++){
    assert.equal(at(e,'fs_board_score',team),team===end?1:0);
-   const pose=(team===end?1:0)*8+team*4;
-   for(let tile=0;tile<4;tile++)assert.deepEqual(Buffer.from(v.subarray(0x1500+team*64+tile*16,0x1510+team*64+tile*16)),Buffer.from(asciiTile(SCORE_TILES[pose+tile])));
+   const pose=(team===end?1:0)*12+team*6;
+   for(let tile=0;tile<6;tile++)assert.deepEqual(Buffer.from(v.subarray(0x1500+team*96+tile*16,0x1510+team*96+tile*16)),Buffer.from(asciiTile(SCORE_TILES[pose+tile])));
+   const ink=[];
+   for(let y=13;y<=28;y++)for(let x=team?85:46;x<=(team?113:74);x++)if(backgroundPixel(e,x,y)===3)ink.push([x,y]);
+   const xs=ink.map(p=>p[0]),ys=ink.map(p=>p[1]);
+   assert.ok(Math.abs((Math.min(...xs)+Math.max(...xs))/2-(team?99:60))<=0.5,'score face is horizontally centered in its recess');
+   assert.equal((Math.min(...ys)+Math.max(...ys))/2,20.5,'score face is vertically centered in its recess');
   }
   // Fence and housing data stay resident through scoring and scrolling.
-  for(let n=8;n<FUTSAL_PITCH.tiles.length;n++){
+  for(let n=12;n<FUTSAL_PITCH.tiles.length;n++){
    const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
    assert.deepEqual(Buffer.from(v.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])));
   }
