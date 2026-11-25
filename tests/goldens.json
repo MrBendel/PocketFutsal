@@ -25,12 +25,13 @@
   "shootout-dive": "c81e1e3d",
   "shootout-goal": "6ed00021",
   "training-hub-scrolled": "0af74be9",
-  "slalom-live": "a0abdc5f",
-  "slalom-clear": "9185916a",
-  "slalom-hit": "699316b9",
+  "slalom-live": "4f3bf7f2",
+  "slalom-clear": "6f678c7c",
+  "slalom-hit": "b5f577af",
   "slam-zone": "e138e6dc",
   "power-meter": "76405eb5",
   "rally-vs-live": "39ea55b1",
   "rally-solo-live": "f29a423a",
-  "juggle-vs-live": "0732a9da"
+  "juggle-vs-live": "0732a9da",
+  "slalom-vs-live": "952753d8"
 }
