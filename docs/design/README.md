@@ -68,7 +68,7 @@ calls are marked *(ours)*.
 
 The two touches give the game its set-up-and-attack move: reached unready, your first
 touch **controls** the ball up in front of you (not over the net); ready a strike as
-it comes down, and with two presses your second touch is a **slam**, on fire.
+it comes down, and with four presses your second touch is a **slam**, on fire.
 
 A banner along the bottom says how each point ended: NET!, OUT!, 2 BOUNCES!, 3 TOUCHES!, FAULT! (a serve
 that didn't go over), and SET TO ... at the end of a set.
@@ -158,11 +158,14 @@ slammed (the Captain Tsubasa feel).
   power up A or B or both. The player is locked, when they're near the ball at return
   distance they either return or slide and return or if they're too far they miss").
   Getting there is yours, with the d-pad; only a ball loose in your half walks you to
-  it. **The lock starts as the ball comes over the net** into your half (2026-11-23,
-  playtest: "I keep getting stuck from the power up before I think I should"): queued
-  while it's still over their side, you still run, and the meter fills as you press;
-  over the net, you're planted and the d-pad aims. (A bot that presses as the CPU
-  strikes and then runs there wins 63% of points; it had been stuck where it pressed.) The CPU plays by the same lock: it gets there, then readies
+  it. **The lock starts at the press** again (2026-11-24, playtest: "powering up
+  doesn't feel like it's locking correctly. I think the rules we added broke it"). For a
+  day it started as the ball came over the net (2026-11-23, playtest: "I keep getting
+  stuck from the power up before I think I should"): queued while it was still over
+  their side, you still ran. Now **the other button calls the strike off** instead
+  ("if you're locked into an A power up, B cancels and vice versa"), so pressing too
+  early costs a press, not the point. The CPU plays by the same lock, from the ball
+  crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
   the ball's height picks kick, volley, header or bicycle kick. Strikes go at most half
@@ -189,12 +192,14 @@ slammed (the Captain Tsubasa feel).
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B then A: lob**, over the other player and deep: 24 px behind them, at least 60
-  past the net (a lob at a player up at the net sends them back for it). **A then B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.) The second
-  button arms it for 24 frames (about 0.4 s), so press it just before the ball arrives;
-  struck later it's the curve or the power shot again (2026-11-22, from the playtest:
-  "every shot I shoot is a lob"). The first button again taps the charge up.
+- **B, A: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **A, B: drop shot**,
+  dying just past halfway. (Mario Tennis has these the other way round.) A quick roll:
+  the second button within 12 frames (0.2 s) of the first (2026-11-24, when the other
+  button became the cancel); it stays a lob or a drop shot till it's struck, and the
+  first button again taps the charge up. The other button any later calls the strike
+  off. (Before, the second button armed it for 24 frames, pressed just before the
+  ball arrived, from the playtest: "every shot I shoot is a lob".)
 - **A full meter** (on A or B, or a header) sets the ball on fire. Meeting a ball on
   fire cleanly takes 20 of the meter's 32.
 - **The power meter and the power slam** (2026-11-23, playtest: "fill it up for successful
@@ -244,7 +249,10 @@ slammed (the Captain Tsubasa feel).
   fire (small), dust where a slide or a knockdown starts, sparks off the net. From the
   BURST_VFX pack (a paid pack: the PNGs stay out of the repo; tools/export-vfx.mjs turns
   the chosen sheets into src/vfx_tiles.c, which is committed). One at a time, sprites
-  20-27, a row of sprites placed a frame at most (src/vfx.c).
+  20-27, a row of sprites placed a frame at most (src/vfx.c). Where a slam lands, sparks
+  fly up off the court (2026-11-24, playtest: "the second row when it hits the ground",
+  Sparks Medium A): 40 x 32, wider than 8 sprites, so a frame's sprites go only to its
+  drawn columns (7 at most); its tiles go on past 159, after the HUD's.
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
@@ -304,7 +312,54 @@ slammed (the Captain Tsubasa feel).
   ring, 8 dots (sprites 29-36, tile 30, set once a match: a frame only moves them) as
   far out as your leap reaches while the ball's 64 px or more from the spot in depth,
   closing on the ring as it comes: closed, it's there. A drop shot's marker has none.
-- **Home between shots** (2026-11-22, from the playtest: "I keep losing 2 or 3 to 11"):
+  (2026-11-24: replaced by three rings, below.)
+- **The power slam's bar only when it's ready** (2026-11-24, playtest: "we don't need
+  the power meter to be persistent, just something to indicate when your slam is
+  ready"): the meter fills unseen; full or armed, a bar shows in the player's
+  shadow (yours 16 px, the CPU's 8), blinking gold and dark; the shadow stays grey.
+  (Later that day: your bar became pips, below.)
+- **The net smash** (2026-11-24, playtest: "when you rush the net you should be able to
+  bicycle kick to knock the ball out of the air for a smash"): within NET_RUSH (30 px)
+  of the net, a ball of the CPU's at NET_SMASH_Z (14 px) or higher, met with a slam's
+  charge (four presses), is a slam, leapt for as a lob is (SLAM_LEAP_X/FWD). Before,
+  the same ball came back a header at 26-34 or a bicycle kick on fire at 60. The
+  smash goes at your slam's 72, aimed NET_SMASH_LAND (36 px) past the net and driven
+  down onto it (its own vz: fc_arc's net lift left it flat, landing 59 past), with
+  only the lift that clears the net. Off its bounce it kicks up SMASH_BOUNCE (30). At
+  first the CPU returned all 18 smashes of build/scratch/netsmash.mjs (it slid across
+  and met it rising); now, like gold, only a full meter meets it clean, so it pops all
+  18 up, a ball for you to slam. Two presses, or deeper than 30 px: as before. The
+  late bot (which never comes to the net): the same scores either way.
+- **A more modern power meter** (2026-11-24, playtest: "what else we can do to improve
+  the power meter so it feels a little more modern"), all of it in play_hud.c:
+  - Pips: your bar's four 3 px pips (16 strikes each), shown for a second when a
+    clean strike adds to it, gold up to where it's filled (12 px at full), dark past;
+    each pip filled plays a blip a step higher than the last (SFX_PIP).
+  - Ready: the pips stay, your outline (colour 3 of your palette: it's your hair too)
+    pulses dark to gold every 64 frames; a four-note run up (SFX_READY); a sparkle on
+    you, once the strike's own burst is done (one effect plays at a time); and the
+    first time in a match, "A+B" over your head for two seconds (sprites 35-37,
+    tiles 154-159, drawn from a 5x6 font with an outline at the match's start).
+  - Armed: the pips blink and the outline pulses fast and brighter; the power slam
+    struck, it flashes white for 6 frames and snaps back to ink.
+  - The CPU's stays a blinking bar, ready or armed.
+  - A pulsing colour costs the vblank 8 bytes, not 128: gfx_obj_color sets one
+    colour and marks its sprite palette, and the vblank uploads only marked ones
+    (pal_write_obj in vram_queue.s). The slam zone uses it too. Worst Futnet frame:
+    60,500 cycles (of 65,664), from 57,940.
+- **The slam zone, by palette** (2026-11-24, the user's idea: "a single ring sprite and
+  cycle the palette to make it look like it's moving"): three rings, one inside the
+  other, 48x16 (six sprites in one row, the right three the left flipped; tiles from
+  build/scratch/zoneart.mjs), the inner one the spot. Nothing moves: the lit ring steps
+  in as the ball comes down (past 48 px of depth from the spot the outer, past 20 the
+  middle, then the spot), flashing yellow and orange, the others a dim teal. Its
+  palette is the curve trail's, borrowed while it shows (a lob or a pop-up leaves no
+  trail; a last one fading out is cut) and given back after. With you on its lines and
+  the outer ring no longer lit, the outer ring's two ends go: four sprites there. Rally
+  frames past ten sprites a line: 101 with all six, 33 with that (0.24%), from 358 with
+  the dots; what's left is both players on the same lines with an effect playing.
+- **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
+  seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the
   middle, 196 deep (the CPU's home, mirrored). A bot that plays like a person (it reacts
   10-20 frames after the CPU's touch and presses three times; build/scratch/humanbot.mjs)
@@ -315,12 +370,25 @@ slammed (the Captain Tsubasa feel).
   one frame and launched the ball 111 px up and long. It now allows at least 6 frames.
   The bot went from losing every game to winning 31 points to 15.
 - **Aim sticks**: LEFT or RIGHT while planted sets the aim until the strike goes.
-- **Charging flashes**: your palette, white, and (from half a meter) fire, faster as the
-  meter fills.
+- **Charging flashes** from half a meter (2026-11-24: a press or two stays in your own
+  colors, and the blink as the CPU's ball came, GO!'s stand-in, is gone: "I seem to be
+  flashing every time the ball is returned to me"): white and fire, faster as it fills.
 - **Shot trails** (Mario Tennis style): a struck ball streaks a trail of dots, taper
-  and fading behind it: red off A (or anything on fire), blue off B. Two dots, three
-  from half a meter, four on fire. Lobs, drop shots and scuffs leave none; the trail
-  fades out at the bounce or the next touch.
+  and fading behind it, only on the shots that earned one (2026-11-24, playtest: "it
+  seems like every shot is a slam or curve with trails"; it was 85% of strikes, now
+  15-20%): red on fire or a slam, blue off a curve charged past half, gold. Three dots,
+  four on fire. The trail fades out at the bounce or the next touch.
+- **Pace by power** (2026-11-24, playtest: "the ball never seems to change velocity ...
+  a lob ... should be moving slower and if you hit a slam ball it should move with a lot
+  more velocity"): every strike's time in the air was capped at 60 frames (`FC_ARC_FLAT`),
+  slower ones sped up to it, so a two-press drive left at about 50 and a full-meter fire
+  shot at 48. Now, in SUB a frame (|vx| + |vy|): a lob about 20 (lift 34: 48 px up, 91
+  frames), a drive about 50, fire 60, your slam 72 (four presses, `FC_SLAM_CHARGE` 16;
+  the CPU's slams go at fire's 60), a gold slam 80, the power slam 88. Bots
+  (build/scratch/latebot2.mjs, speeds2.mjs, seeds 1 4242 777 99): a player pressing 2-3
+  times late wins 12 points of 56 (10 of 54 before); one that mashes 6-9 times wins 25%
+  to that one's 19%. A slower base drive (26, so a tap was slower) cost the late bot
+  half its points (the CPU mishits less off a slow ball) and was dropped.
 - **No HUD row** (2026-11-24, playtest: "do away with the persistent on-screen HUD to
   give more room for the gameplay", the score handled as Mario Tennis does): the court
   has the whole screen (`CAM_MAX` 24). The score's on a board in the court art, in the
@@ -370,3 +438,19 @@ goals. The keepers and the sideways view went in v0.2.
   one player).
 - Real art: more frames (serve, run sideways, get up, a control touch), a crowd.
 - **The name**: PocketFutsal is now a futnet game.
+- **See-through overlays** (milestone, 2026-11-24): the serve box and the point banner
+  on sprites, so the court shows round the letters (the window layer is always solid).
+  It needs a sprite budget first: ten a line is the hardware's limit, and a face plus
+  YOU 03 is eight. Pack the text (two narrow glyphs a tile), share tiles, and keep
+  players off the box's lines. Measured after the sprite pass below: in a serve 17 of
+  the 40 are in use (23 free), the busiest line 6, so 4 a line to spare.
+- **Sprite pass** (2026-11-24; build/scratch/oamscan.mjs counts sprites a line in bot
+  matches). The game draws 8x16 sprites, so even a 3 px dot counts on 16 lines of the
+  ten a line can show. Before: in a serve the bottom of the screen already had 8 a
+  line; in a rally 3.3% of frames went past ten (up to 20), and the power gauges were
+  what the hardware dropped. Now each player's power gauge is drawn into the blank
+  lower half of their own copy of the shadow's tiles (sprite tiles 140-147), not three
+  sprites of its own (37-39 are free): serves and tosses peak at 6 a line, rallies go
+  past ten on 2.6% of frames. What was left was the slam zone: its 8 dots sat within
+  16 lines of each other, ring and all ten a line by themselves (now three rings by
+  palette, above: 0.24%). (Work RAM isn't tight: globals run on past 0xD000, 3.2 KB short of the stack.)

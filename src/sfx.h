@@ -22,7 +22,9 @@
 #define SFX_CHARGE 9   // the meter is full
 #define SFX_TICK 10    // a press on the meter
 #define SFX_HALF 11    // the meter's at half: a slam's ready
-#define SFX_COUNT 12
+#define SFX_PIP 12     // a pip of the power meter filled: SFX_PIP + 0, 1, 2, each a step higher
+#define SFX_READY 15   // the power meter full: a run up four notes
+#define SFX_COUNT 16
 
 // --- watchable state ---
 extern uint8_t sfx_last;      // the last sound started (0xFF: none yet)

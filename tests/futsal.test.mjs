@@ -2,8 +2,11 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
-import {asciiTile,FUTSAL_PITCH,FUTSAL_GOAL} from '../tools/tile-art.mjs';
-import {GOAL_BG,goalPose,PATCH_Y,PATCH_W} from '../tools/goal-background.mjs';
+import {REACTION_TILES} from '../tools/reaction-art.mjs';
+import {asciiTile,FUTSAL_GOAL,FUTSAL_ZONE} from '../tools/tile-art.mjs';
+import {STADIUM_PITCH as FUTSAL_PITCH,STADIUM_OFFSET,pitchTile,SCORE_TILES} from '../tools/stadium-art.mjs';
+import {GOAL_H} from '../tools/goal-art.mjs';
+import {GOAL_BG,GOAL_TILES,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
 const PLAY=3;
 function startGame(pace=2,seed=4242) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
@@ -12,6 +15,37 @@ function startGame(pace=2,seed=4242) {
  return settle(e.tap('START'),PLAY,'futsal mode');
 }
 const put=(e,n,v)=>e.write8(e.symbols.addr(n),v);
+test('each player animates the correct win or lose reaction after either team wins',()=>{
+ for(const winner of [0,1]){
+  const e=startGame();e.write8(e.symbols.addr('score')+winner,5);e.write8(e.symbols.addr('score')+(winner^1),2);
+  put(e,'fs_goal_timer',1);settle(e.idle(2),GAME_OVER,'animated futsal results');
+  const v=e.snapshot().vram;
+  for(let i=0;i<4;i++){
+   const outcome=(i>>1)===winner?0:1;
+   assert.equal(at(e,'fs_result_outcome',i),outcome);
+   const expected=REACTION_TILES.slice(i*48+outcome*24,i*48+outcome*24+24).flatMap(t=>asciiTile(t));
+   assert.deepEqual(Buffer.from(v.subarray(0x2000+i*384,0x2000+(i+1)*384)),Buffer.from(expected),'all three poses stay resident');
+  }
+  const seen=Array.from({length:4},()=>new Set()),ground=[];let peak=0;
+  for(let f=0;f<64;f++){
+   e.idle();const o=e.snapshot().oam;
+   for(let i=0;i<4;i++){
+    seen[i].add(at(e,'fs_result_frame',i));
+    assert.equal(o[i*16+3]&15,8|i,'body keeps character palette and sprite bank');
+    if(!f)ground[i]=o[(16+i)*4];else assert.equal(o[(16+i)*4],ground[i],'shadow stays grounded');
+   }
+   for(let y=0;y<144;y++){
+    let n=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])n++;
+    peak=Math.max(peak,n);
+   }
+  }
+  for(const poses of seen)assert.equal(poses.size,3,'every character loops through all three poses');
+  assert.ok(peak<=10,`results fit sprite scanline budget: ${peak}`);
+  assert.equal(e.v('game_over_timer'),30,'reactions continue after the input delay');
+  e.shot(winner?'futsal-red-win-reactions':'futsal-blue-win-reactions');
+  settle(e.tap('START'),0,'results return to menu');
+ }
+});
 test('four AI players pass, shoot, and finish a match',()=>{
  const e=startGame();
  assert.equal(e.v('fs_spectator'),1);
@@ -98,7 +132,7 @@ test('new roster loads all four pixel sets into VRAM and uses each character pal
   e.writeBytes(e.symbols.addr('fs_pl_y')+i*2,[y&255,y>>8]);
  }
  e.idle(3);
- const palettes=[];for(let slot=0;slot<4;slot++)palettes.push(e.read8(0xfe00+(1+slot*4)*4+3)&7);
+ const palettes=[];for(let slot=0;slot<4;slot++)palettes.push(e.read8(0xfe00+(3+slot*4)*4+3)&7);
  assert.deepEqual([...palettes].sort(),[0,1,2,3]);
  e.shot('futsal-new-roster');
 });
@@ -108,17 +142,17 @@ test('power shots leave a visible fading trail; player shadows stay on court',()
  e.tap('START').idle(3);
  assert.ok(e.v('fs_power_trail')>0);
  assert.equal(e.read8(0xfe03+e.v('fs_ball_oam')*4)&7,6,'bright ball palette');
- assert.ok(e.read8(0xfe00+18*4)>0,'first trail sprite visible');
+ assert.ok(e.read8(0xfe00+20*4)>0,'first trail sprite visible');
  e.shot('futsal-power-trail');
  for(let i=0;i<4;i++) {
   const py=at(e,'fs_pl_y',i,'i16')>>4;
   const ground=e.read8(e.symbols.addr('fs_projection_y')+py)-e.v('fs_cam_y');
-  assert.equal(e.read8(0xfe00+(21+i)*4),ground+12,'grounded player shadow');
+  assert.equal(e.read8(0xfe00+(23+i)*4),ground+12,'grounded player shadow');
  }
  e.tap('START');
  put(e,'fs_owner',0); e.idle(2);
  assert.equal(e.v('fs_power_trail'),0);
- assert.equal(e.read8(0xfe00+18*4),0,'trail hidden on possession');
+ assert.equal(e.read8(0xfe00+20*4),0,'trail hidden on possession');
 });
 
 test('ball is occluded by nearer players and draws over farther players',()=>{
@@ -127,7 +161,7 @@ test('ball is occluded by nearer players and draws over farther players',()=>{
  e.writeBytes(e.symbols.addr('fs_tackling'),[0,0,0,0]);
  const ys=[190,150,70,30];
  for(let i=0;i<4;i++)e.writeBytes(e.symbols.addr('fs_pl_y')+i*2,[(ys[i]*16)&255,(ys[i]*16)>>8]);
- for(const [y,expected] of [[210,0],[170,4],[110,8],[50,12],[10,16]]){
+ for(const [y,expected] of [[210,2],[170,6],[110,10],[50,14],[10,18]]){
   set16(e,'fs_ball_y',y*16);e.idle(3);
   assert.equal(e.v('fs_ball_oam'),expected);
   const phase=e.v('gfx_ball_phase'),tile=phase<2?phase*2:116+(phase-2)*2;
@@ -166,7 +200,7 @@ test('a lofted pass clears feet, has a ground shadow, and reaches its teammate',
  assert.equal(e.v('fs_owner'),255,'airborne pass remains loose');
  assert.ok(e.v('fs_ball_z','i16')>2*16,'pass rises above the court');
  e.tap('START').idle(3);
- const ball=e.read8(0xfe00+e.v('fs_ball_oam')*4),shadow=e.read8(0xfe00+25*4);
+ const ball=e.read8(0xfe00+e.v('fs_ball_oam')*4),shadow=e.read8(0xfe00+27*4);
  assert.ok(shadow-ball>3,'visible separation from court shadow');
  e.shot('futsal-lofted-pass');e.tap('START');
  e.until(e=>e.v('fs_owner')===1,100,'teammate receiving the pass');
@@ -325,7 +359,7 @@ test('a hard cut can lose control without turning or teleporting the ball',()=>{
 });
 
 function humanActor(e){
- for(let n=0;n<17;n++)if((e.read8(0xfe03+n*4)&7)===0)return n;
+ for(let n=2;n<19;n++)if((e.read8(0xfe03+n*4)&7)===0)return n;
  assert.fail('blue player sprite missing');
 }
 test('all four side cycles are resident in VRAM without replacing front/back or slides',()=>{
@@ -333,7 +367,7 @@ test('all four side cycles are resident in VRAM without replacing front/back or 
  const expected=Buffer.from(sideAtlas().flatMap(t=>asciiTile(t))),vram=e.snapshot().vram;
  assert.deepEqual(Buffer.from(vram.subarray(214*16,242*16)),expected);
  for(let n=0;n<FUTSAL_PITCH.tiles.length;n++){
-  const tile=80+n,offset=0x1000+(tile<128?tile:tile-256)*16;
+  const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
   assert.deepEqual(Buffer.from(vram.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])),'court tile survives sprite uploads');
  }
 });
@@ -397,8 +431,38 @@ test('tap B delivers quickly; holding B charges a much higher lob on release',()
  assert.ok(e.v('fs_flight_left')>=62,'lob gives time to run into the zone');
  let peak=0;for(let f=0;f<33;f++){e.idle();peak=Math.max(peak,e.v('fs_ball_z','i16'));}
  assert.ok(peak>40*16,'lob clears players well above a quick pass');
- e.tap('START').idle(3);assert.ok(e.read8(0xfe00+26*4)>0,'landing ellipse is visible');
+ e.tap('START').idle(3);assert.ok(e.read8(0xfe00+0*4)>0,'landing ellipse is visible');
  e.shot('futsal-high-lob');
+});
+
+test('the complete landing ring stays visible when lower rows exceed the sprite scanline limit',()=>{
+ const e=humanSpace();
+ for(const [name,value]of [['fs_lob',1],['fs_owner',255],['fs_receiver',255],['fs_flight_left',100],['fs_pickup_lock',100]])put(e,name,value);
+ for(const [name,value]of [['fs_target_x',80*16],['fs_target_y',150*16],['fs_ball_z',80*16],['fs_ball_y',140*16],['fs_ball_vx',0],['fs_ball_vy',0],['fs_ball_vz',0]])set16(e,name,value);
+ for(let i=0;i<4;i++){
+  setPlayer(e,i,24+i*32,160);e.write8(e.symbols.addr('fs_think')+i,200);
+  for(const [name,value]of [['fs_ai_tx',(24+i*32)*16],['fs_ai_ty',160*16]])e.writeBytes(e.symbols.addr(name)+i*2,[value&255,value>>8]);
+ }
+ e.idle(6);e.tap('START').idle(3);
+ const o=e.snapshot().oam,frame=e.frameBuffer();
+ const ringSlot=Array.from({length:40},(_,i)=>i).find(i=>o[i*4+2]===124&&!(o[i*4+3]&8));
+ assert.notEqual(ringSlot,undefined,'landing ring is active');
+ const top=o[ringSlot*4]-16,left=o[ringSlot*4+1]-8;
+ let peak=0;
+ for(let y=4;y<8;y++){
+  let count=0;for(let i=0;i<40;i++)if(top+y>=o[i*4]-16&&top+y<o[i*4])count++;
+  peak=Math.max(peak,count);
+ }
+ assert.ok(peak>10,`fixture reproduces lower-half OBJ pressure: ${peak}`);
+ for(let y=0;y<8;y++)for(let x=0;x<16;x++){
+  const ink=FUTSAL_ZONE[x<8?0:2][y][x%8];
+  if(ink==='1'){
+   const p=((top+y)*160+left+x)*3;
+   assert.deepEqual([...frame.subarray(p,p+3)],[248,232,64],`complete ring at ${x},${y}`);
+  }
+ }
+ assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(124*16,128*16)),Buffer.from(FUTSAL_ZONE.flatMap(t=>asciiTile(t))),'ring art stays intact in VRAM');
+ e.shot('futsal-target-ring-crowded');
 });
 
 test('holding B off the ball calls a lob return into the human finishing lane',()=>{
@@ -429,7 +493,7 @@ test('a timed jump meets the descending lob with a bicycle kick and grounded sha
  e.idle(5).tap('START').idle(3);
  assert.ok(e.read8(0xfe03+humanActor(e)*4)&64,'bicycle uses the actual inverted character tiles');
  const ground=e.read8(e.symbols.addr('fs_projection_y')+(y>>4))-e.v('fs_cam_y');
- assert.equal(e.read8(0xfe00+21*4),ground+12,'shadow stays under the launch point');
+ assert.equal(e.read8(0xfe00+23*4),ground+12,'shadow stays under the launch point');
  e.shot('futsal-bicycle-finish');
 });
 
@@ -781,7 +845,7 @@ test('posts and crossbars rebound the ball, dislodge either goal, and reset with
   assert.equal(at(e,'score',end),0,'frame contact is never a goal');
   assert.equal(e.v(kind==='post'?'fs_post_hits':'fs_bar_hits','u16'),1);
   assert.ok(e.v('fs_ball_vy','i16')*(end?-1:1)>0,'rebound returns toward the field');
-  e.idle(25);
+  e.idle(38);
   checkGoalPatch(e,end,goalPose(at(e,'fs_goal_dx',end,'i8'),at(e,'fs_goal_dy',end,'i8')));
   assert.ok(Math.abs(at(e,kind==='post'?'fs_goal_dx':'fs_goal_dy',end,'i8'))>=4,'hit goal really moves');
   assert.equal(at(e,'fs_goal_dx',end^1,'i8'),0,'opposite goal stays anchored');
@@ -810,14 +874,15 @@ test('clean finishes, high misses and swept diagonal post contacts use the same 
 });
 
 function checkGoalPatch(e,end,pose=0){
- const v=e.snapshot().vram,cells=PATCH_W*3,base=(end*16+pose)*cells;
+ const v=e.snapshot().vram,cells=PATCH_W*PATCH_H,base=(end*16+pose)*cells;
  for(let local=0;local<cells;local++){
   const cell=(PATCH_Y[end]+Math.floor(local/PATCH_W))*32+6+local%PATCH_W;
   const tile=v[0x1800+cell],attr=v[0x3800+cell];
   assert.equal(attr,GOAL_BG.attrs[base+local]);
-  if(attr&8){
-   assert.ok(tile<96,'goal BG tile is outside OBJ character memory');
-   assert.deepEqual(Buffer.from(v.subarray(0x3000+tile*16,0x3010+tile*16)),Buffer.from(asciiTile(GOAL_BG.tiles[base+local])),`goal ${end}, pose ${pose}, cell ${local}`);
+  if((attr&8)&&(attr&7)>=4&&(attr&7)<=6){
+   assert.ok(tile<96,'goal BG tile is outside stadium and OBJ character memory');
+   const ink=(end*16+pose)*GOAL_TILES+GOAL_BG.map[base+local]-end*GOAL_TILES;
+   assert.deepEqual(Buffer.from(v.subarray(0x3000+tile*16,0x3010+tile*16)),Buffer.from(asciiTile(GOAL_BG.tiles[ink])),`goal ${end}, pose ${pose}, cell ${local}`);
   }else assert.equal(tile,GOAL_BG.map[base+local]);
  }
 }
@@ -827,9 +892,33 @@ function backgroundPixel(e,x,y){
  return ((v[offset]>>(7-(x&7)))&1)|(((v[offset+1]>>(7-(x&7)))&1)<<1);
 }
 
+test('stadium background scores update both teams without changing the housing or player tiles',()=>{
+ for(const end of [0,1]){
+  const e=goalCrossing(end,{x:80,z:4});e.idle(8);
+  const v=e.snapshot().vram;
+  for(let team=0;team<2;team++){
+   assert.equal(at(e,'fs_board_score',team),team===end?1:0);
+   const pose=(team===end?1:0)*12+team*6;
+   for(let tile=0;tile<6;tile++)assert.deepEqual(Buffer.from(v.subarray(0x1500+team*96+tile*16,0x1510+team*96+tile*16)),Buffer.from(asciiTile(SCORE_TILES[pose+tile])));
+   const ink=[];
+   for(let y=13;y<=28;y++)for(let x=team?85:46;x<=(team?113:74);x++)if(backgroundPixel(e,x,y)===3)ink.push([x,y]);
+   const xs=ink.map(p=>p[0]),ys=ink.map(p=>p[1]);
+   assert.ok(Math.abs((Math.min(...xs)+Math.max(...xs))/2-(team?99:60))<=0.5,'score face is horizontally centered in its recess');
+   assert.equal((Math.min(...ys)+Math.max(...ys))/2,20.5,'score face is vertically centered in its recess');
+  }
+  // Fence and housing data stay resident through scoring and scrolling.
+  for(let n=12;n<FUTSAL_PITCH.tiles.length;n++){
+   const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
+   assert.deepEqual(Buffer.from(v.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])));
+  }
+  assert.equal(e.read8(e.symbols.addr('fs_projection_y')),64,'court has stadium headroom');
+  if(end===0)e.shot('futsal-stadium-scoreboard');
+ }
+});
+
 test('both movable goals are centred on the court in BG tiles and use no OBJ slots',()=>{
- const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.flatMap(t=>asciiTile(t)));
- assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(250*16,256*16)),expected,'compact shadow art stays resident');
+ const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.slice(4).flatMap(t=>asciiTile(t)));
+ assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(254*16,256*16)),expected,'compact shadow art stays resident');
  put(e,'fs_goal_timer',100);e.idle(3);
  for(const end of [0,1]){
   checkGoalPatch(e,end);
@@ -848,11 +937,11 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  const e=startGame();put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',224*16);set16(e,'fs_ball_z',0);
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,112);
  for(const n of ['fs_action','fs_tackling','fs_aerial','fs_moving','fs_side'])e.writeBytes(e.symbols.addr(n),[0,0,0,0]);
- e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=144-16-e.v('fs_cam_y');
+ e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=STADIUM_OFFSET+144-GOAL_H-e.v('fs_cam_y');
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,216);
  e.idle(3);const after=e.frameBuffer(),o=e.snapshot().oam;
  let peak=0;
- for(let y=top;y<top+16;y++){
+ for(let y=top;y<top+GOAL_H;y++){
   let count=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])count++;
   peak=Math.max(peak,count);
   for(let x=60;x<100;x++)if(x<76||x>=84){

@@ -1,17 +1,19 @@
-# Portable goal sprites
+# Legacy portable goal sprite study
 
-Both ends use the same 40x16-pixel frame: thick cream posts and crossbar, a dark outline,
+The original flat 40x16-pixel frame used: thick cream posts and crossbar, a dark outline,
 and dark open mesh for contrast on the blue court. `goals-1x.png` shows top and bottom at native resolution;
 `goals-4x.png` is a nearest-neighbour preview. The preview has a court-blue background.
 
 Source: `FUTSAL_GOAL` in `tools/tile-art.mjs`. Re-export with
 `node tools/export-goal-study.mjs`. Two unique 8x16 columns build each goal;
 the right post mirrors the left. `goal.2bpp` also includes the compact player
-shadow. The six-tile authoring sheet remains at bank-zero tiles 250..255 (including
-the compact player shadow), but goals no longer use hardware OBJ sprites.
+shadow. The active dimensional goal is now `../v3/native.json`. This legacy authoring
+sheet supplies only its compact player shadow at OBJ tiles 254..255.
+Goals do not use hardware OBJ sprites.
 `tools/goal-background.mjs` composites the goal with its underlying court into
 bank-one BG tiles. Two resident rest poses and two shared motion buffers use
-signed BG tile IDs 0..95 at 0x9000..0x95ff, separate from player OBJ data.
+signed BG tile IDs 0..95, separate from player OBJ data. The stadium uses
+IDs 96..127; compact goal buffers hold only inked cells of each pose.
 Precomputed knockback poses upload six tiles per frame during the stoppage;
 the tilemap switches only once a whole pose is ready. Reset switches straight
 back to the resident normal pose. Scrolling needs no goal uploads. This avoids

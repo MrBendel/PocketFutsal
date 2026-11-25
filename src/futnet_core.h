@@ -17,16 +17,20 @@
 #define FC_BRAKE 4
 #define FC_SKID_FRAMES 9
 #define FC_YOU_TAP 4
-#define FC_SLAM_CHARGE 8
+#define FC_SLAM_CHARGE 16  // your charge for a slam: four presses, mashed as it comes down
 #define FC_COMBO_FRAMES 24
-#define FC_POWER_SPEED 48
-#define FC_GOLD_SPEED 56
+// The ball's speeds (SUB a frame, |vx| + |vy|), in steps you can see: a lob floats
+// (about 20), a drive about 50 (ARC_FLAT's pace, deep), a full meter on fire 60,
+// your slam 72 (the CPU's goes at fire's 60), gold 80, the power slam 88 (play.c).
+#define FC_POWER_SPEED 60
+#define FC_SLAM_SPEED 72
+#define FC_GOLD_SPEED 80
 #define FC_DRIVE_SPEED 28
 #define FC_CURVE_SPEED 25
 #define FC_CURVE_OFS 44
 #define FC_HEADER_SPEED 24
-#define FC_CHIP_LIFT 28
-#define FC_ARC_FLAT 60
+#define FC_CHIP_LIFT 34   // a lob: about 48 px up, 90 frames: slow, time to get under it
+#define FC_ARC_FLAT 60    // frames: the longest a strike arcs (a slower one's sped up to it)
 #define FC_ARC_MAX 100
 #define FC_TRAIL_MAX 4
 #define FC_S_TRAIL 8

@@ -42,14 +42,20 @@ static const Step charge[] = {{3, 0, DUTY25, 0x71, P(1923)}, {6, 0, DUTY25, 0x81
 static const Step tick[] = {{3, 0, DUTY12, 0x51, P(1985)}};                        // a short high blip
 static const Step half[] = {{3, 0, DUTY25, 0x81, P(1899)}, {5, 0, DUTY25, 0x91, P(1949)}};  // two notes up
 
+static const Step pip1[] = {{2, 0, DUTY50, 0x61, P(1798)}, {4, 0, DUTY50, 0x41, P(1849)}};  // a pip: a step up
+static const Step pip2[] = {{2, 0, DUTY50, 0x71, P(1849)}, {4, 0, DUTY50, 0x51, P(1899)}};
+static const Step pip3[] = {{2, 0, DUTY50, 0x81, P(1899)}, {4, 0, DUTY50, 0x61, P(1923)}};
+static const Step ready[] = {  // full: up four notes, the last held
+    {3, 0, DUTY50, 0xA1, P(1798)}, {3, 0, DUTY50, 0xA1, P(1849)}, {3, 0, DUTY50, 0xB1, P(1899)}, {16, 0, DUTY50, 0xC3, P(1949)}};
+
 // Each sound's channel (0 = channel 1, 1 = channel 2, 2 = channel 4), priority,
 // step count and steps, as separate arrays: plain byte indexing (an array of
 // structs would multiply, a slow routine on this CPU).
 #define N(steps) (sizeof(steps) / sizeof(Step))
-static const uint8_t snd_ch[SFX_COUNT] = {1, 2, 2, 0, 1, 1, 2, 1, 2, 1, 1, 1};
-static const uint8_t snd_prio[SFX_COUNT] = {4, 4, 1, 5, 6, 5, 2, 3, 5, 2, 1, 2};
-static const uint8_t snd_n[SFX_COUNT] = {N(start), N(kick), N(touch), N(power), N(goal), N(whistle), N(board), N(catch_), N(parry), N(charge), N(tick), N(half)};
-static const Step *const snd_steps[SFX_COUNT] = {start, kick, touch, power, goal, whistle, board, catch_, parry, charge, tick, half};
+static const uint8_t snd_ch[SFX_COUNT] = {1, 2, 2, 0, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 0};
+static const uint8_t snd_prio[SFX_COUNT] = {4, 4, 1, 5, 6, 5, 2, 3, 5, 2, 1, 2, 2, 2, 2, 5};
+static const uint8_t snd_n[SFX_COUNT] = {N(start), N(kick), N(touch), N(power), N(goal), N(whistle), N(board), N(catch_), N(parry), N(charge), N(tick), N(half), N(pip1), N(pip2), N(pip3), N(ready)};
+static const Step *const snd_steps[SFX_COUNT] = {start, kick, touch, power, goal, whistle, board, catch_, parry, charge, tick, half, pip1, pip2, pip3, ready};
 
 uint8_t sfx_last = 0xFF;
 uint16_t sfx_played;

@@ -29,8 +29,8 @@ and their aim are buffered across held simulation frames; pause stays immediate.
 
 Futsal is an arcade prototype: two outfield players per team, no dedicated
 goalkeepers, first to five goals. The court has goals at both baselines and
-rebounding walls outside the goal mouths. Both ends now use the same 40x16
-portable-goal sprite and matching collision dimensions. Posts and the crossbar
+rebounding walls outside the goal mouths. Both ends now use the same 40x24
+dimensional portable-goal artwork and matching collision dimensions. Posts and the crossbar
 rebound the ball and knock the goal out of position. A short FRAME! stoppage
 lets the rebound and displacement read, then resets the goal and gives the
 defending team the restart. A frame hit never counts as a goal. Goals are drawn with background tiles so
@@ -38,11 +38,29 @@ the ball, players, shadows and effects cannot push their net/frame out of the
 Game Boy's ten-sprites-per-scanline list. Their collision and displacement
 remain separate from the renderer.
 
+A stadium stand and centered scoreboard sit behind the far goal. The board is
+part of the scrolling background and uses the original Pocket Sports numerals
+in muted gold. Each score changes through a queued six-tile update; the main
+score/control strip stays separate. The extra 32 pixels of stadium headroom
+leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
+`artwork/scoreboard/v3`.
+
+The lob landing ring reserves the first two sprite slots so its complete
+outline survives crowded scanlines. Players and the ball retain their depth
+order behind the targeting cue; shadows, trails and contact effects follow.
+
+At full time, all four players have subtle win/lose reactions: small shoulder
+lifts and arm shifts for the winning pair, slumped shoulders and head dips for
+the losing pair. The original faces and outfits stay intact. Three frames per
+outcome loop on the results screen, with fixed ground shadows. The native art
+and animated study are in `artwork/players/roster/reactions`.
+
 Shooting precision depends on distance: close finishes have very little scatter,
 medium shots spread wider, and efforts from more than 144 court pixels away are
 wild clearances aimed outside the goal mouth. Missed deliveries shed speed on
 landing so an unreceived pass does not keep rolling into a distant goal.
-Goal artwork is in `artwork/goals/v1`, generated from the native pixel tiles.
+The active goal artwork is in `artwork/goals/v3`: the approved generated study
+reduced to native pixels, with a sparse recessed net and roof/side depth.
 
 WATCH runs four AI players; PLAY gives
 you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
@@ -174,16 +192,16 @@ the title switch between one set and the best of three.
 
 | Button | What it does |
 |---|---|
-| D-pad | Run (eight ways) in your half. Queued with the ball in your half, or serving: it only aims |
+| D-pad | Run (eight ways) in your half. Ready (from the press), or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
-| B then A / A then B | A **lob** over them / a **drop shot** just past halfway: press the second just before the ball arrives |
-| A flashing marker | A lob, pop-up or drop shot coming to you: be there (queued, you're run there) and, with half a meter, jump and bicycle-kick it: a **slam**. A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
-| A or B again while ready | Tap for more power: the meter fills only as you press, and stays |
-| A + B, the power meter full | The **power slam**: your next clean strike goes gold and fast. The power meter is the gauge under your feet: each clean strike in a rally fills it a little; it flashes full (or armed). The CPU's is under its feet |
+| B, A / A, B in a quick roll | A **lob** over them / a **drop shot** just past halfway: the second button within a moment (12 frames) of the first; it stays one till it's struck |
+| A flashing marker | A lob or pop-up coming to you: three rings round the spot, the lit one stepping in as it comes down (a drop shot: one small ring). Be there (queued, you're run there) and mash: with four presses you jump and bicycle-kick it, a **slam**, the fastest ball in the game (a lob floats down slowly to give you time). A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
+| Up at the net, mash | A ball of the CPU's coming over high (14 px up or more) while you're within 30 px of the net: four presses and you leap and bicycle-kick it down, a **smash**: at a slam's speed, steep and short, kicking up high off its bounce. Like gold, only a full meter meets it clean: the CPU fends it up for you to slam |
+| A or B again while ready | Tap for more power: the meter fills only as you press, and stays. The ball's speed follows it: a drive, then on fire (eight presses, a red trail), then a slam; you flash from half a meter |
+| A + B, the power meter full | The **power slam**: your next clean strike goes gold and fast. Each clean strike in a rally fills the meter a little: four pips show under your feet for a second as it does, each one filled with a blip a note higher. Full, the pips stay, your outline glows gold and "A+B" shows over you the first time; armed, it all blinks faster. The CPU's is a bar under its feet, flashing when it's full |
 | A or B as a power slam reaches you | Your one try: within 5 frames of it reaching you, you send it back on fire; too early, too late or never, it knocks you down |
-| SELECT while ready | Call the strike off |
-| You blink | The CPU's struck it to you and nothing's queued: press A or B now |
+| The other button while ready (or SELECT) | Call the strike off: readied with A, B cancels, and the other way round |
 | LEFT / RIGHT while ready | Angle it that way; neutral goes half as far, away from the CPU (it sticks; a marker shows where it'll land) |
 | UP / DOWN while ready | Play it deep / short; neutral, away from the CPU: short of it at the back, past it up close |
 | START | Pause |

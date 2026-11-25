@@ -11,13 +11,19 @@
 #include "play_hud.h"
 #include "state.h"
 #include "portrait.h"
+#include <gb/cgb.h>
+#include "sfx.h"
+#include "vfx.h"
 
 extern uint8_t note_timer, set_won, hud_pending;
 uint8_t hud_mode = 0xFF;      // the overlay showing (HUD_*; 0xFF: none yet)
 uint8_t board_shown[4];       // the board's points and sets as drawn (0xFF: redraw)
-uint8_t gauge_shown[3];       // each gauge sprite's fill, px (0xFF: redraw)
-static uint8_t gauge_buf[3][6];  // their bars: three rows of the sprite's top tile
+uint8_t gauge_shown[4];       // each shadow tile's bar as drawn (yours: pixels filled, 0x80/0x81 armed; the CPU's: 0 none, 0x7F dark, 0xFF gold; 0xFE: redraw)
+static uint8_t gauge_buf[4][6];  // their bars: three rows of the shadow's lower tile
 static uint8_t strip_buf[5];
+uint8_t meter_seen, meter_show, glow_level, glow_flash, ready_spark, hint_timer, hint_done;
+static uint8_t was_special;
+extern uint8_t vfx_kind;
 
 #define DIGIT(n) (FONT_TILES + ('0' - ' ') + (n))
 #define CHAR(c) (FONT_TILES + ((c) - ' '))
@@ -53,17 +59,45 @@ static void board_update(void) {
     }
 }
 
-static const uint8_t zeros[16 * 6];
-
 void hud_init(void) BANKED {
     banked_bkg_data(T_FACE, PORTRAIT_TILE_COUNT, portrait_tiles, BANK(portrait));
-    // The gauges: blank tiles (only their top three rows are ever drawn), sprites hidden.
-    set_sprite_data(S_GAUGE, 6, zeros);
-    for (uint8_t k = 0; k < 3; k++) {
-        set_sprite_tile(OAM_GAUGE + k, S_GAUGE + (k << 1));
-        move_sprite(OAM_GAUGE + k, 0, 0);
-        gauge_shown[k] = 0xFF;
+    // The shadows (sprite tiles 16-19, set up by gfx_player_shadow_init) copied for
+    // each player, their lower halves blank till a gauge is drawn in; the shadow
+    // sprites pointed at the copies.
+    uint8_t t[64];
+    get_sprite_data(16, 4, t);
+    for (uint8_t k = 16; k < 32; k++) t[k] = t[k + 32] = 0;
+    set_sprite_data(S_GAUGE, 4, t);
+    set_sprite_data(S_GAUGE + 4, 4, t);
+    for (uint8_t k = 0; k < 4; k++) {
+        set_sprite_tile(OAM_PLAYER_SHADOW + k, S_GAUGE + (k << 1));
+        gauge_shown[k] = 0xFE;
     }
+    // The hint's letters (5 x 6, gold), outlined (dark), in the tops of their tiles.
+    static const uint8_t glyphs[3][6] = {
+        {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11},   // A
+        {0x00, 0x04, 0x04, 0x1F, 0x04, 0x04},   // +
+        {0x1E, 0x11, 0x1E, 0x11, 0x11, 0x1E}};  // B
+    for (uint8_t g = 0; g < 3; g++) {
+        uint8_t l[8];
+        l[0] = l[7] = 0;
+        for (uint8_t r = 0; r < 6; r++) l[r + 1] = glyphs[g][r] << 1;
+        for (uint8_t k = 0; k < 32; k++) t[k] = 0;
+        for (uint8_t r = 0; r < 8; r++) {
+            uint8_t o = l[r] | (l[r] << 1) | (l[r] >> 1);
+            if (r) o |= l[r - 1];
+            if (r < 7) o |= l[r + 1];
+            o &= ~l[r];
+            t[r << 1] = l[r] | o;  // 1: the letter, 3: its outline
+            t[(r << 1) + 1] = o;
+        }
+        set_sprite_data(S_HINT + (g << 1), 2, t);
+        set_sprite_tile(OAM_HINT + g, S_HINT + (g << 1));
+        set_sprite_prop(OAM_HINT + g, SPR_PAL_UI);
+        move_sprite(OAM_HINT + g, 0, 0);
+    }
+    meter_seen = meter_show = glow_flash = ready_spark = hint_timer = hint_done = was_special = 0;
+    glow_level = 0xFF;
     // The board, in the UI's palette.
     bkg_frame(BOARD_X, BOARD_Y, BOARD_W, 3);
     bkg_text(BOARD_X + 1, BOARD_Y + 1, "YOU");
@@ -135,51 +169,121 @@ void hud_draw(void) BANKED {
     else win_text(0, 0, you ? "2 BOUNCES! POINT YOU" : "2 BOUNCES! POINT CPU");
 }
 
-// A gauge sprite's bar, n px of 8 filled: an outline row (2), the fill (1) then the
-// empty (3), an outline row. Copied in at the next vblank when it changes.
-static void gauge_fill(uint8_t k, uint8_t n) {
-    if (n == gauge_shown[k]) return;
-    gauge_shown[k] = n;
+// The bar in shadow tile k's lower half: over the columns in m, an outline row (2),
+// the fill (1; 3 in the columns in e: empty), an outline row. Copied in at the next
+// vblank when it changes (key: what's drawn).
+static void gauge_fill(uint8_t k, uint8_t key, uint8_t m, uint8_t e) {
+    if (key == gauge_shown[k]) return;
+    gauge_shown[k] = key;
     uint8_t *b = gauge_buf[k];
     b[0] = 0x00;
-    b[1] = 0xFF;
-    b[2] = 0xFF;
-    b[3] = n >= 8 ? 0x00 : (uint8_t)(0xFF >> n);
+    b[1] = m;
+    b[2] = m;
+    b[3] = e;
     b[4] = 0x00;
-    b[5] = 0xFF;
-    gfx_vram_copy((uint8_t *)(0x8000 + ((uint16_t)(S_GAUGE + (k << 1)) << 4)), b, 6, 0);
+    b[5] = m;
+    gfx_vram_copy((uint8_t *)(0x8000 + ((uint16_t)(S_GAUGE + (k << 1) + 1) << 4)), b, 6, 0);
+}
+
+// Your outline (colour 3 of your palette) as the meter stands: ink; full, a slow gold
+// pulse; armed, a fast bright one; the slam struck, a white flash. Uploaded only when
+// it changes (gfx_obj_color: 8 bytes at the vblank).
+static const uint16_t glow_colors[6] = {
+    RGB8(24, 32, 48), RGB8(104, 80, 32), RGB8(184, 136, 24), RGB8(255, 200, 40), RGB8(255, 240, 150), RGB8(255, 255, 255)};
+static void glow_update(void) {
+    uint8_t level = 0;
+    if (glow_flash) {
+        glow_flash--;
+        level = 5;
+    } else if (pl_special[SIDE_YOU] || pl_power[SIDE_YOU] == POWER_MAX) {
+        uint8_t armed = pl_special[SIDE_YOU];
+        uint8_t t = ((uint8_t)frame_count >> (armed ? 1 : 3)) & 7;
+        level = (t < 4 ? t : 7 - t) + armed;  // a triangle: up and down
+    }
+    if (level != glow_level) {
+        glow_level = level;
+        gfx_obj_color(SPR_PAL_YOU, 3, glow_colors[level]);
+    }
+}
+
+// The ready moment (your meter just full): the sound, a sparkle on you once the
+// strike's own burst is done, and the first time in a match, A+B over you.
+static void meter_events(void) {
+    uint8_t p = pl_power[SIDE_YOU], sp = pl_special[SIDE_YOU];
+    if (was_special && !sp) glow_flash = 6;  // the power slam struck: the glow snaps off in a flash
+    was_special = sp;
+    if (p != meter_seen) {
+        uint8_t was = meter_seen >> 4, now = p >> 4;
+        meter_seen = p;
+        if (p == POWER_MAX) {
+            sfx_play(SFX_READY);
+            ready_spark = 40;
+            meter_show = 0;
+            if (!hint_done) {
+                hint_done = 1;
+                hint_timer = HINT_FRAMES;
+            }
+        } else if (p) {
+            meter_show = 60;  // a strike filled it: the pips show a moment
+            if (now > was) sfx_play(SFX_PIP + now - 1);
+        }
+    }
+    if (ready_spark) {
+        ready_spark--;
+        if (vfx_kind == 0xFF) {
+            vfx_start(VFX_SPARK, you_sx + 8, you_sy + cam_y - 12);
+            ready_spark = 0;
+        }
+    }
+    if (sp || goal_timer) hint_timer = 0;
+    uint8_t hx = 0, hy = 0;
+    if (hint_timer) {
+        hint_timer--;
+        int16_t y = you_sy - 20 - (((uint8_t)frame_count >> 3) & 1);  // bobbing over your head
+        if (y > 0 && y < 160 && you_sx > 4 && you_sx < 156) hx = (uint8_t)(you_sx - 4), hy = (uint8_t)y;
+    }
+    for (uint8_t g = 0; g < 3; g++) {
+        move_sprite(OAM_HINT + g, hx, hy);
+        if (hx) hx += 8;
+    }
 }
 
 void hud_update(uint8_t busy) BANKED {
     // The box goes once the serve's tossed (and comes back for the next: on the
     // frame after, hud_pending, not on the serve's set-up, a full frame already).
     if (!paused && !goal_timer && !hud_pending && (phase == PHASE_SERVE) != (hud_mode == HUD_BOX)) hud_draw();
-    // The gauges, under each player's shadow (draw() placed it this frame): yours
-    // 16 px, a pixel for each 4 of the meter, the CPU's 8; full or armed, flashing.
-    // Empty, hidden.
-    for (uint8_t i = 0; i < 2; i++) {
-        uint8_t p = pl_power[i], full = pl_special[i] || p == POWER_MAX;
-        OAM_item_t *s = &shadow_OAM[OAM_PLAYER_SHADOW + (i << 1)];
-        OAM_item_t *o = &shadow_OAM[OAM_GAUGE + (i << 1)];
-        uint8_t y = (p || full) ? s->y + 8 : 0;
-        uint8_t pal = full && (frame_count & 8) ? SPR_PAL_POWER : SPR_PAL_UI;
-        if (i == SIDE_YOU) {
-            uint8_t n = full ? 16 : p >> 2;
-            if (!busy) {
-                gauge_fill(0, n > 8 ? 8 : n);
-                gauge_fill(1, n > 8 ? n - 8 : 0);
-            }
-            o->y = y;
-            o->x = s->x;
-            o->prop = pal;
-            o[1].y = y;
-            o[1].x = s->x + 8;
-            o[1].prop = pal;
-        } else {
-            if (!busy) gauge_fill(2, full ? 8 : p >> 3);
-            o->y = y;
-            o->x = s->x + 4;
-            o->prop = pal;
+    if (paused) return;
+    meter_events();
+    glow_update();
+    // Your meter: four pips in your shadow (16 px, a 3 px pip and a gap each), shown a
+    // moment when a strike adds to it (playtest: "we don't need the power meter to be
+    // persistent"), gold up to where it's filled, dark past; full, all gold while it's
+    // ready; armed, blinking. The CPU's: an 8 px bar, blinking, ready or armed. The
+    // shadow stays grey ("I liked the grey shadows better"). Tiles redrawn only on a
+    // change, off a strike's busy frame.
+    if (meter_show) meter_show--;
+    if (busy) return;
+    uint8_t lit = (frame_count & 8) ? 0xFF : 0;
+    uint8_t on = (pl_special[SIDE_CPU] || pl_power[SIDE_CPU] == POWER_MAX) ? 0xFF : 0, e = on & ~lit;
+    uint8_t key = on & (lit | 0x7F);  // 0 none, 0x7F dark, 0xFF gold
+    gauge_fill(2, key, on & 0x0F, e & 0x0F);
+    gauge_fill(3, key, on & 0xF0, e & 0xF0);
+    uint8_t p = pl_power[SIDE_YOU];
+    if (pl_special[SIDE_YOU]) {
+        gauge_fill(0, 0x80 | (lit & 1), 0xEE, 0xEE & ~lit);
+        gauge_fill(1, 0x80 | (lit & 1), 0xEE, 0xEE & ~lit);
+    } else if (p == POWER_MAX || meter_show) {
+        // Filled pixels: 12 of the pips' at a full meter (p * 3 / 16).
+        uint8_t f = (uint8_t)((p << 1) + p) >> 4, fill[2] = {0, 0};
+        if (f + 1 == gauge_shown[0] && f + 1 == gauge_shown[1]) return;  // (as drawn)
+        for (uint8_t k = 0, n = 0; k < 16; k++) {
+            if ((k & 3) == 3) continue;
+            if (n++ < f) fill[k >> 3] |= 0x80 >> (k & 7);
         }
+        gauge_fill(0, f + 1, 0xEE, 0xEE & ~fill[0]);
+        gauge_fill(1, f + 1, 0xEE, 0xEE & ~fill[1]);
+    } else {
+        gauge_fill(0, 0, 0, 0);
+        gauge_fill(1, 0, 0, 0);
     }
 }

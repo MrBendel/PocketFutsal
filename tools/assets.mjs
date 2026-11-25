@@ -30,7 +30,9 @@
 import fs from 'node:fs';
 import { fullTiles, basicTiles, actionTiles, sideAtlas, CHARACTERS } from './player-art.mjs';
 import {BALL_EXTRA} from './ball-art.mjs';
-import {GOAL_BG} from './goal-background.mjs';
+import {GOAL_BG_ENDS} from './goal-background.mjs';
+import {STADIUM_PITCH,STADIUM_MAP,SCORE_TILES} from './stadium-art.mjs';
+import {REACTION_TILES} from './reaction-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -58,8 +60,10 @@ export const ASSETS = [
   // The court, drawn in code in tools/tile-art.mjs: its unique tiles, plus a
   // 20x21 map (tile indices from mapBase on) and the tiles' palettes.
   { name: 'pitch', bank: true, ascii: PITCH.tiles, map: PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
-  { name: 'futsal_pitch', bank: true, ascii: FUTSAL_PITCH.tiles, map: FUTSAL_PITCH, mapBase: 80, src: 'tools/tile-art.mjs' },
-  { name: 'futsal_goal_bg', bank: true, ascii: GOAL_BG.tiles, map: GOAL_BG, src: 'tools/goal-background.mjs', deps:['tools/tile-art.mjs'] },
+  { name: 'futsal_pitch', bank: true, ascii: STADIUM_PITCH.tiles.slice(0,134), map: STADIUM_MAP, src:'tools/stadium-art.mjs',deps:['tools/tile-art.mjs','artwork/fonts/sports-v1/sports.json','artwork/scoreboard/v3/stadium-scoreboard.json'] },
+  { name: 'futsal_stands', bank:true, ascii:STADIUM_PITCH.tiles.slice(134),src:'tools/stadium-art.mjs',deps:['tools/tile-art.mjs','artwork/fonts/sports-v1/sports.json','artwork/scoreboard/v3/stadium-scoreboard.json'] },
+  { name:'futsal_score',bank:true,ascii:SCORE_TILES,src:'tools/stadium-art.mjs',deps:['artwork/fonts/sports-v1/sports.json','artwork/scoreboard/v3/stadium-scoreboard.json'] },
+  ...['far','near'].map((end,i)=>({name:`futsal_goal_${end}_bg`,bank:true,ascii:GOAL_BG_ENDS[i].tiles,map:GOAL_BG_ENDS[i],src:'tools/goal-background.mjs',deps:['tools/tile-art.mjs','tools/stadium-art.mjs','tools/goal-art.mjs','artwork/goals/v3/native.json','artwork/fonts/sports-v1/sports.json','artwork/scoreboard/v3/stadium-scoreboard.json']})),
   { name: 'futsal_goal', bank: true, ascii: FUTSAL_GOAL, src: 'tools/tile-art.mjs' },
   { name: 'futsal_zone', bank: true, ascii: FUTSAL_ZONE, src: 'tools/tile-art.mjs' },
   // The HUD's charge meter, loaded after the pitch's tiles.
@@ -74,6 +78,7 @@ export const ASSETS = [
   { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
   ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),
   ...CHARACTERS.map(id => ({ name: `action_${id}`, bank: true, ascii: actionTiles(id), src: `artwork/players/roster/${id}/player.json` })),
+  {name:'futsal_reactions',bank:true,ascii:REACTION_TILES,src:'tools/reaction-art.mjs',deps:CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`)},
   { name: 'side_roster', bank: true, ascii: sideAtlas(), src: 'tools/player-art.mjs', deps: CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`) },
   // The mini games (src/mg_*.c): each a background (map from SCENE_TILES on) and
   // its own sprite tiles, drawn in tools/art/mg_*.mjs.

@@ -29,6 +29,15 @@ void vram_queue_write(void);  // vram_queue.s
 uint16_t pal_bg[PAL_COUNT * 4], pal_obj[PAL_COUNT * 4];
 volatile uint8_t pal_dirty;
 void pal_write(void);
+// Sprite palettes changed one colour at a time (gfx_obj_color): a bit each, only
+// those uploaded (8 bytes, not all 128).
+volatile uint8_t pal_obj_mask;
+void pal_write_obj(uint8_t mask);
+void gfx_obj_color(uint8_t p, uint8_t k, uint16_t c) {
+    uint8_t i = (p << 2) + k;
+    pal_base_obj[i] = pal_obj[i] = c;
+    pal_obj_mask |= 1 << p;
+}
 
 // Set by gfx_commit(); the vblank handler only touches the queues when set, so it
 // never sees a half-built frame (e.g. when a frame runs long).
@@ -136,6 +145,10 @@ void gfx_vbl(void) {
     if (pal_dirty) {
         pal_write();
         pal_dirty = 0;
+        pal_obj_mask = 0;
+    } else if (pal_obj_mask) {
+        pal_write_obj(pal_obj_mask);
+        pal_obj_mask = 0;
     }
     if (vram_ready) {
         // The queue writes VRAM bank 0; a load into bank 1 (weapon art) may be

@@ -273,7 +273,8 @@ test('a struck ball leaves a trail: red off A, blue off B, longer charged; it fa
 });
 
 test('no HUD in a rally: the score box (faces, points) before each serve, a banner for the call, the board in the court art', () => {
-  const OAM_GAUGE = 37, BOARD_ROW = 2, BOARD_PTS = 7;
+  const BOARD_ROW = 2, BOARD_PTS = 7;
+  const gauge = (e) => e.read8(0x8000 + 141 * 16 + 2);  // your shadow's lower tile, the bar's outline row: its columns
   const win = (e) => (e.read8(0xFF40) & 0x20 ? e.read8(0xFF4A) : -1);  // the window's line, or -1: off
   const board = (e) => [0, 1, 3, 4].map((k) => e.read8(0x9800 + BOARD_ROW * 32 + BOARD_PTS + k) - 16);  // font: '0' is 16
   const emu = served(startGame());
@@ -286,10 +287,24 @@ test('no HUD in a rally: the score box (faces, points) before each serve, a bann
   const rally = quietRally();
   rally.idle(2);
   assert.equal(win(rally), -1, 'none in a rally');
-  assert.equal(rally.read8(0xFE00 + OAM_GAUGE * 4), 0, 'an empty power meter: no gauge');
+  assert.equal(gauge(rally), 0, 'an empty power meter: no gauge');
   rally.write8(rally.symbols.addr('pl_power') + YOU, 40);
   rally.idle(2);
-  assert.ok(rally.read8(0xFE00 + OAM_GAUGE * 4) > 0, 'some power: a gauge under you');
+  assert.equal(gauge(rally), 0xEE, 'a strike added to it: four pips show a moment');
+  assert.equal(rally.read8(0x8000 + 141 * 16 + 3), 0, 'the first two filled (40 of 64: gold to 7 of 12 px)');
+  rally.idle(70);
+  assert.equal(gauge(rally), 0, 'then gone till the next');
+  const hint = () => rally.read8(0xFE00 + 35 * 4);
+  assert.equal(hint(), 0, 'no hint yet');
+  rally.write8(rally.symbols.addr('pl_power') + YOU, POWER_MAX);
+  rally.idle(2);
+  assert.equal(gauge(rally), 0xEE, 'full: the slam ready, the pips in your shadow while it lasts');
+  assert.equal(rally.read8(rally.symbols.addr('sfx_last')), 15, 'the ready sound (SFX_READY)');
+  assert.ok(hint() > 0, 'the first time in a match: A+B over you');
+  assert.ok(rally.read8(rally.symbols.addr('glow_level')) <= 3, 'your outline pulsing gold');
+  rally.idle(130);
+  assert.equal(hint(), 0, 'the hint gone after a moment');
+  assert.equal(gauge(rally), 0xEE, 'the pips still there: ready');
   // A point: the call along the bottom, the board's digits swapped, then the box.
   for (const [n, v] of [['last_touch', YOU], ['holder', CPU], ['ball_landings', 1], ['ball_netted', 0], ['ball_serve', 0]]) rally.write8(rally.symbols.addr(n), v);
   ballAt(rally, 100, 60, 2);
@@ -303,29 +318,54 @@ test('no HUD in a rally: the score box (faces, points) before each serve, a bann
   assert.equal(win(rally), 136, 'PAUSED along the bottom');
 });
 
-test('a lob (B then A) or a drop shot (A then B) is armed for a moment: struck later it is the curve or the power shot', () => {
+test('a quick roll (B, A or A, B) is a lob or a drop shot, and it stays one; the other button later calls the strike off', () => {
   let emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);  // going away: nothing to strike yet
-  emu.tap('B').idle(30).tap('A');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB, 'armed');
-  emu.idle(30);
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_CURVE, 'lapsed: a curve again');
+  emu.tap('B').tap('A');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB, 'B, A: a lob');
+  emu.idle(40);
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB, 'it stays a lob');
+  const c = at(emu, 'pl_charge', YOU);
   emu.tap('B');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_CURVE, 'B taps it up');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB, 'B again fills the meter, still a lob');
+  assert.equal(at(emu, 'pl_charge', YOU), c + YOU_TAP);
+  emu.tap('A');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_NONE, 'A later: called off');
   emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A').tap('B');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_DROP, 'armed');
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_DROP, 'A, B: a drop shot');
   emu.tap('A');
-  assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER, 'A again disarms it');
-  for (const [wait, want] of [[4, 1], [30, 0]]) {
+  assert.equal(at(emu, 'pl_shot', YOU), SHOT_DROP, 'A again: still a drop shot');
+  for (const [first, other] of [['A', 'B'], ['B', 'A']]) {
     emu = quietRally();
-    ballAt(emu, 80, 60, 0, 0, -10);  // far off in the CPU's half: nothing to strike yet
-    emu.tap('B').idle(20).tap('A').idle(wait);
-    ballAt(emu, 82, 184);  // in reach: struck now
-    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 10, 'the strike');
-    assert.equal(emu.v('ball_lob'), want, want ? 'A just before it: a lob' : 'A too early: a curve');
+    ballAt(emu, 80, 150, 0, 0, -40);
+    emu.tap(first).tap(first).idle(20).tap(other);
+    assert.equal(at(emu, 'pl_shot', YOU), SHOT_NONE, `${first} readied, ${other} later: called off`);
+    assert.equal(at(emu, 'pl_charge', YOU), 0, 'the meter emptied');
+    emu.tap(other);
+    assert.equal(at(emu, 'pl_shot', YOU), first === 'A' ? 2 : 1, 'then it readies afresh');
   }
+  emu = quietRally();
+  ballAt(emu, 80, 60, 0, 0, -10);  // far off in the CPU's half: nothing to strike yet
+  emu.tap('B').tap('A').idle(40);
+  ballAt(emu, 82, 184);  // in reach: struck now
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 10, 'the strike');
+  assert.equal(emu.v('ball_lob'), 1, 'rolled long before it came: still a lob');
+});
+
+test('readied, you are locked from the press: the ball still in the CPU\'s half, the d-pad only aims', () => {
+  const emu = quietRally();
+  ballAt(emu, 80, 60, 0, 0, -10);
+  emu.tap('A');
+  const x = at(emu, 'pl_x', YOU, 'i16'), y = at(emu, 'pl_y', YOU, 'i16');
+  emu.hold('LEFT+UP', 20);
+  assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'not run left');
+  assert.equal(at(emu, 'pl_y', YOU, 'i16'), y, 'nor up');
+  assert.equal(at(emu, 'pl_aim', YOU), 0, 'aimed left');
+  assert.equal(at(emu, 'pl_depth', YOU), 2, 'and deep');
+  emu.tap('B').hold('LEFT', 10);
+  assert.ok(at(emu, 'pl_x', YOU, 'i16') < x, 'B called it off: you run');
 });
 
 test('B then A is a lob, dropping deep behind the CPU', () => {
@@ -336,7 +376,7 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_LOB);
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the lob');
   let top = 0;
-  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 80, 'it landing');
+  emu.until((e) => { top = Math.max(top, px(e.v('ball_z', 'i16'))); return top > 4 && e.v('ball_z', 'i16') === 0; }, 120, 'it landing');
   assert.ok(top >= 24, `up ${top} px`);
   const y = px(emu.v('ball_y', 'i16'));
   assert.ok(y <= 24 && y >= 8, `lands at ${y}, well behind the CPU at 40`);
@@ -344,7 +384,8 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
 
 test('a lob coming down to you: a flashing marker where to meet it; there and queued, you slam it out of the air', () => {
   const emu = quietRally();
-  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  // The marker: the slam zone's middle sprite (29-34) for a slam, the small ring (19) for a drop shot.
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 31) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
@@ -369,27 +410,33 @@ test('a lob coming down to you: a flashing marker where to meet it; there and qu
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
-test('the slam zone: a ring of dots as wide as your leap while the lob is far, closing on the spot as it comes', () => {
+test('the slam zone: three rings, 48 px across, the lit one stepping in to the spot as the lob comes; its palette borrowed and given back', () => {
   const emu = quietRally();
   const oam = (n) => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n + 1), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n)];
-  const spread = () => oam(29)[0] - oam(30)[0];  // the right dot's x less the left's
+  const pal = () => [1, 2, 3].map((k) => at(emu, 'pal_base_obj', 4 * 4 + k, 'u16'));  // the curve trail's, palette 4
+  const before = pal();
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
   emu.idle(6);
   assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
-  assert.ok(oam(29)[1] > 0, 'the dots show');
-  const wide = spread();
-  assert.ok(wide >= 50, `far: as wide as the leap, ${wide} px`);
+  assert.equal(emu.v('zone_on'), 1, 'the zone shows');
+  assert.equal(oam(34)[0] - oam(29)[0], 40, 'six sprites in a row: 48 px across');
+  assert.equal(oam(29)[1], oam(34)[1], 'one row: six on its lines');
+  assert.equal(emu.v('zone_lit'), 0, 'far: the outer ring lit');
+  assert.notDeepEqual(pal(), before, 'the palette borrowed');
   matchGolden(emu, 'slam-zone');
+  emu.until((e) => e.v('zone_lit') === 1, 200, 'the middle ring');
   emu.until((e) => Math.abs(px(e.v('ball_y', 'i16')) - at(e, 'meet_y', YOU, 'i16')) <= 4, 200, 'it reaching the spot');
-  assert.ok(spread() <= 22, `at the spot: closed in, ${spread()} px (from ${wide})`);
+  assert.equal(emu.v('zone_lit'), 2, 'there: the spot lit');
+  assert.equal(oam(19)[1], 0, 'no small ring meanwhile');
   emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
   emu.idle(2);
   assert.equal(oam(29)[1], 0, 'gone once it lands');
+  assert.deepEqual(pal(), before, 'the palette given back');
 });
 
-test('charged for a slam (two presses), you leap at a lob coming down well outside your reach', () => {
+test('charged for a slam (four presses), you leap at a lob coming down well outside your reach', () => {
   const leap = (charge) => {
     const emu = quietRally();
     incoming(emu, 104, 196, 0, -6);  // 24 px across, 6 behind you, coming down
@@ -399,11 +446,11 @@ test('charged for a slam (two presses), you leap at a lob coming down well outsi
     emu.idle(3);
     return emu;
   };
-  const yes = leap(8);
+  const yes = leap(16);
   assert.equal(at(yes, 'pl_shots', YOU), 1, 'leapt and struck it');
   assert.equal(at(yes, 'pl_last_move', YOU), MOVE_BICYCLE, 'a slam: a jumping bicycle kick');
   assert.equal(yes.v('ball_power'), 1, 'on fire');
-  assert.equal(at(leap(4), 'pl_shots', YOU), 0, 'one press: no leap');
+  assert.equal(at(leap(8), 'pl_shots', YOU), 0, 'two presses: no leap (a slam takes mashing)');
 });
 
 test('a slam by the button: A red, B blue (bending), both gold (faster; only a full meter meets it clean)', () => {
@@ -461,9 +508,9 @@ test('a drop shot coming to you shows where to meet it, after its bounce too', (
   assert.ok(marker(emu) > 0, 'still shown off the bounce');
 });
 
-test('bursts: an impact star off a slam, dust off a slide, sparks off the net', () => {
+test('bursts: an impact star off a slam and sparks where it lands, dust off a slide, sparks off the net', () => {
   const oam = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 20);
-  const VFX = { SLAM: 0, FIRE: 1, DUST: 2, SPARK: 3 };
+  const VFX = { SLAM: 0, FIRE: 1, DUST: 2, SPARK: 3, SPRAY: 4 };
   let emu = quietRally();
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
@@ -475,8 +522,15 @@ test('bursts: an impact star off a slam, dust off a slide, sparks off the net', 
   assert.equal(emu.v('vfx_kind'), VFX.SLAM);
   emu.idle(3);
   assert.ok(oam(emu) > 0 || emu.read8(emu.symbols.addr('shadow_OAM') + 4 * 21) > 0, 'drawn');
-  emu.idle(20);
+  emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'the slam landing');
+  assert.equal(emu.v('vfx_kind'), VFX.SPRAY, 'sparks fly up where it lands');
+  emu.idle(3);
+  const vis = [];
+  for (let k = 20; k < 28; k++) if (emu.read8(emu.symbols.addr('shadow_OAM') + 4 * k)) vis.push(k);
+  assert.ok(vis.length >= 3, `drawn in the burst's 8 sprites: ${vis}`);
+  emu.idle(24);
   assert.equal(emu.v('vfx_kind'), 255, 'over');
+  for (let k = 20; k < 28; k++) assert.equal(emu.read8(emu.symbols.addr('shadow_OAM') + 4 * k), 0, `sprite ${k} hidden`);
   emu = quietRally();
   ballAt(emu, 112, 150, 0, 0, 48);
   emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
@@ -843,20 +897,46 @@ test('running side to side costs you: a turn skids first', () => {
   assert.ok(vx() < -8, `then off the other way: ${vx()}`);
 });
 
-test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
+test('rushing the net: a ball over it high, mashed four times, is smashed down short, and the CPU can only pop it up', () => {
+  const shot = (youY, presses) => {
+    const emu = quietRally();
+    placePlayer(emu, YOU, 78, youY);
+    placePlayer(emu, CPU, 80, 30);
+    ballAt(emu, 80, 70, 16, 0, 44);
+    set16(emu, 'ball_vz', 8);
+    for (let k = 0; k < presses; k++) emu.tap('A').idle(1);
+    emu.until((e) => at(e, 'pl_shots', YOU) > 0, 60, 'the strike');
+    emu.idle(1);
+    return emu;
+  };
+  const speed = (e) => Math.abs(e.v('ball_vx', 'i16')) + Math.abs(e.v('ball_vy', 'i16'));
+  const emu = shot(132, 4);
+  assert.equal(at(emu, 'pl_last_move', YOU), MOVE_BICYCLE, 'a bicycle kick');
+  assert.equal(speed(emu), 72, "at your slam's speed");
+  assert.equal(emu.v('ball_smash'), 1);
+  emu.until((e) => e.v('ball_landings') > 0, 30, 'it landing');
+  const landY = px(emu.v('ball_y', 'i16'));
+  assert.ok(landY > HALFWAY - 48 && landY < HALFWAY, `down short, past the net: ${landY}`);
+  assert.ok(emu.v('ball_vz', 'i16') >= 28, 'and it kicks up high');
+  emu.write8(emu.symbols.addr('cpu_idle'), 0);
+  emu.until((e) => at(e, 'pl_shots', CPU) > 0 || e.v('goal_timer'), 200, 'the CPU at it');
+  if (!emu.v('goal_timer')) assert.equal(emu.v('ball_pop'), 1, 'only a full meter meets it clean: the CPU pops it up');
+  assert.ok(speed(shot(132, 2)) < 72, 'two presses: no smash');
+  assert.ok(speed(shot(160, 4)) < 72, 'back from the net: no smash');
+});
+
+test('between shots you stay where you are; a volley right at the net stays low and lands in', () => {
   let emu = quietRally();
-  placePlayer(emu, YOU, 40, 124);  // up at the net
+  placePlayer(emu, YOU, 40, 124);  // up at the net, off to the left
   ballAt(emu, 80, 60, 20, 0, -4);  // going away, slowly, high
   set16(emu, 'ball_vz', 40);
-  emu.idle(20);
-  const y0 = px(at(emu, 'pl_y', YOU, 'i16'));
-  assert.ok(y0 > 126, `jogging back: ${y0}`);
-  emu.hold('UP', 12);
-  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) < y0 + 4, 'the d-pad still takes you anywhere');
-  emu.idle(90);
+  const x0 = px(at(emu, 'pl_x', YOU, 'i16')), y0 = px(at(emu, 'pl_y', YOU, 'i16'));
+  emu.idle(60);
   assert.equal(emu.v('goal_timer'), 0, 'still in play');
-  const x = px(at(emu, 'pl_x', YOU, 'i16')), y = px(at(emu, 'pl_y', YOU, 'i16'));
-  assert.ok(y > 170 && x > 60 && x < 100, `back home: (${x}, ${y})`);
+  assert.equal(px(at(emu, 'pl_x', YOU, 'i16')), x0, 'no jog to the middle');
+  assert.equal(px(at(emu, 'pl_y', YOU, 'i16')), y0, 'or back');
+  emu.hold('DOWN', 12);
+  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) > y0 + 4, 'the d-pad takes you');
   emu = quietRally();
   placePlayer(emu, YOU, 50, 122);
   ballAt(emu, 52, 116, 10, 0, 6);  // dropping onto your foot at net height
@@ -952,13 +1032,19 @@ test('the power meter: clean strikes in a rally fill it; full, A+B arms the powe
   arm.hold('A+B', 1);
   assert.equal(at(arm, 'pl_special', YOU), 1, 'armed');
   assert.equal(at(arm, 'pl_power', YOU), 0, 'the meter spent');
+  arm.idle(1);
+  assert.ok(arm.v('glow_level') >= 1, 'armed: your outline glowing (a fast pulse, brighter)');
   arm.until((e) => { e.idle(1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
   arm.idle(1);
   assert.equal(arm.v('ball_special'), 1, 'the power slam');
   assert.equal(arm.v('ball_gold'), 1);
-  assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 64, 'faster than a gold slam');
+  assert.equal(Math.abs(arm.v('ball_vx', 'i16')) + Math.abs(arm.v('ball_vy', 'i16')), 88, 'faster than a gold slam');
   assert.ok(arm.v('ball_vy', 'i16') < 0, 'up the court');
   assert.equal(at(arm, 'pl_special', YOU), 0, 'used');
+  arm.idle(2);
+  assert.equal(arm.v('glow_level'), 5, 'struck: the glow snaps off in a white flash');
+  arm.idle(8);
+  assert.equal(arm.v('glow_level'), 0, 'then the outline as it was');
   const notFull = quietRally();
   notFull.write8(notFull.symbols.addr('pl_power') + YOU, POWER_MAX - 1);
   incoming(notFull, 82, 130, 40, 0);
@@ -988,9 +1074,9 @@ test("the CPU's power slam: only a press timed to within 5 frames of it reaching
   assert.equal(comeAt([48, 20]), 'down', 'one try: a second press does not count');
 });
 
-test('screen: the power meter, a gauge under you, half full', () => {
+test('screen: the power slam ready: the pips, your outline gold, A+B over you', () => {
   const emu = quietRally();
-  emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX / 2);
+  emu.write8(emu.symbols.addr('pl_power') + YOU, POWER_MAX);
   incoming(emu, 80, 40, 30, 60);
   emu.tap('A').tap('A');
   matchGolden(emu.idle(4), 'power-meter');

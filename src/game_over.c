@@ -7,6 +7,7 @@
 #include "gfx.h"
 #include "game.h"
 #include "scene_text.h"
+#include "futsal_results.h"
 
 #define INPUT_DELAY 30  // frames before START counts
 
@@ -19,7 +20,7 @@ void game_over_enter(void) BANKED {
     fill_bkg_rect(0, 0, 32, 32, TITLE_PAL_TEXT);
     VBK_REG = 0;
     uint8_t t = SCENE_TILES;
-    t += draw(FONT_DISPLAY, TEXT_CENTER, 4, game_mode ? (winner == SIDE_YOU ? "BLUE WINS!" : "RED WINS!") : (winner == SIDE_YOU ? "YOU WIN!" : "CPU WINS"), t, TITLE_PAL_GOLD);
+    t += draw(FONT_DISPLAY, TEXT_CENTER, game_mode?3:4, game_mode ? (winner == SIDE_YOU ? "BLUE WINS!" : "RED WINS!") : (winner == SIDE_YOU ? "YOU WIN!" : "CPU WINS"), t, TITLE_PAL_GOLD);
     // "YOU 11 - 7 CPU": the last set's points, one or two digits each; for the
     // best of three, "SETS 2 - 1" under it.
     char line[16];
@@ -33,17 +34,23 @@ void game_over_enter(void) BANKED {
     }
     line[n++] = ' ', line[n++] = game_mode ? 'R' : 'C', line[n++] = game_mode ? 'E' : 'P', line[n++] = game_mode ? 'D' : 'U';
     line[n] = 0;
-    t += text_draw(FONT_COMPACT, TEXT_CENTER, 8, line, t, TITLE_PAL_TEXT);
+    t += text_draw(FONT_COMPACT, TEXT_CENTER, game_mode?6:8, line, t, TITLE_PAL_TEXT);
     if (match_sets > 1) {
         char sl[] = "SETS 0 - 0";
         sl[5] = '0' + sets[SIDE_YOU];
         sl[9] = '0' + sets[SIDE_CPU];
         t += text_draw(FONT_COMPACT, TEXT_CENTER, 10, sl, t, TITLE_PAL_TEXT);
     }
-    draw(FONT_COMPACT, TEXT_CENTER, 14, "PRESS START", t, TITLE_PAL_TEXT);
+    if(game_mode){
+        t+=draw(FONT_COMPACT,8,9,"BLUE",t,TITLE_PAL_TEXT);
+        t+=draw(FONT_COMPACT,8,13,"RED",t,TITLE_PAL_TEXT);
+        draw(FONT_COMPACT,TEXT_CENTER,17,"PRESS START",t,TITLE_PAL_TEXT);
+        futsal_results_enter();
+    }else draw(FONT_COMPACT, TEXT_CENTER, 14, "PRESS START", t, TITLE_PAL_TEXT);
 }
 
 void game_over_update(void) BANKED {
+    if(game_mode)futsal_results_update();
     if (game_over_timer < INPUT_DELAY) {
         game_over_timer++;
         return;
