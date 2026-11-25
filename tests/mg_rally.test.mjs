@@ -1,5 +1,6 @@
-// WALL RALLY (src/mg_rally.c): 1v1 Wall Squash vs CPU (first to 5 pts) + Solo
-// endless rebound streak, tin faults, double-bounce points, stat scaling, frame
+// WALL RALLY (src/mg_rally.c): Futnet-paced 1v1 Wall Squash vs CPU (first to 5)
+// + Solo endless rebound streak, 3/4-SUB gravity, first-bounce sit-up hangtime,
+// planting & tap-charging, diving slide saves, tin faults, stat scaling, frame
 // budget, and golden screens.
 import { test } from 'node:test';
 import { assert, matchGolden, FRAME_LIMIT, px, set16 } from './helpers.mjs';
@@ -21,7 +22,7 @@ function readDetail(e) {
   return s;
 }
 
-test('VS CPU squash: alternating wall rebounds between YOU and CPU, bounce reticle, and golden', () => {
+test('VS CPU squash: Futnet-paced alternating rebounds, first-bounce hangtime, and golden', () => {
   const e = startMinigame(MG.RALLY, 4242, { vs: true });
   assert.equal(e.v('mg_vs'), 1);
   goLive(e);
@@ -44,14 +45,57 @@ test('VS CPU squash: alternating wall rebounds between YOU and CPU, bounce retic
   assert.equal(e.v('mg_rally_ball'), BALL_TO_WALL, 'YOU struck ball toward the wall');
   assert.equal(e.v('mg_rally_last'), 0);
 
-  // Wait for wall rebound -> turn switches to CPU (1), and CPU returns it back to wall!
-  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL, 60, 'ball rebounds off wall');
+  // Measure frames to the wall: should match Futnet's measured ~36-44f flight, not instant!
+  let toWallFrames = 0;
+  while (e.v('mg_rally_ball') === BALL_TO_WALL && toWallFrames < 100) {
+    e.idle(1);
+    toWallFrames++;
+  }
+  assert.equal(e.v('mg_rally_ball'), BALL_FROM_WALL);
+  assert.ok(toWallFrames >= 34 && toWallFrames <= 48, `Futnet-paced flight to wall: ${toWallFrames}f`);
   assert.equal(e.v('mg_rally_turn'), 1, 'turn alternates to CPU after wall rebound');
   assert.equal(e.v('mg_rally_streak'), 1);
 
-  e.until((em) => em.v('mg_rally_ball') === BALL_TO_WALL && em.v('mg_rally_last') === 1, 90, 'CPU strikes rebound');
-  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL && em.v('mg_rally_turn') === 0, 60, 'CPU shot rebounds back to YOU');
+  // CPU tracks, plants, and returns the rebound at Futnet pace -> rebounds back to YOU!
+  e.until((em) => em.v('mg_rally_ball') === BALL_TO_WALL && em.v('mg_rally_last') === 1, 150, 'CPU strikes rebound');
+  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL && em.v('mg_rally_turn') === 0, 100, 'CPU shot rebounds back to YOU');
   assert.equal(e.v('mg_rally_streak'), 2);
+
+  // Move YOU out of the way and verify unplayed rebound hangs >= 75 frames before 2nd bounce!
+  set16(e, 'mg_rally_px', 12 * 16);
+  set16(e, 'mg_rally_bx', 120 * 16);
+  let aliveFrames = 0;
+  while (e.v('mg_rally_ball') === BALL_FROM_WALL && aliveFrames < 180) {
+    e.idle(1);
+    aliveFrames++;
+  }
+  assert.ok(aliveFrames >= 75, `Futnet-paced rebound + sit-up hangtime: ${aliveFrames}f (expected >= 75f)`);
+});
+
+test('Futnet movement: planting locks position to aim, and wide ball triggers diving slide save', () => {
+  const e = startMinigame(MG.RALLY, 999, { vs: false });
+  goLive(e);
+  e.idle(4);
+
+  // Pressing A while ball is incoming plants YOU (pl_shot !== 0) and shows wall aim reticle.
+  set16(e, 'mg_rally_px', 80 * 16);
+  set16(e, 'mg_rally_pd', 88 * 16);
+  set16(e, 'mg_rally_bx', 108 * 16);  // 28 px wide (outside normal reach 16, inside SLIDE_REACH 36!)
+  set16(e, 'mg_rally_bd', 70 * 16);
+  set16(e, 'mg_rally_bz', 10 * 16);
+  set16(e, 'mg_rally_vx', 0);
+  set16(e, 'mg_rally_vd', 20);
+  set16(e, 'mg_rally_vz', 4);
+  e.tap('A');
+  assert.ok(e.v('pl_shot') !== 0, 'pressing A plants YOU');
+  // Holding LEFT while planted aims left without moving your feet!
+  const plantedX = e.v('mg_rally_px', 'i16');
+  e.hold('LEFT', 3);
+  assert.equal(e.v('mg_rally_px', 'i16'), plantedX, 'planted feet stay locked while aiming');
+
+  // As the wide ball crosses our depth, YOU automatically lunge into a Futnet slide and return it!
+  e.until((em) => em.v('mg_rally_slide') > 0, 40, 'diving slide triggered');
+  e.until((em) => em.v('mg_rally_ball') === BALL_TO_WALL, 30, 'slide reaches and returns ball to wall');
 });
 
 test('VS CPU faults & win: tin fault (< 8 px) and double bounce award points; 5 points wins', () => {
@@ -74,13 +118,13 @@ test('VS CPU faults & win: tin fault (< 8 px) and double bounce award points; 5 
   assert.equal(e.v('mg_rally_you_pts'), 1, 'CPU tin fault awards YOU a point');
 
   // 2) Wait for next serve, then force a double bounce on CPU's turn at 4-2 -> 5-2 match win!
-  e.until((em) => em.v('mg_rally_ball') !== BALL_DEAD, 60, 'next serve');
+  e.until((em) => em.v('mg_rally_ball') !== BALL_DEAD, 80, 'next serve');
   e.write8(e.symbols.addr('mg_rally_you_pts'), 4);
   e.write8(e.symbols.addr('mg_rally_cpu_pts'), 2);
   set16(e, 'mg_rally_cx', 140 * 16);
   set16(e, 'mg_rally_bx', 20 * 16);
   set16(e, 'mg_rally_bd', 76 * 16);
-  set16(e, 'mg_rally_bz', 2 * 16);
+  set16(e, 'mg_rally_bz', 1 * 16);
   set16(e, 'mg_rally_vx', 0);
   set16(e, 'mg_rally_vd', 8);
   set16(e, 'mg_rally_vz', -8);
@@ -110,7 +154,7 @@ test('SOLO mode: every rebound comes back to YOU, power adds +2, and 3 misses en
   set16(e, 'mg_rally_bd', yd - 32);
   set16(e, 'mg_rally_bz', 6 * 16);
   e.tap('A');
-  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL, 60, 'solo rebound');
+  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL, 80, 'solo rebound');
   assert.equal(e.v('mg_rally_turn'), 0, 'in SOLO mode every rebound returns to YOU');
   assert.equal(e.v('mg_rally_points', 'u16'), 1);
 
@@ -120,7 +164,7 @@ test('SOLO mode: every rebound comes back to YOU, power adds +2, and 3 misses en
   set16(e, 'mg_rally_bz', 6 * 16);
   e.write8(e.symbols.addr('mg_rally_charge'), 48);
   e.tap('A');
-  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL, 60, 'power solo rebound');
+  e.until((em) => em.v('mg_rally_ball') === BALL_FROM_WALL, 80, 'power solo rebound');
   assert.equal(e.v('mg_rally_points', 'u16'), 3, 'power shot scores +2');
 
   // 3rd miss ends the solo run and records BEST RALLY detail.
@@ -162,7 +206,7 @@ test('REFLEX increases speed and reach; POWER accelerates charge; busy rally fit
     const keys = [];
     if (px0 < tx0 - 3) keys.push('RIGHT');
     else if (px0 > tx0 + 3) keys.push('LEFT');
-    if (f % 16 < 8) keys.push((f & 16) ? 'B' : 'A');
+    if (f % 24 === 0) keys.push((f & 16) ? 'B' : 'A');
     eHigh.hold(keys, 1);
     if (eHigh.lastFrameCycles > peak) peak = eHigh.lastFrameCycles;
   }

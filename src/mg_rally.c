@@ -1,16 +1,14 @@
 #pragma bank 255
 // WALL RALLY (MG_RALLY): street-futsal / squash rebound wall mini game!
-// Supports BOTH:
+// Tuned to match Futnet Singles' exact pace, 3/4-SUB gravity, first-bounce
+// hangtime, Mario Tennis momentum/skid, planting & tap-charging, and slide saves.
+//
+// Modes (toggled on brief card via mg_vs):
 //   - VS CPU (mg_vs == 1, default): 1v1 Wall Squash! Alternate hitting rebounds
-//     above the red tin line (z >= 8). Power drives, curves, and short drops
-//     force your rival to miss or double-bounce. First to 5 points wins!
-//   - SOLO   (mg_vs == 0): Endless rebound streak! Every rebound comes back to
-//     you faster as your streak climbs. 3 misses and you are out!
+//     above the red tin line (z >= 8). First to 5 points wins!
+//   - SOLO   (mg_vs == 0): Endless rebound streak! 3 misses and you are out.
 //
-// Reuses bank-0 futnet_core (fc_step_move, fc_ready, fc_charge_pal, fc_curve_step,
-// fc_trail_draw) so movement momentum, charging flashes, and trails match Futnet.
-//
-// Stats trained: REFLEX (primary: speed + reach) + POWER (secondary: charge + drive).
+// Stats trained: REFLEX (speed + reach) + POWER (charge rate + power drive).
 #include <gb/gb.h>
 #include <gb/cgb.h>
 #include <string.h>
@@ -26,31 +24,37 @@
 #include "mg_rally_bg.h"
 #include "mg_rally_spr.h"
 
-// --- court constants (world px and SUB = 16ths) ---
-#define GRAV 2
+// --- court & Futnet-matched physics constants (world px, SUB = 16ths) ---
+// Gravity is 3/4 SUB/frame (3 frames in 4, exact Futnet gravity!) so arcs and
+// bounces hang in the air with the exact ~1.3s Mario Tennis / Futnet rhythm.
 #define WALL_FOOT 56
-#define TIN_Z 8           // hitting the wall below z = 8 px clangs the red tin (fault!)
+#define TIN_Z 8            // hitting the wall below z = 8 px clangs the red tin (fault!)
 #define PL_D_MIN 46
 #define PL_D_MAX 104
 #define PL_X_MIN 10
 #define PL_X_MAX 150
 #define BALL_X_MIN 6
 #define BALL_X_MAX 154
-#define D_OUT 118         // rolling/flying past baseline without 2nd bounce
-#define REACH_FWD 11
-#define REACH_BACK 9
-#define REACH_Z 30
-#define KICK_FRAMES 12
-#define CHARGE_FULL 48
+#define D_OUT 118          // past baseline
+#define REACH_FWD 10
+#define REACH_BACK 8
+#define REACH_Z 32
+#define SLIDE_REACH 36     // planted out of reach: diving slide save!
+#define SLIDE_FRAMES 22
+#define KICK_FRAMES 14     // matches Futnet KICK_FRAMES
+#define BOUNCE_MIN 20      // Futnet first-bounce sit-up (~52 frames hangtime)
+#define DROP_HOP 14        // Futnet drop-shot low hop (~38 frames)
+#define LOB_BOUNCE 24      // high wall lob bounce
+#define BOUNCE_DEAD 4
 #define WIN_PTS 5
 #define SOLO_LIVES 3
-#define WAIT_SERVE 42
+#define WAIT_SERVE 50
 
 // Ball states.
-#define BALL_WAIT 0       // between points / waiting to serve
-#define BALL_TO_WALL 1    // struck toward the rebound wall
-#define BALL_FROM_WALL 2  // rebounded off the wall: next player's turn!
-#define BALL_DEAD 3       // point ended (tin fault or 2nd bounce), rolling out
+#define BALL_WAIT 0        // between points / waiting to serve
+#define BALL_TO_WALL 1     // struck toward the rebound wall
+#define BALL_FROM_WALL 2   // rebounded off the wall: next player's turn!
+#define BALL_DEAD 3        // point ended (tin fault or 2nd bounce), rolling out
 
 // Popup callouts.
 #define POP_NONE 0
@@ -69,11 +73,11 @@
 #define RT_U 14
 
 // OAM slots (14..39).
-#define OAM_MARK OAM_MG_FREE         // 14: bounce marker / aim marker
-#define OAM_STAR (OAM_MG_FREE + 1)   // 15: wall impact starburst
-#define OAM_POP (OAM_MG_FREE + 2)    // 16..18: 3-letter callout ("PT!", "TIN", "OUT")
-#define OAM_TRAIL (OAM_MG_FREE + 5)  // 19..22: 4-dot Futnet shot trail
-#define OAM_LAST (OAM_MG_FREE + 8)
+#define OAM_MARK OAM_MG_FREE         // 14: floor bounce marker on YOUR turn
+#define OAM_AIM (OAM_MG_FREE + 1)    // 15: wall aim marker while planted
+#define OAM_STAR (OAM_MG_FREE + 2)   // 16: wall impact starburst
+#define OAM_POP (OAM_MG_FREE + 3)    // 17..19: 3-letter callout ("PT!", "TIN", "OUT")
+#define OAM_TRAIL (OAM_MG_FREE + 6)  // 20..23: 4-dot Futnet shot trail
 
 // Perspective lookup tables (every 2 px of depth 0..126, matching tools/art/mg_rally.mjs).
 static const uint8_t gy_tab[64] = {
@@ -88,12 +92,12 @@ static const uint8_t s_tab[64] = {
     119, 119, 120, 121, 121, 122, 122, 123, 124, 124, 125, 126, 126, 127, 127, 128, 129, 129,
     130, 130, 131, 132, 132, 133, 134, 134, 135,
 };
-// round(128 * 16 / t) for t = 14 .. 45: velocity in SUB/frame = (delta_px * rcp) >> 7.
-static const uint8_t rcp_tab[32] = {
-    146, 137, 128, 120, 114, 108, 102, 98, 93, 89, 85, 82, 79, 76, 73, 71, 68, 66,
-    64, 62, 60, 58, 57, 55, 54, 52, 51, 50, 49, 48, 47, 45,
+// round(128 * 16 / t) for t = 18 .. 57 (40 entries): vel_sub = (delta_px * RCP(t)) >> 7.
+static const uint8_t rcp_tab[40] = {
+    114, 108, 102, 98, 93, 89, 85, 82, 79, 76, 73, 71, 68, 66, 64, 62, 60, 58, 57, 55,
+    54, 53, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 39, 38, 37, 37, 36,
 };
-#define RCP(t) rcp_tab[(t) - 14]
+#define RCP(t) rcp_tab[(t) - 18]
 
 // Background palettes 0..4 (matching tools/art/mg_rally.mjs).
 #define C(r, g, b) RGB8(r, g, b)
@@ -109,11 +113,13 @@ static const uint16_t ui_pal[4] = {0, C(255, 232, 64), C(232, 136, 24), C(40, 24
 // --- watchable state ---
 int16_t mg_rally_bx, mg_rally_bd, mg_rally_bz;
 int16_t mg_rally_vx, mg_rally_vd, mg_rally_vz;
+uint8_t mg_rally_fall;       // 3-frames-in-4 gravity counter (exact Futnet ball_fall!)
 uint8_t mg_rally_ball;       // BALL_*
 uint8_t mg_rally_turn;       // 0 = YOU next strike, 1 = CPU next strike
 uint8_t mg_rally_last;       // 0 = YOU struck to wall, 1 = CPU struck to wall
 uint8_t mg_rally_bounces;    // floor bounces since wall rebound
 uint8_t mg_rally_drop;       // 1 if shot to wall is a soft drop
+uint8_t mg_rally_lob;        // 1 if shot to wall is a high lob
 int16_t mg_rally_px, mg_rally_pd;
 int16_t mg_rally_cx, mg_rally_cd;
 int16_t mg_rally_land_x, mg_rally_land_d;  // predicted first bounce (world px)
@@ -124,8 +130,10 @@ uint8_t mg_rally_misses;
 uint8_t mg_rally_server;
 uint8_t mg_rally_wait;
 uint8_t mg_rally_charge, mg_rally_charging;
-uint8_t mg_rally_swing;      // buffered swing frames
+uint8_t mg_rally_swing;      // buffered swing frames when tapped unplanted
 uint8_t mg_rally_kick, mg_rally_ckick;
+uint8_t mg_rally_slide, mg_rally_cslide;
+int8_t mg_rally_slide_vx;
 uint8_t mg_rally_walk, mg_rally_cwalk;
 uint8_t mg_rally_cface;
 uint8_t mg_rally_star, mg_rally_pop, mg_rally_pop_kind;
@@ -166,54 +174,85 @@ static uint8_t put_str(uint8_t at, const char *s) {
 }
 
 static void predict_bounce(void) {
-    // Step a fast 24-iter copy of (bx, bd, bz, vz) to find where the rebound first hits z <= 0.
+    // Fast 2-frames-per-step trace under 3/4 SUB/frame gravity (up to 80 frames).
     int16_t x = mg_rally_bx, d = mg_rally_bd, z = mg_rally_bz;
     int16_t vx = mg_rally_vx, vd = mg_rally_vd, vz = mg_rally_vz;
-    for (uint8_t k = 0; k < 28; k++) {
+    uint8_t fall = mg_rally_fall;
+    for (uint8_t k = 0; k < 40; k++) {
         x += vx << 1;
         d += vd << 1;
-        vz -= GRAV << 1;
-        z += (vz << 1) + GRAV;
+        if (++fall & 3) vz--;
+        z += vz;
+        if (++fall & 3) vz--;
+        z += vz;
         if (x < (BALL_X_MIN << 4)) { x = BALL_X_MIN << 4; vx = -vx; }
         else if (x > (BALL_X_MAX << 4)) { x = BALL_X_MAX << 4; vx = -vx; }
         if (z <= 0) break;
     }
-    mg_rally_land_x = clamp16(x >> 4, 14, 146);
-    mg_rally_land_d = clamp16(d >> 4, PL_D_MIN, PL_D_MAX);
+    mg_rally_land_x = clamp16(x >> 4, 16, 144);
+    mg_rally_land_d = clamp16(d >> 4, PL_D_MIN, PL_D_MAX - 4);
 }
 
-// Serve the ball cleanly off the wall to start a rally!
+// Launch toward the wall over `t` frames (18..57) under 3/4 SUB/frame gravity.
+static void launch_to_wall(uint8_t who, int16_t tx, int16_t tz, uint8_t t,
+                           uint8_t curve, uint8_t power, uint8_t drop, uint8_t lob) {
+    if (t < 18) t = 18;
+    if (t > 57) t = 57;
+    fc_ball_plain();
+    if (mg_rally_bz < (3 << 4)) mg_rally_bz = 3 << 4;
+    if (curve) {
+        int8_t side = tx < 64 ? -1 : tx > 96 ? 1 : ((mg_rally_bx >> 4) < 80 ? 1 : -1);
+        int16_t wide_tx = tx - side * 28;
+        mg_rally_vx = (int16_t)((wide_tx - (mg_rally_bx >> 4)) * RCP(t)) >> 7;
+        ball_curve = side > 0 ? 10 : -10;
+        ball_curve_t = t;
+    } else {
+        mg_rally_vx = (int16_t)((tx - (mg_rally_bx >> 4)) * RCP(t)) >> 7;
+    }
+    int16_t d_px = mg_rally_bd >> 4;
+    if (d_px < 6) d_px = 6;
+    mg_rally_vd = -((int16_t)(d_px * RCP(t)) >> 7);
+    // Exact 3/4-gravity vertical velocity to arrive at height `tz` after `t` frames:
+    mg_rally_vz = (((int16_t)(tz - (mg_rally_bz >> 4)) * RCP(t)) >> 7) + ((3 * (int16_t)(t + 1)) >> 3);
+    mg_rally_ball = BALL_TO_WALL;
+    mg_rally_last = who;
+    mg_rally_drop = drop;
+    mg_rally_lob = lob;
+    mg_rally_bounces = 0;
+    ball_power = power;
+    ball_trail = (drop || lob) ? 0 : (curve ? TRAIL_CURVE : TRAIL_POWER);
+    trail_len = power ? FC_TRAIL_MAX : 2;
+    trail_n = 0;
+    sfx_play(power ? SFX_POWER : ((drop || lob) ? SFX_TOUCH : SFX_KICK));
+}
+
+// Serve the ball cleanly off the wall at Futnet pace to start a rally!
 static void serve_ball(void) {
     fc_ball_plain();
     mg_rally_charge = mg_rally_charging = mg_rally_swing = 0;
+    mg_rally_slide = mg_rally_cslide = 0;
     fc_unready(SIDE_YOU);
+    fc_unready(SIDE_CPU);
     mg_rally_bounces = 0;
-    mg_rally_drop = 0;
+    mg_rally_drop = mg_rally_lob = 0;
     mg_rally_streak = 0;
 
     if (mg_vs && mg_rally_server == 1) {
-        // CPU serves toward the wall!
         mg_rally_bx = mg_rally_cx;
         mg_rally_bd = mg_rally_cd - (4 << 4);
         mg_rally_bz = 6 << 4;
-        int16_t tx = (mg_rally_px >> 4) < 80 ? 112 : 48;
-        uint8_t t = 26;
-        mg_rally_vx = (int16_t)((tx - (mg_rally_bx >> 4)) * RCP(t)) >> 7;
-        mg_rally_vd = -((int16_t)((mg_rally_bd >> 4) * RCP(t)) >> 7);
-        mg_rally_vz = ((int16_t)((22 - 6) * RCP(t)) >> 7) + t + 1;
-        mg_rally_ball = BALL_TO_WALL;
-        mg_rally_last = 1;
+        int16_t tx = (mg_rally_px >> 4) < 80 ? 108 : 52;
+        launch_to_wall(1, tx, 24, 40, 0, 0, 0, 0);
         mg_rally_ckick = KICK_FRAMES;
-        sfx_play(SFX_KICK);
     } else {
-        // Feed comes cleanly off the wall to YOU to start!
         int16_t sx = 56 + ((uint8_t)rand() & 47);
         mg_rally_bx = sx << 4;
         mg_rally_bd = 2 << 4;
-        mg_rally_bz = 22 << 4;
+        mg_rally_bz = 24 << 4;
         mg_rally_vx = ((mg_rally_px - mg_rally_bx) >> 6);
         mg_rally_vd = 20;
-        mg_rally_vz = 14;
+        mg_rally_vz = 6;
+        mg_rally_fall = 0;
         mg_rally_ball = BALL_FROM_WALL;
         mg_rally_last = 1;
         mg_rally_turn = 0;
@@ -222,82 +261,59 @@ static void serve_ball(void) {
     }
 }
 
-static void launch_to_wall(uint8_t who, int16_t tx, int16_t tz, uint8_t t, uint8_t curve, uint8_t power, uint8_t drop) {
-    if (t < 15) t = 15;
-    if (t > 42) t = 42;
-    fc_ball_plain();
-    if (mg_rally_bz < (2 << 4)) mg_rally_bz = 2 << 4;
-    if (curve) {
-        int8_t side = tx < 64 ? -1 : tx > 96 ? 1 : ((mg_rally_bx >> 4) < 80 ? 1 : -1);
-        int16_t wide_tx = tx - side * 24;
-        mg_rally_vx = (int16_t)((wide_tx - (mg_rally_bx >> 4)) * RCP(t)) >> 7;
-        ball_curve = side > 0 ? 12 : -12;
-        ball_curve_t = t;
-    } else {
-        mg_rally_vx = (int16_t)((tx - (mg_rally_bx >> 4)) * RCP(t)) >> 7;
-    }
-    int16_t d_px = mg_rally_bd >> 4;
-    if (d_px < 4) d_px = 4;
-    mg_rally_vd = -((int16_t)(d_px * RCP(t)) >> 7);
-    mg_rally_vz = ((int16_t)((tz - (mg_rally_bz >> 4)) * RCP(t)) >> 7) + t + 1;
-    mg_rally_ball = BALL_TO_WALL;
-    mg_rally_last = who;
-    mg_rally_drop = drop;
-    mg_rally_bounces = 0;
-    ball_power = power;
-    ball_trail = drop ? 0 : (curve ? TRAIL_CURVE : TRAIL_POWER);
-    trail_len = power ? FC_TRAIL_MAX : 2;
-    trail_n = 0;
-    sfx_play(power ? SFX_POWER : (drop ? SFX_TOUCH : SFX_KICK));
+static int16_t player_aim_tx(void) {
+    uint8_t aim = (joy & J_LEFT) ? 0 : (joy & J_RIGHT) ? 2 : pl_shot[SIDE_YOU] ? pl_aim[SIDE_YOU] : 1;
+    if (aim == 0) return 28;
+    if (aim == 2) return 132;
+    return mg_vs ? ((mg_rally_cx >> 4) < 80 ? 114 : 46) : (64 + ((uint8_t)rand() & 31));
 }
 
-static void player_strike(void) {
+static void player_strike(uint8_t is_slide) {
     uint8_t kind = pl_shot[SIDE_YOU] ? pl_shot[SIDE_YOU] : SHOT_POWER;
-    uint8_t drop = (kind == SHOT_DROP) || ((joy & J_DOWN) && kind == SHOT_CURVE);
-    uint8_t curve = !drop && (kind == SHOT_CURVE);
-    uint8_t power = !drop && (mg_rally_charge >= CHARGE_FULL || pl_charge[SIDE_YOU] >= CHARGE_MAX);
+    uint8_t dep = (joy & J_UP) ? 2 : (joy & J_DOWN) ? 0 : pl_shot[SIDE_YOU] ? pl_depth[SIDE_YOU] : 1;
+    uint8_t drop = !is_slide && (kind == SHOT_DROP || (dep == 0 && kind == SHOT_CURVE));
+    uint8_t lob = is_slide || kind == SHOT_LOB;
+    uint8_t curve = !drop && !lob && (kind == SHOT_CURVE);
+    uint8_t power = !is_slide && !drop && !lob &&
+                    (mg_rally_charge >= 48 || pl_charge[SIDE_YOU] >= CHARGE_MAX);
     uint8_t lv_p = stat_lv[STAT_POWER];
 
-    int16_t tx;
-    if (joy & J_LEFT) tx = 28;
-    else if (joy & J_RIGHT) tx = 132;
-    else tx = mg_vs ? ((mg_rally_cx >> 4) < 80 ? 120 : 40) : (64 + ((uint8_t)rand() & 31));
+    int16_t tx = player_aim_tx();
+    int16_t tz = drop ? 13 : lob ? 38 : (dep == 2 ? 32 : 22);
+    uint8_t c_bonus = (pl_charge[SIDE_YOU] >> 2);  // 0..8 faster with charge
+    uint8_t t = is_slide ? 48 : drop ? 48 : lob ? 50 : power ? (28 - (lv_p >> 2)) : (40 - c_bonus);
 
-    int16_t tz = drop ? 13 : ((joy & J_UP) ? 34 : 22);
-    uint8_t t = drop ? 36 : power ? (20 - (lv_p >> 3)) : (28 - (mg_rally_charge >> 3));
-
-    launch_to_wall(0, tx, tz, t, curve, power, drop);
+    launch_to_wall(0, tx, tz, t, curve, power, drop, lob);
     mg_rally_charge = mg_rally_charging = mg_rally_swing = 0;
     fc_unready(SIDE_YOU);
-    mg_rally_kick = KICK_FRAMES;
+    if (!is_slide) mg_rally_kick = KICK_FRAMES;
 }
 
-static void cpu_strike(void) {
-    int16_t dx = (mg_rally_bx - mg_rally_cx) >> 4;
-    if (dx < 0) dx = -dx;
-    uint8_t stretched = dx >= 12 && (mg_rally_drop || ball_power);
-
-    int16_t tx = (mg_rally_px >> 4) < 80 ? (116 + ((uint8_t)rand() & 15)) : (28 + ((uint8_t)rand() & 15));
+static void cpu_strike(uint8_t stretched) {
+    int16_t tx = (mg_rally_px >> 4) < 80 ? (112 + ((uint8_t)rand() & 15)) : (32 + ((uint8_t)rand() & 15));
     uint8_t r = (uint8_t)rand() & 7;
-    uint8_t drop = !stretched && r == 0;
-    uint8_t curve = !stretched && (r == 1 || r == 2);
-    uint8_t power = !stretched && r == 3 && mg_rally_streak >= 3;
-    int16_t tz = drop ? 13 : 22 + (r & 7);
-    // Under heavy pressure at full stretch, CPU occasionally clips the red tin!
-    if (stretched && ((uint8_t)rand() & 3) == 0) tz = 4;
-    uint8_t t = drop ? 36 : power ? 20 : 28;
+    uint8_t drop = !stretched && r == 0 && (mg_rally_pd >> 4) > 84;
+    uint8_t lob = stretched || (r == 7 && (mg_rally_pd >> 4) < 62);
+    uint8_t curve = !stretched && !drop && !lob && (r == 1 || r == 2);
+    uint8_t power = !stretched && !drop && !lob && r == 3 && mg_rally_streak >= 4;
+    int16_t tz = drop ? 13 : lob ? 36 : 22 + (r & 7);
+    // At full stretch against a heavy/drop ball, CPU occasionally clips the red tin!
+    if (stretched && (mg_rally_drop || ball_power) && ((uint8_t)rand() & 3) == 0) tz = 4;
+    uint8_t t = lob ? 50 : drop ? 48 : power ? 28 : 40;
 
-    launch_to_wall(1, tx, tz, t, curve, power, drop);
+    launch_to_wall(1, tx, tz, t, curve, power, drop, lob);
+    fc_unready(SIDE_CPU);
     mg_rally_ckick = KICK_FRAMES;
 }
 
 static void end_point(uint8_t winner_side, uint8_t pop_kind) {
     uint8_t at;
     mg_rally_ball = BALL_DEAD;
-    mg_rally_pop = 36;
+    mg_rally_pop = 40;
     mg_rally_pop_kind = pop_kind;
     mg_rally_charging = mg_rally_charge = mg_rally_swing = 0;
     fc_unready(SIDE_YOU);
+    fc_unready(SIDE_CPU);
     ball_trail = 0;
     ball_curve_t = 0;
 
@@ -342,22 +358,21 @@ static void end_point(uint8_t winner_side, uint8_t pop_kind) {
 
 static void wall_rebound(void) {
     int16_t z = mg_rally_bz >> 4;
-    uint8_t i0 = 0;
-    mg_rally_star = 10;
-    mg_rally_star_x = proj_x(mg_rally_bx, i0) - 4;
+    mg_rally_star = 12;
+    mg_rally_star_x = proj_x(mg_rally_bx, 0) - 4;
     mg_rally_star_y = WALL_FOOT - (z < 2 ? 2 : z > 44 ? 44 : z) - 4;
 
     if (z < TIN_Z) {
         // CLANG! Hit the red squash tin -> fault by mg_rally_last!
         sfx_play(SFX_BOARD);
         mg_rally_bd = 0;
-        mg_rally_vd = 10;
+        mg_rally_vd = 8;
         mg_rally_vz = 6;
         end_point(1 - mg_rally_last, POP_TIN);
         return;
     }
 
-    // Clean wall hit above the tin!
+    // Clean wall hit above the tin — rebounds at Futnet pace!
     sfx_play(SFX_BOARD);
     mg_rally_streak++;
     if (mg_rally_streak > mg_rally_best_streak) mg_rally_best_streak = mg_rally_streak;
@@ -365,24 +380,28 @@ static void wall_rebound(void) {
         mg_rally_points += 1 + ball_power;
     }
 
-    uint8_t pace = mg_rally_streak >> 2;
-    if (pace > 6) pace = 6;
+    uint8_t pace = mg_rally_streak >> 3;  // gentle ramp over long rallies (0..4)
+    if (pace > 4) pace = 4;
     mg_rally_bd = 0;
     if (mg_rally_drop) {
         mg_rally_vd = 16;
-        mg_rally_vz = 12;
+        mg_rally_vz = 2;
+        mg_rally_vx >>= 1;
+    } else if (mg_rally_lob) {
+        mg_rally_vd = 19;
+        mg_rally_vz = 14;
         mg_rally_vx = (mg_rally_vx * 3) >> 2;
     } else if (ball_power) {
-        mg_rally_vd = 26 + pace;
-        mg_rally_vz = 20;
+        mg_rally_vd = 27 + pace;
+        mg_rally_vz = 4;
     } else {
-        mg_rally_vd = 20 + pace;
-        mg_rally_vz = 18;
+        mg_rally_vd = 21 + pace;
+        mg_rally_vz = 6;
     }
     if (ball_curve) {
-        mg_rally_vx += ball_curve > 0 ? 6 : -6;
+        mg_rally_vx += ball_curve > 0 ? 5 : -5;
     }
-    mg_rally_vx = clamp16(mg_rally_vx, -26, 26);
+    mg_rally_vx = clamp16(mg_rally_vx, -18, 18);
     mg_rally_ball = BALL_FROM_WALL;
     mg_rally_bounces = 0;
     mg_rally_turn = mg_vs ? (1 - mg_rally_last) : 0;
@@ -400,7 +419,7 @@ static void ball_step(void) {
     }
     mg_rally_bx += mg_rally_vx;
     mg_rally_bd += mg_rally_vd;
-    mg_rally_vz -= GRAV;
+    if (++mg_rally_fall & 3) mg_rally_vz--;  // Futnet 3/4 SUB/frame gravity!
     mg_rally_bz += mg_rally_vz;
 
     if (mg_rally_bx < (BALL_X_MIN << 4)) {
@@ -412,21 +431,34 @@ static void ball_step(void) {
     }
 
     if (mg_rally_bz <= 0) {
+        uint8_t first = (mg_rally_bounces == 0);
+        int16_t up = (-mg_rally_vz * 3) >> 2;
         mg_rally_bz = 0;
-        if (mg_rally_vz < -6) {
-            mg_rally_vz = (-mg_rally_vz * 5) >> 3;
-            if (mg_rally_ball != BALL_DEAD) sfx_play(SFX_TOUCH);
+        if (mg_rally_ball == BALL_FROM_WALL) {
+            // Exact Futnet first-bounce sit-up so you have time to read, run, & strike!
+            if (mg_rally_drop) {
+                if (first && up < DROP_HOP) up = DROP_HOP;
+                mg_rally_vx >>= 1;
+                mg_rally_vd >>= 1;
+            } else if (mg_rally_lob) {
+                if (first && up < LOB_BOUNCE) up = LOB_BOUNCE;
+                mg_rally_vx >>= 1;
+                mg_rally_vd >>= 1;
+            } else {
+                if (first && up < BOUNCE_MIN) up = BOUNCE_MIN;
+                mg_rally_vx -= mg_rally_vx >> 2;
+                mg_rally_vd -= mg_rally_vd >> 2;
+            }
+            mg_rally_vz = up > BOUNCE_DEAD ? up : 0;
+            if (mg_rally_vz) sfx_play(SFX_TOUCH);
+            if (++mg_rally_bounces >= 2 || !mg_rally_vz) {
+                end_point(1 - mg_rally_turn, mg_vs ? POP_PT : POP_OUT);
+                return;
+            }
         } else {
-            mg_rally_vz = 0;
-        }
-        if (mg_rally_ball == BALL_FROM_WALL && ++mg_rally_bounces >= 2) {
-            // Double bounce -> current turn player failed to reach it!
-            end_point(1 - mg_rally_turn, mg_vs ? POP_PT : POP_OUT);
-            return;
-        }
-        if (mg_rally_ball == BALL_DEAD) {
-            mg_rally_vx -= mg_rally_vx >> 3;
-            mg_rally_vd -= mg_rally_vd >> 3;
+            mg_rally_vz = up > BOUNCE_DEAD ? up : 0;
+            mg_rally_vx -= mg_rally_vx >> 2;
+            mg_rally_vd -= mg_rally_vd >> 2;
         }
     }
 
@@ -452,53 +484,91 @@ static void player_step(void) {
     if (mg_rally_swing) mg_rally_swing--;
     fc_combo_tick(SIDE_YOU);
 
-    int8_t sp = (int8_t)mg_rally_speed;
-    int8_t tx = (joy & J_RIGHT) ? sp : (joy & J_LEFT) ? -sp : 0;
-    int8_t ty = (joy & J_DOWN) ? (sp - 4) : (joy & J_UP) ? -(sp - 4) : 0;
-    if (mg_rally_charging) {
-        tx >>= 1;
-        ty >>= 1;
+    // Diving slide recovery (exact Futnet slide feel).
+    if (mg_rally_slide) {
+        mg_rally_slide--;
+        if (mg_rally_slide > 8) {
+            pl_x[SIDE_YOU] = clamp16(pl_x[SIDE_YOU] + mg_rally_slide_vx, PL_X_MIN << 4, PL_X_MAX << 4);
+            mg_rally_px = pl_x[SIDE_YOU];
+            if (in_player_reach()) player_strike(1);
+        }
+        return;
     }
-    fc_min_x = PL_X_MIN << 4;
-    fc_max_x = PL_X_MAX << 4;
-    fc_min_y = PL_D_MIN << 4;
-    fc_max_y = PL_D_MAX << 4;
-    fc_step_move(SIDE_YOU, tx, ty, 0);
-    mg_rally_px = pl_x[SIDE_YOU];
-    mg_rally_pd = pl_y[SIDE_YOU];
-    if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) mg_rally_walk++;
 
     uint8_t your_ball = (mg_rally_ball == BALL_FROM_WALL && (!mg_vs || mg_rally_turn == 0));
+    if (!your_ball && pl_shot[SIDE_YOU]) {
+        mg_rally_charging = mg_rally_charge = 0;
+        fc_unready(SIDE_YOU);
+    }
+
+    // Queue / tap-charge A (power), B (curve), B->A (lob), A->B (drop) once it's your ball!
     if (joy_pressed & (J_A | J_B)) {
-        fc_ready(SIDE_YOU, (joy_pressed & J_B) ? 1 : 0, 0);
-        if (your_ball && in_player_reach()) {
-            player_strike();
-            return;
-        }
+        uint8_t b = (joy_pressed & J_B) ? 1 : 0;
         if (your_ball) {
+            fc_ready(SIDE_YOU, b, 0);
             mg_rally_charging = 1;
-            mg_rally_swing = 14;
+            uint8_t fc_c = (uint8_t)(pl_charge[SIDE_YOU] + (pl_charge[SIDE_YOU] >> 1));
+            if (fc_c > mg_rally_charge) mg_rally_charge = fc_c;
+            if (in_player_reach()) {
+                player_strike(0);
+                return;
+            }
+        } else {
+            mg_rally_swing = 10;
         }
     }
     if (joy_pressed & J_SELECT) {
         mg_rally_charging = mg_rally_charge = mg_rally_swing = 0;
         fc_unready(SIDE_YOU);
     }
-    if (mg_rally_charging) {
-        if (!your_ball) {
-            mg_rally_charging = mg_rally_charge = 0;
-            fc_unready(SIDE_YOU);
+
+    // While planted (pl_shot[SIDE_YOU]), D-pad aims your shot & you brake to a plant,
+    // exact Futnet style! Unplanted, you run with full Futnet momentum & turn skids.
+    if (pl_shot[SIDE_YOU]) {
+        if (joy & J_LEFT) pl_aim[SIDE_YOU] = 0;
+        else if (joy & J_RIGHT) pl_aim[SIDE_YOU] = 2;
+        if (joy & J_UP) pl_depth[SIDE_YOU] = 2;
+        else if (joy & J_DOWN) pl_depth[SIDE_YOU] = 0;
+        if ((joy & (J_A | J_B)) && mg_rally_charge < 48 && ((uint8_t)frame_count & 1)) {
+            uint8_t next = mg_rally_charge + mg_rally_charge_rate;
+            mg_rally_charge = next > 48 ? 48 : next;
+            pl_charge[SIDE_YOU] = (uint8_t)((mg_rally_charge * 5) >> 3);
+        }
+    }
+
+    int8_t sp = (int8_t)mg_rally_speed;
+    int8_t tx = 0, ty = 0;
+    uint8_t firm = 2;  // firm=2: Futnet skid when reversing direction!
+    if (pl_shot[SIDE_YOU]) {
+        firm = 1;      // planted: brake cleanly in place
+    } else {
+        tx = (joy & J_RIGHT) ? sp : (joy & J_LEFT) ? -sp : 0;
+        ty = (joy & J_DOWN) ? sp : (joy & J_UP) ? -sp : 0;
+    }
+
+    fc_min_x = PL_X_MIN << 4;
+    fc_max_x = PL_X_MAX << 4;
+    fc_min_y = PL_D_MIN << 4;
+    fc_max_y = PL_D_MAX << 4;
+    fc_step_move(SIDE_YOU, tx, ty, firm);
+    mg_rally_px = pl_x[SIDE_YOU];
+    mg_rally_pd = pl_y[SIDE_YOU];
+    if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) mg_rally_walk++;
+
+    if (your_ball && pl_shot[SIDE_YOU]) {
+        if (in_player_reach()) {
+            player_strike(0);
             return;
         }
-        if ((joy & (J_A | J_B)) && mg_rally_charge < CHARGE_FULL) {
-            uint8_t next = mg_rally_charge + mg_rally_charge_rate;
-            mg_rally_charge = next > CHARGE_FULL ? CHARGE_FULL : next;
-            pl_charge[SIDE_YOU] = mg_rally_charge >> 1;
-        }
-        if (in_player_reach()) {
-            player_strike();
-        } else if (!(joy & (J_A | J_B)) && !mg_rally_swing) {
-            mg_rally_charging = 0;
+        // Planted & ball is crossing our depth outside reach -> Futnet diving slide!
+        int16_t dx = (mg_rally_bx - mg_rally_px) >> 4;
+        int16_t adx = dx < 0 ? -dx : dx;
+        int16_t dd = (mg_rally_bd - mg_rally_pd) >> 4;
+        if (adx > mg_rally_reach && adx <= SLIDE_REACH && dd >= -6 && dd <= 8 && (mg_rally_bz >> 4) <= 24) {
+            mg_rally_slide = SLIDE_FRAMES;
+            mg_rally_slide_vx = dx < 0 ? -36 : 36;
+            pl_face[SIDE_YOU] = dx < 0;
+            sfx_play(SFX_TOUCH);
         }
     }
 }
@@ -510,41 +580,55 @@ static void cpu_step(void) {
         return;
     }
     int16_t tx_px, td_px;
-    int16_t cspd = 20 + (mg_rally_streak >> 2);
-    if (cspd > 24) cspd = 24;
+    int8_t cspd = FC_SPEED_CPU + (mg_rally_streak >> 3);
+    if (cspd > 23) cspd = 23;
+    pl_top[SIDE_CPU] = cspd;
 
     if (mg_rally_ball == BALL_FROM_WALL && mg_rally_turn == 1) {
         tx_px = mg_rally_land_x;
         td_px = clamp16(mg_rally_land_d + 4, PL_D_MIN + 4, PL_D_MAX - 6);
-    } else if (mg_rally_ball == BALL_TO_WALL && mg_rally_last == 0) {
-        // Start reading your shot as it flies toward the wall!
-        tx_px = clamp16((mg_rally_bx >> 4) + (mg_rally_vx >> 1), 28, 132);
-        td_px = 76;
-        cspd = 16;
-    } else {
-        // Recover toward the center squash T (slightly opposite YOU so sprites don't stack).
-        tx_px = (mg_rally_px >> 4) < 80 ? 92 : 68;
-        td_px = 76;
-        cspd = 14;
-    }
-
-    int16_t tx = tx_px << 4, td = td_px << 4;
-    uint8_t moved = 0;
-    if (mg_rally_cx < tx - 24) { mg_rally_cx += cspd; mg_rally_cface = 0; moved = 1; }
-    else if (mg_rally_cx > tx + 24) { mg_rally_cx -= cspd; mg_rally_cface = 1; moved = 1; }
-    if (mg_rally_cd < td - 24) { mg_rally_cd += cspd - 3; moved = 1; }
-    else if (mg_rally_cd > td + 24) { mg_rally_cd -= cspd - 3; moved = 1; }
-    mg_rally_cx = clamp16(mg_rally_cx, PL_X_MIN << 4, PL_X_MAX << 4);
-    mg_rally_cd = clamp16(mg_rally_cd, PL_D_MIN << 4, PL_D_MAX << 4);
-    if (moved) mg_rally_cwalk++;
-
-    if (mg_rally_ball == BALL_FROM_WALL && mg_rally_turn == 1) {
         int16_t dx = (mg_rally_bx - mg_rally_cx) >> 4;
+        int16_t adx = dx < 0 ? -dx : dx;
         int16_t dd = (mg_rally_bd - mg_rally_cd) >> 4;
-        if (dx >= -14 && dx <= 14 && dd >= -11 && dd <= 9 && (mg_rally_bz >> 4) <= REACH_Z) {
-            cpu_strike();
+        // Plant & ready like Futnet CPU once near the bounce spot!
+        if (!pl_shot[SIDE_CPU] && adx <= 12 && dd >= -28) {
+            fc_ready(SIDE_CPU, (rand() & 3) == 0 ? 1 : 0, 0);
+            pl_charge[SIDE_CPU] = 8;
         }
+        if (adx <= 16 && dd >= -REACH_FWD && dd <= REACH_BACK && (mg_rally_bz >> 4) <= REACH_Z) {
+            cpu_strike(adx >= 13);
+            return;
+        }
+    } else if (mg_rally_ball == BALL_TO_WALL && mg_rally_last == 0) {
+        fc_unready(SIDE_CPU);
+        tx_px = clamp16((mg_rally_bx >> 4) + (mg_rally_vx >> 1), 32, 128);
+        td_px = 78;
+    } else {
+        fc_unready(SIDE_CPU);
+        tx_px = (mg_rally_px >> 4) < 80 ? 92 : 68;
+        td_px = 80;
     }
+
+    int8_t vx_to = 0, vy_to = 0;
+    if (!pl_shot[SIDE_CPU]) {
+        int16_t ex = tx_px - (mg_rally_cx >> 4);
+        int16_t ed = td_px - (mg_rally_cd >> 4);
+        if (ex > 2) vx_to = ex > 8 ? cspd : (cspd >> 1);
+        else if (ex < -2) vx_to = ex < -8 ? -cspd : -(cspd >> 1);
+        if (ed > 2) vy_to = ed > 8 ? cspd : (cspd >> 1);
+        else if (ed < -2) vy_to = ed < -8 ? -cspd : -(cspd >> 1);
+    }
+    fc_min_x = PL_X_MIN << 4;
+    fc_max_x = PL_X_MAX << 4;
+    fc_min_y = PL_D_MIN << 4;
+    fc_max_y = PL_D_MAX << 4;
+    pl_x[SIDE_CPU] = mg_rally_cx;
+    pl_y[SIDE_CPU] = mg_rally_cd;
+    fc_step_move(SIDE_CPU, vx_to, vy_to, 1);
+    mg_rally_cx = pl_x[SIDE_CPU];
+    mg_rally_cd = pl_y[SIDE_CPU];
+    mg_rally_cface = pl_face[SIDE_CPU];
+    if (pl_vx[SIDE_CPU] || pl_vy[SIDE_CPU]) mg_rally_cwalk++;
 }
 
 // --- HUD & drawing ---
@@ -579,33 +663,36 @@ static void hud_draw(void) {
 }
 
 static void draw_scene(void) {
-    // Depth-sort YOU and CPU so whichever player is closer to the camera draws on top!
     uint8_t you_slot = (mg_vs && mg_rally_cd > mg_rally_pd) ? 1 : 0;
     uint8_t cpu_slot = 1 - you_slot;
 
-    // 1) YOU
+    // 1) YOU (standing/running/charging/kicking, or lying during a diving slide!)
     uint8_t pi = didx(mg_rally_pd);
-    uint8_t pf;
-    if (mg_run == MG_RUN_OVER) pf = (mg_vs && !mg_won) ? MG_F_LOSE : MG_F_WIN;
-    else if (mg_rally_kick) pf = MG_F_KICK;
-    else if (mg_rally_charging) pf = MG_F_READY;
-    else if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) pf = (mg_rally_walk & 4) ? MG_F_RUN_A : MG_F_RUN_B;
-    else pf = MG_F_STAND;
-    uint8_t ppal = fc_charge_pal(SIDE_YOU, SPR_PAL_YOU);
-    if (mg_rally_charging && mg_rally_charge >= CHARGE_FULL && ((uint8_t)mg_timer & 2)) ppal = SPR_PAL_POWER;
-    mg_player(you_slot, MG_FRAME(MG_VIEW_BACK, pf), proj_x(mg_rally_px, pi), gy_tab[pi], ppal, pl_face[SIDE_YOU]);
+    uint8_t ppal = pl_shot[SIDE_YOU] ? fc_charge_pal(SIDE_YOU, SPR_PAL_YOU) : SPR_PAL_YOU;
+    if (mg_rally_charging && mg_rally_charge >= 48 && ((uint8_t)mg_timer & 2)) ppal = SPR_PAL_POWER;
+    if (mg_rally_slide) {
+        mg_player_lying(you_slot, proj_x(mg_rally_px, pi), gy_tab[pi] - 6, SPR_PAL_YOU, pl_face[SIDE_YOU]);
+    } else {
+        uint8_t pf;
+        if (mg_run == MG_RUN_OVER) pf = (mg_vs && !mg_won) ? MG_F_LOSE : MG_F_WIN;
+        else if (mg_rally_kick) pf = (mg_rally_bz >> 4) >= 14 ? MG_F_VOLLEY : MG_F_KICK;
+        else if (pl_shot[SIDE_YOU] && !(pl_vx[SIDE_YOU] | pl_vy[SIDE_YOU])) pf = MG_F_READY;
+        else if (pl_vx[SIDE_YOU] || pl_vy[SIDE_YOU]) pf = ((uint8_t)frame_count & 8) ? MG_F_RUN_A : MG_F_RUN_B;
+        else pf = MG_F_STAND;
+        mg_player(you_slot, MG_FRAME(MG_VIEW_BACK, pf), proj_x(mg_rally_px, pi), gy_tab[pi], ppal, pl_face[SIDE_YOU]);
+    }
 
     // 2) CPU (VS mode)
     if (mg_vs) {
         uint8_t ci = didx(mg_rally_cd);
+        uint8_t cpal = pl_shot[SIDE_CPU] ? fc_charge_pal(SIDE_CPU, SPR_PAL_CPU) : SPR_PAL_CPU;
         uint8_t cf;
         if (mg_run == MG_RUN_OVER) cf = mg_won ? MG_F_LOSE : MG_F_WIN;
-        else if (mg_rally_ckick) cf = MG_F_KICK;
-        else if (mg_rally_ball == BALL_FROM_WALL && mg_rally_turn == 1)
-            cf = (mg_rally_cwalk & 4) ? MG_F_RUN_A : MG_F_RUN_B;
+        else if (mg_rally_ckick) cf = (mg_rally_bz >> 4) >= 14 ? MG_F_VOLLEY : MG_F_KICK;
+        else if (pl_shot[SIDE_CPU] && !(pl_vx[SIDE_CPU] | pl_vy[SIDE_CPU])) cf = MG_F_READY;
+        else if (pl_vx[SIDE_CPU] || pl_vy[SIDE_CPU]) cf = ((uint8_t)frame_count & 8) ? MG_F_RUN_B : MG_F_RUN_A;
         else cf = MG_F_STAND;
-        mg_player(cpu_slot, MG_FRAME(MG_VIEW_BACK, cf), proj_x(mg_rally_cx, ci), gy_tab[ci], SPR_PAL_CPU,
-                  mg_rally_cface);
+        mg_player(cpu_slot, MG_FRAME(MG_VIEW_BACK, cf), proj_x(mg_rally_cx, ci), gy_tab[ci], cpal, mg_rally_cface);
     } else {
         mg_player_hide(1);
     }
@@ -628,7 +715,7 @@ static void draw_scene(void) {
         }
     }
 
-    // 4) Floor bounce reticle on YOUR turn (shows where the wall rebound will bounce!)
+    // 4) Floor bounce reticle on YOUR turn + Wall aim marker while planted!
     if (mg_run == MG_RUN_LIVE && mg_rally_ball == BALL_FROM_WALL && (!mg_vs || mg_rally_turn == 0) &&
         mg_rally_bounces == 0) {
         uint8_t li = didx(mg_rally_land_d << 4);
@@ -636,6 +723,14 @@ static void draw_scene(void) {
         mg_sprite(OAM_MARK, MG_T_AIM, mpal, proj_x(mg_rally_land_x << 4, li) - 4, gy_tab[li] - 4);
     } else {
         move_sprite(OAM_MARK, 0, 0);
+    }
+    if (mg_run == MG_RUN_LIVE && pl_shot[SIDE_YOU]) {
+        int16_t ax = player_aim_tx();
+        uint8_t dep = (joy & J_UP) ? 2 : (joy & J_DOWN) ? 0 : pl_depth[SIDE_YOU];
+        int16_t az = (pl_shot[SIDE_YOU] == SHOT_DROP) ? 13 : (dep == 2 ? 32 : 22);
+        mg_sprite(OAM_AIM, MG_T_AIM, SPR_PAL_UI, proj_x(ax << 4, 0) - 4, WALL_FOOT - az - 4);
+    } else {
+        move_sprite(OAM_AIM, 0, 0);
     }
 
     // 5) Wall impact starburst
@@ -649,7 +744,7 @@ static void draw_scene(void) {
     // 6) Point / Tin / Out callout popup
     if (mg_rally_pop) {
         mg_rally_pop--;
-        int16_t py = 44 - ((36 - mg_rally_pop) >> 2);
+        int16_t py = 44 - ((40 - mg_rally_pop) >> 2);
         uint8_t t0, t1, t2, pal;
         if (mg_rally_pop_kind == POP_TIN) {
             t0 = RT_T; t1 = RT_I; t2 = RT_N; pal = SPR_PAL_CPU;
@@ -675,26 +770,31 @@ void mg_rally_enter(void) BANKED {
 
     uint8_t lv_r = stat_lv[STAT_REFLEX];
     uint8_t lv_p = stat_lv[STAT_POWER];
-    mg_rally_speed = 20 + (lv_r >> 1);
-    mg_rally_reach = 15 + (lv_r >> 2);
-    mg_rally_charge_rate = 2 + (lv_p >= 7) + (lv_p >= 14);
+    mg_rally_speed = FC_SPEED_YOU + (lv_r >> 2);
+    mg_rally_reach = 16 + (lv_r >> 2);
+    mg_rally_charge_rate = 1 + (lv_p >= 7) + (lv_p >= 14);
 
-    fc_unready(SIDE_YOU);
+    for (uint8_t s = 0; s < 2; s++) {
+        fc_unready(s);
+        pl_vx[s] = pl_vy[s] = 0;
+        pl_accel[s] = FC_ACCEL;
+        pl_grip[s] = FC_GRIP;
+        pl_skid[s] = pl_side[s] = pl_flash[s] = 0;
+    }
     fc_ball_plain();
     pl_x[SIDE_YOU] = mg_rally_px = (mg_vs ? 54 : 80) << 4;
     pl_y[SIDE_YOU] = mg_rally_pd = 84 << 4;
-    pl_vx[SIDE_YOU] = pl_vy[SIDE_YOU] = 0;
     pl_face[SIDE_YOU] = 0;
     pl_top[SIDE_YOU] = (int8_t)mg_rally_speed;
-    pl_accel[SIDE_YOU] = FC_ACCEL;
-    pl_grip[SIDE_YOU] = FC_GRIP;
-    pl_skid[SIDE_YOU] = pl_side[SIDE_YOU] = pl_flash[SIDE_YOU] = 0;
 
-    mg_rally_cx = 106 << 4;
-    mg_rally_cd = 80 << 4;
-    mg_rally_cface = 1;
+    pl_x[SIDE_CPU] = mg_rally_cx = 106 << 4;
+    pl_y[SIDE_CPU] = mg_rally_cd = 80 << 4;
+    pl_face[SIDE_CPU] = mg_rally_cface = 1;
+    pl_top[SIDE_CPU] = FC_SPEED_CPU;
+
     mg_rally_ball = BALL_WAIT;
-    mg_rally_turn = mg_rally_last = mg_rally_bounces = mg_rally_drop = 0;
+    mg_rally_fall = 0;
+    mg_rally_turn = mg_rally_last = mg_rally_bounces = mg_rally_drop = mg_rally_lob = 0;
     mg_rally_you_pts = mg_rally_cpu_pts = 0;
     mg_rally_points = 0;
     mg_rally_streak = mg_rally_best_streak = mg_rally_misses = 0;
@@ -702,6 +802,7 @@ void mg_rally_enter(void) BANKED {
     mg_rally_wait = 0;
     mg_rally_charge = mg_rally_charging = mg_rally_swing = 0;
     mg_rally_kick = mg_rally_ckick = mg_rally_walk = mg_rally_cwalk = 0;
+    mg_rally_slide = mg_rally_cslide = 0;
     mg_rally_star = mg_rally_pop = mg_rally_pop_kind = mg_rally_over = 0;
     mg_rally_land_x = 80;
     mg_rally_land_d = 80;
