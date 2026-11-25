@@ -69,6 +69,9 @@ uint8_t fs_ball_oam, fs_hud_pending,fs_goal_refresh;
 uint8_t fs_power_trail, fs_trail_n, fs_trail_i;
 uint8_t fs_trail_x[16], fs_trail_y[16];
 uint8_t fs_projection_y[225], fs_projection_s[225];
+// Reserve OAM 0/1 for the landing cue: a crowded line must not drop half its
+// outline. Depth-sorted actors/ball use 2..18, marker 19, trails 20..22,
+// player shadows 23..26, ball shadow 27, contact effects 28/29.
 
 static int16_t ab(int16_t n) { return n < 0 ? -n : n; }
 static int16_t clamp(int16_t n, int16_t lo, int16_t hi) { return n < lo ? lo : n > hi ? hi : n; }
@@ -614,15 +617,15 @@ static void draw(void) {
     // Five comparisons, fixed indices: no nested loop/index bookkeeping.
 #define DEPTH_SWAP(a,b) do { if(fs_pl_y[order[a]]<fs_pl_y[order[b]]){uint8_t t=order[a];order[a]=order[b];order[b]=t;} } while(0)
     DEPTH_SWAP(0,1);DEPTH_SWAP(2,3);DEPTH_SWAP(0,2);DEPTH_SWAP(1,3);DEPTH_SWAP(1,2);
-    fs_ball_oam=0;
+    fs_ball_oam=2;
     for(uint8_t i=0;i<4;i++) if(fs_pl_y[i]>fs_ball_y) fs_ball_oam+=4;
     for(uint8_t slot=0;slot<4;slot++) {
         static uint8_t i,n,tile,pal,pose,y,x;
         static int16_t sy;
-        i=order[slot];n=slot<<2;if(n>=fs_ball_oam)n++;
+        i=order[slot];n=(slot<<2)+2;if(n>=fs_ball_oam)n++;
         y=(uint16_t)fs_pl_y[i]>>4;x=sx((uint16_t)fs_pl_x[i]>>4,y);sy=fs_projection_y[y]-fs_cam_y;
         if(!i){marker_x=x+4;marker_y=sy-18;}
-        move_sprite(21+i,x+4,sy+12);
+        move_sprite(23+i,x+4,sy+12);
         if(fs_aerial[i]){
             uint8_t t=fs_aerial[i];
             tile=(i<<6)+(fs_view[i]<<5)+24;pal=S_BANK|i;
@@ -671,19 +674,19 @@ static void draw(void) {
         } else fs_trail_n=0;
         for(uint8_t k=0;k<3;k++) {
             uint8_t age=(k+1)<<1, entry=(fs_trail_i-age)&15;
-            if(fs_trail_n>age) place(18+k,fs_trail_x[entry],fs_trail_y[entry]-fs_cam_y);
-            else move_sprite(18+k,0,0);
+            if(fs_trail_n>age) place(20+k,fs_trail_x[entry],fs_trail_y[entry]-fs_cam_y);
+            else move_sprite(20+k,0,0);
         }
     }
-    move_sprite(25,ball_sx,(uint8_t)(ball_wy-fs_cam_y+1));
-    place(17,marker_x,marker_y);
+    move_sprite(27,ball_sx,(uint8_t)(ball_wy-fs_cam_y+1));
+    place(19,marker_x,marker_y);
     if(fs_lob&&fs_owner==NOBODY&&!fs_goal_timer){
         uint8_t zy=(uint16_t)fs_target_y>>4,zx=sx((uint16_t)fs_target_x>>4,zy);
         uint8_t pal=fs_zone_ready&&(fs_sim_ticks&4)?SPR_PAL_POWER:SPR_PAL_UI;
-        set_sprite_prop(26,pal);set_sprite_prop(27,pal);
-        move_sprite(26,zx,fs_projection_y[zy]-fs_cam_y+12);
-        move_sprite(27,zx+8,fs_projection_y[zy]-fs_cam_y+12);
-    }else{move_sprite(26,0,0);move_sprite(27,0,0);}
+        set_sprite_prop(0,pal);set_sprite_prop(1,pal);
+        move_sprite(0,zx,fs_projection_y[zy]-fs_cam_y+12);
+        move_sprite(1,zx+8,fs_projection_y[zy]-fs_cam_y+12);
+    }else{move_sprite(0,0,0);move_sprite(1,0,0);}
     if(fs_fx_timer||fs_fx_frame!=255)futsal_fx_draw(fs_cam_y);
     if(fs_goal_refresh){
         fs_goal_refresh=0;futsal_goals_draw(fs_cam_y);
@@ -697,11 +700,11 @@ void futsal_enter(void) BANKED {
     futsal_goals_load();
     futsal_stadium_load();
     banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
-    set_sprite_tile(26,124);set_sprite_tile(27,126);
-    for(uint8_t k=0;k<3;k++){set_sprite_tile(18+k,8+(k<<1));set_sprite_prop(18+k,4);move_sprite(18+k,0,0);}
-    set_sprite_tile(25,4);set_sprite_prop(25,SPR_PAL_UI);
-    set_sprite_tile(17,6);set_sprite_prop(17,SPR_PAL_UI);
-    for(uint8_t i=0;i<4;i++){set_sprite_tile(21+i,254);set_sprite_prop(21+i,SPR_PAL_UI);}
+    set_sprite_tile(0,124);set_sprite_tile(1,126);
+    for(uint8_t k=0;k<3;k++){set_sprite_tile(20+k,8+(k<<1));set_sprite_prop(20+k,4);move_sprite(20+k,0,0);}
+    set_sprite_tile(27,4);set_sprite_prop(27,SPR_PAL_UI);
+    set_sprite_tile(19,6);set_sprite_prop(19,SPR_PAL_UI);
+    for(uint8_t i=0;i<4;i++){set_sprite_tile(23+i,254);set_sprite_prop(23+i,SPR_PAL_UI);}
     banked_bkg_data(SCENE_TILES,FUTSAL_PITCH_TILE_COUNT,futsal_pitch_tiles,BANK(futsal_pitch));
     banked_sprite_data(0,SPRITES_TILE_COUNT,sprites_tiles,BANK(sprites));
     banked_sprite_data(20,ACTION_SPIKY_TILE_COUNT,action_spiky_tiles,BANK(action_spiky));

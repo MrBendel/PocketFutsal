@@ -45,6 +45,10 @@ score/control strip stays separate. The extra 32 pixels of stadium headroom
 leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
 `artwork/scoreboard/v3`.
 
+The lob landing ring reserves the first two sprite slots so its complete
+outline survives crowded scanlines. Players and the ball retain their depth
+order behind the targeting cue; shadows, trails and contact effects follow.
+
 Shooting precision depends on distance: close finishes have very little scatter,
 medium shots spread wider, and efforts from more than 144 court pixels away are
 wild clearances aimed outside the goal mouth. Missed deliveries shed speed on
