@@ -865,20 +865,18 @@ test('running side to side costs you: a turn skids first', () => {
   assert.ok(vx() < -8, `then off the other way: ${vx()}`);
 });
 
-test('between shots you jog back home; a volley right at the net stays low and lands in', () => {
+test('between shots you stay where you are; a volley right at the net stays low and lands in', () => {
   let emu = quietRally();
-  placePlayer(emu, YOU, 40, 124);  // up at the net
+  placePlayer(emu, YOU, 40, 124);  // up at the net, off to the left
   ballAt(emu, 80, 60, 20, 0, -4);  // going away, slowly, high
   set16(emu, 'ball_vz', 40);
-  emu.idle(20);
-  const y0 = px(at(emu, 'pl_y', YOU, 'i16'));
-  assert.ok(y0 > 126, `jogging back: ${y0}`);
-  emu.hold('UP', 12);
-  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) < y0 + 4, 'the d-pad still takes you anywhere');
-  emu.idle(90);
+  const x0 = px(at(emu, 'pl_x', YOU, 'i16')), y0 = px(at(emu, 'pl_y', YOU, 'i16'));
+  emu.idle(60);
   assert.equal(emu.v('goal_timer'), 0, 'still in play');
-  const x = px(at(emu, 'pl_x', YOU, 'i16')), y = px(at(emu, 'pl_y', YOU, 'i16'));
-  assert.ok(y > 170 && x > 60 && x < 100, `back home: (${x}, ${y})`);
+  assert.equal(px(at(emu, 'pl_x', YOU, 'i16')), x0, 'no jog to the middle');
+  assert.equal(px(at(emu, 'pl_y', YOU, 'i16')), y0, 'or back');
+  emu.hold('DOWN', 12);
+  assert.ok(px(at(emu, 'pl_y', YOU, 'i16')) > y0 + 4, 'the d-pad takes you');
   emu = quietRally();
   placePlayer(emu, YOU, 50, 122);
   ballAt(emu, 52, 116, 10, 0, 6);  // dropping onto your foot at net height

@@ -160,7 +160,6 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define SERVE_FRAMES 50
 #define BALL_R 3          // px: the ball's radius on the court
 #define HOME_CPU 24       // the CPU's depth, waiting
-#define HOME_YOU 196
 #define CPU_PLANT 96      // px: the CPU readies when the ball's this close and it's in place
 #define CPU_LATE 40       // px: and this close, in place or not
 #define CPU_START 8       // its meter as it readies
@@ -1455,19 +1454,9 @@ void play_update(void) BANKED {
     }
     int8_t dx = joy & J_RIGHT ? 1 : joy & J_LEFT ? -1 : 0;
     int8_t dy = joy & J_DOWN ? 1 : joy & J_UP ? -1 : 0;
-    // Between shots (nothing queued, the d-pad let go, the ball going away), you jog
-    // back to the middle, HOME_YOU deep, as the CPU goes home: a rally doesn't creep
-    // you up to the net, where everything goes over your head. (Coming to you,
-    // nothing queued, you stay put: the game running you there, the overnight
-    // loop's idea, played like an autopilot, a control touch that never went over.)
-    if (!(dx | dy) && !pl_shot[SIDE_YOU] && phase == PHASE_RALLY && !coming(SIDE_YOU)) {
-        int16_t hx = CENTER_X - PX(pl_x[SIDE_YOU]), hy = HOME_YOU - PX(pl_y[SIDE_YOU]);
-        pl_wx[SIDE_YOU] = (int8_t)clamp16(hx, -SPEED_YOU / 2, SPEED_YOU / 2);  // a jog
-        pl_wy[SIDE_YOU] = (int8_t)clamp16(hy, -SPEED_YOU / 2, SPEED_YOU / 2);
-        pl_auto[SIDE_YOU] = 1;
-    }
-    // No autopilot after a strike (playtest: "the player auto moves after kicking"):
-    // you stand where you are till the d-pad moves you, the CPU going home meanwhile.
+    // No autopilot between shots (playtest: "the player auto moves after kicking",
+    // then "can we stop the character auto moving to center"): you stand where you
+    // are till the d-pad moves you, the CPU going home meanwhile.
     player_update(SIDE_YOU, dx, dy);
     cpu_update();
     ball_update();
