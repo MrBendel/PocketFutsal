@@ -38,6 +38,14 @@ test('ball renders ahead of & behind player in OAM, lanes are tight (66/94), and
   assert.ok(e.v('mg_slalom_by', 'i16') <= 89, 'ball rests cleanly ahead of player head (y <= 89)');
   assert.equal(e.v('mg_slalom_px', 'i16'), 66, 'starts in tight Solo left lane (x=66)');
 
+  // Verify Solo cones (OAM slots 18..24) are actually visible on screen!
+  let visibleCones = 0;
+  for (let slot = 18; slot <= 24; slot++) {
+    const cy = e.read8(0xFE00 + slot * 4);
+    if (cy > 0 && cy < 160) visibleCones++;
+  }
+  assert.ok(visibleCones >= 2, `Solo mode displays visible cones on pitch (found ${visibleCones})`);
+
   e.write8(e.symbols.addr('mg_slalom_row') + 1, CONE_LEFT);   // safe on RIGHT
   e.write8(e.symbols.addr('mg_slalom_row') + 2, CONE_RIGHT);  // safe on LEFT
 

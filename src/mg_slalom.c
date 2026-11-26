@@ -488,7 +488,8 @@ static void draw_scene(void) {
         }
     } else {
         mg_player_hide(1);
-        mg_hide(OAM_BALL_CPU, OAM_CONES_CPU + ROW_COUNT - 1);
+        mg_hide(OAM_BALL_CPU, OAM_SHAD_CPU);
+        mg_hide(OAM_CONES_CPU, OAM_CONES_CPU + ROW_COUNT - 1);
     }
 
     // Checkered finish line across the pitch when TARGET_DIST is within view!
