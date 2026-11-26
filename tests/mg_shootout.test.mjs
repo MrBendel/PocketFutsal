@@ -296,6 +296,63 @@ test('a busy shootout stays inside the frame budget', () => {
   assert.ok(worst < FRAME_LIMIT / 2, `worst frame ${worst} cycles (limit ${FRAME_LIMIT})`);
 });
 
+test('shootout: low/high keeper dives play every new pose, mirror, recover and react', () => {
+  for (const [col,row] of [[0,0],[2,1]]) {
+    const e=liveShootout(4242);
+    takeKick(e,2,row,50);
+    untilPhase(e,P.FLIGHT,40);
+    e.write8(e.symbols.addr('mg_shootout_kguess'),col);
+    e.write8(e.symbols.addr('mg_shootout_kup'),row);
+    e.write8(e.symbols.addr('mg_shootout_kmove'),row?16:12);
+    set16(e,'mg_shootout_dive_at',e.v('mg_shootout_clock','i16'));
+    const seen=new Set(),oam=e.symbols.addr('shadow_OAM');
+    for(let f=0;f<70;f++) {
+      e.idle(1);
+      const pose=e.v('mg_shootout_keeper_anim');
+      if(pose!==255) {
+        if(pose-row*8===4&&!seen.has(4))e.shot(row?'shootout-high-extended':'shootout-low-extended');
+        seen.add(pose-row*8);
+        const visible=Array.from({length:8},(_,i)=>6+i).filter(n=>e.read8(oam+n*4));
+        assert.ok(visible.length>=4&&visible.length<=7,'only occupied keeper columns use OAM');
+        for(const n of visible) {
+          const tile=e.read8(oam+n*4+2),prop=e.read8(oam+n*4+3);
+          assert.ok(tile>=64&&tile<80,'new keeper stream occupies its reserved tiles');
+          assert.equal(prop&8,0,'keeper uses its bank-0 stream');
+          assert.equal(!!(prop&32),col===0,'left dive mirrors the rightward source');
+        }
+      }
+      if(e.v('mg_shootout_phase')===P.RESULT&&e.v('mg_shootout_t')===48) {
+        assert.notEqual(e.v('mg_shootout_keeper_reaction'),255,'keeper rises into its result animation');
+        assert.notEqual(e.v('mg_shootout_shooter_reaction'),255,'shooter uses the generated result animation');
+        assert.equal(e.v('mg_shootout_keeper_reaction')<6,e.v('mg_shootout_result')!==R.GOAL);
+        assert.equal(e.v('mg_shootout_shooter_reaction')<6,e.v('mg_shootout_result')===R.GOAL);
+        break;
+      }
+    }
+    assert.deepEqual([...seen].sort(),[0,1,2,3,4,5,6,7]);
+  }
+});
+
+test('shootout: extended dives and result banners stay within the ten-sprites-per-line limit',()=>{
+  const e=liveShootout(4242);
+  takeKick(e,2,0,50);untilPhase(e,P.FLIGHT,40);
+  e.write8(e.symbols.addr('mg_shootout_kguess'),0);
+  e.write8(e.symbols.addr('mg_shootout_kup'),0);
+  e.write8(e.symbols.addr('mg_shootout_kmove'),12);
+  set16(e,'mg_shootout_dive_at',e.v('mg_shootout_clock','i16'));
+  const oam=e.symbols.addr('shadow_OAM');
+  for(let f=0;f<85;f++){
+    e.idle(1);
+    const lines=new Uint8Array(136);
+    for(let n=0;n<40;n++){
+      const y=e.read8(oam+n*4)-16,x=e.read8(oam+n*4+1)-8;
+      if(x<=-8||x>=160||y<=-16)continue;
+      for(let line=Math.max(0,y);line<Math.min(136,y+16);line++)lines[line]++;
+    }
+    assert.ok(Math.max(...lines)<=10,`frame ${f}: too many sprites on a scanline`);
+  }
+});
+
 test('screen: shootout aiming and power meter', () => {
   const e = liveShootout(4242);
   untilPhase(e, P.AIM);

@@ -27,7 +27,11 @@ The RPG side: your player has four stats, raised by playing training mini games,
      Tennis on the Game Boy Advance).
   3. **Keepy-Uppy**: juggle a consecutive number of times.
   4. **Shootout**: score on the CPU, then keep its shots out: timing, and guessing the
-     direction it will shoot.
+     direction it will shoot. Low/high saves use the generated keeper cycle:
+     ready, plant, push-off, reach, descent, landing and recovery. The leading hand
+     meets the existing shot target; inputs and save deadlines retain their rules.
+     Shooter and keeper use the generated win/loss reactions after each kick,
+     with ground shadows separate from the airborne bodies.
 
 ### More mini game ideas
 

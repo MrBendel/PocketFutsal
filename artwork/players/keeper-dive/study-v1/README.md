@@ -36,14 +36,20 @@ ground marks and the game's existing ball as separate preview layers. The ball
 is not embedded in any keeper frame. These loops illustrate a parry; they do
 not simulate the actual shootout's timing or save logic.
 
-For future integration, the keeper can use its current OAM block plus the
-shootout's unused third-player block (6..13), keeping the game's UI at 14..39.
-The existing full player atlas already occupies sprite bank one; a shootout-only
-packed atlas is needed rather than appending these poses to it. The JSON includes
-visible bounds, nonempty sprite columns and a leading-hand reach point. Align
-that hand point to the goal target at the existing save deadline; retain the
-current dive input, reaction timing and outcome calculation. Use pose 4 for the
-save and the later poses for landing/recovery.
+Shootout now consumes the 32×24 low/high sequences through
+`tools/shootout-player-art.mjs`. Its keeper uses OAM 6..13, including the unused
+third-player block, with only nonempty columns enabled. The current pose is
+streamed into bank-0 tiles 64..79 through the vblank queue; the shared player
+bank is unchanged. Lower sprite columns end at the true 24px baseline so blank
+padding cannot consume the result banner's scanline budget.
 
-This is an artwork/reduction study. No live minigame consumes it yet.
+The full-extension hand aligns with the existing goal target; dive inputs,
+reaction deadlines and save outcomes are unchanged. Pose 4 is full reach, followed
+by descent, landing and recovery. Generated front-facing win/loss cycles play
+after the keeper recovers and immediately for the shooter. OAM 38/39 provide
+separate grounded shadows. These runtime trajectories differ from the study GIFs.
+
+Reaction streams use tiles 80..87 and 88..95. All streams stay below sprite tile
+128, where bank-0 sprite data would alias the signed background tile region.
+
 Regenerate the trials with `node tools/reduce-keeper-dive-study.mjs`.
