@@ -146,7 +146,7 @@ getting up), win, lose. PocketFutsal's, per view:
 | bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way |
 | slide | (one set, both views) feet first, for a ball out of reach: seven 32x24 frames, brake, plant, extend, contact, decelerate, kneel, ready (below) |
 | lying | (one set, both views) knocked down |
-| win / lose | the end of the match |
+| win / lose | a point: six-frame cycles, both players facing you (below) |
 
 ### Rules
 
@@ -273,9 +273,17 @@ slammed (the Captain Tsubasa feel).
   tiles 192-203 (you) and 208-219 (the CPU), VRAM bank 0, free in Futnet. Drawn by
   metasprites generated both ways round (a C loop over the six sprites took ~4k
   cycles a frame). Worst Futnet frame 61,220 (the frame a slide starts; 58,060 with
-  the lying pose). The other three players' slides, the win/loss cycles and the
-  keeper dive are in the library (artwork/players/roster/COMPLETE-LIBRARY.md), not
-  in the match yet.
+  the lying pose). The other three players' slides are in the library
+  (artwork/players/roster/COMPLETE-LIBRARY.md), not in Futnet (it plays spiky v
+  spiky); Shootout has the keeper dives (Codex, a32a24e).
+- **A point's reactions** (2026-11-26, the library's generated win and loss cycles,
+  tools/export-reactions.mjs makes src/reaction_art.c): six 16x24 front-view frames
+  each, in place of the one win or lose pose, both players turned to face you. The
+  winner's (anticipate, a fist, take off, the top, come down, land) loops, its lift
+  doubled (to 6 px at the top); the loser's stands, crouches, then shakes their head
+  (turn, centre, turn back) to the end. A step every 8 frames of the point's 110.
+  Streamed into the slide's tiles the same way (all twelve frames, 1536 bytes, in
+  RAM; a frame's 8 tiles by DMA as it changes).
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
