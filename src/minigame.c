@@ -30,7 +30,7 @@ static uint8_t mode_tile;
 static const char *const names[MG_COUNT] = {
     "BALL MACHINE", "TARGET WALL", "KEEPY-UPPY", "SHOOTOUT", "CONE SLALOM", "WALL RALLY",
 };
-static const uint8_t has_vs[MG_COUNT] = {0, 0, 1, 0, 0, 1};
+static const uint8_t has_vs[MG_COUNT] = {0, 0, 1, 0, 1, 1};
 // The stats each trains: the first takes all the XP, the second half.
 static const uint8_t trains[MG_COUNT][2] = {
     {STAT_REFLEX, STAT_CONTROL},  // the machine: get to it, put it back in
@@ -55,8 +55,8 @@ static const char *const brief[MG_COUNT][4] = {
      "D-PAD MOVES & ANGLES RETURNS."},
     {"FIVE PENALTIES EACH. SHOOTING:", "AIM WITH D-PAD, A FOR POWER.", "IN GOAL: READ THE CPU AND PRESS",
      "D-PAD + A TO DIVE. TIMING!"},
-    {"DRIBBLE THROUGH THE CONE GATES!", "D-PAD STEERS, UP/DN FOR PACE.", "A: QUICK CUT   B: CLOSE TRAP.",
-     "HEAVY TOUCHES KNOCK IT LOOSE!"},
+    {"LEFT/RIGHT DRIBBLES 40M SPRINT!", "SOLO MEDAL TIME OR 1V1 CPU RACE.", "DODGE CONES! HITS STUMBLE (+2S",
+     "IN SOLO). GOLD <=12S, SILV <=16S"},
     {"REBOUND RALLY! 1V1 TO 5 OR SOLO.", "ALTERNATE SHOTS OFF THE WALL!", "A: POWER  B: CURVE  DN+B: DROP.",
      "CLEAR RED TIN, NO 2ND BOUNCE!"},
 };

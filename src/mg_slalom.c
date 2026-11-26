@@ -1,16 +1,20 @@
 #pragma bank 255
-// CONE SLALOM (MG_SLALOM): dribble the ball through timed cone gates on a
-// vertical-scrolling training pitch. Trains REFLEX (all XP) + CONTROL (half).
+// CONE SLALOM (MG_SLALOM): TimberMan-style two-lane dribble sprint!
+// Supports BOTH:
+//   - SOLO   (mg_vs == 0, default): 40m Time Trial! Cone hits add +2.0s
+//     (reduced by CONTROL) + brief stumble. Beat GOLD (<=12.0s), SILVER
+//     (<=16.0s), or BRONZE (<=21.0s)!
+//   - VS CPU (mg_vs == 1): Head-to-head 40m Slalom Race! YOU weave down the
+//     left track while the CPU weaves down the right track in real time —
+//     first across the 40m finish tape wins!
 //
-// Controls:
-//   LEFT / RIGHT   steer across the lane
-//   UP / DOWN      sprint faster / ease off for tight turns
-//   A              quick cut / tap in your D-pad direction (short cooldown)
-//   B (hold)       close-control trap (cushions the ball tight to your feet)
-//
-// Heavy touches: sharp cuts at high speed knock the ball loose ahead/sideways;
-// chase it down or tap A/B before it clips a cone or rolls out of bounds.
-// Clearing gates builds a streak (x2 bonus at 3+ consecutive clean gates).
+// Key polish:
+//   1. Ball is drawn in OAM slots 14..17 (AFTER player slots 2..9) and placed
+//      ahead of the player's body so it NEVER draws on top of the player's head!
+//   2. Tight slalom lane gap (28 px in Solo, 24 px per track in VS Race).
+//   3. Guaranteed-solvable cone generator: always inserts at least 1 open
+//      crossover row whenever cones switch sides, and row[1] visually sits
+//      right in front of your ball while row[0] sits beside your boots!
 #include <gb/gb.h>
 #include <gb/cgb.h>
 #include <rand.h>
@@ -25,565 +29,606 @@
 #include "mg_slalom_bg.h"
 #include "mg_slalom_spr.h"
 
-// --- geometry (screen px, 160x136 playfield above HUD) ---
-#define LANE_X0 26
-#define LANE_X1 134
-#define OUT_X0_PX 20
-#define OUT_X1_PX 140
-#define PLAYER_Y 108
-#define BALL_HOLD_DY 24  // ball sits ahead of the player, clearly visible in front of them
+// --- geometry & rules ---
+// Solo tight center weave (28 px gap); VS split-track weave (24 px gap each side).
+#define SOLO_LANE_L 66
+#define SOLO_LANE_R 94
+#define VS_YOU_L 40
+#define VS_YOU_R 64
+#define VS_CPU_L 96
+#define VS_CPU_R 120
 
-#define GATE_MAX 3
-#define GATE_ACTIVE 0
-#define GATE_CLEARED 1
-#define GATE_MISSED 2
+#define PLAYER_Y 118       // player feet y (24 px tall -> head top at y = 95)
+#define BALL_REST_Y 89     // ball center y at rest (ahead of head y = 95, occluded behind player!)
+#define ROW0_CY 96         // row 0 cone top y (y=96..110: beside your boots, already passed!)
+                           // row 1 cone top y = 80 (y=80..94: right in front of you = next step!)
+#define STEP_PX 16         // matches the 16 px grass stripes on mg_slalom_bg
+#define ROW_COUNT 7        // visible rows 0..6 for YOU
+#define COURSE_LEN 48      // full pre-generated course (0 .. TARGET_DIST + 7) so VS tracks match fairly
+#define TARGET_DIST 40     // 40m sprint to the finish line!
 
-#define RUN_SECS 45
-#define RUN_FRAMES (RUN_SECS * 60)
+#define CONE_NONE 0
+#define CONE_LEFT 1
+#define CONE_RIGHT 2
+
+#define MEDAL_NONE 0
+#define MEDAL_BRONZE 1
+#define MEDAL_SILVER 2
+#define MEDAL_GOLD 3
+
+#define GOLD_TENTHS 120    // 12.0s
+#define SILVER_TENTHS 160  // 16.0s
+#define BRONZE_TENTHS 210  // 21.0s
 
 // Sprite tiles in VRAM bank 0 (loaded at MG_SPR_TILES = 16, 2 tiles per 8x16).
 #define T_CONE (MG_SPR_TILES + 0)
 #define T_CONE_HIT (MG_SPR_TILES + 2)
-#define T_CHEVRON (MG_SPR_TILES + 4)
-#define T_PLUS1 (MG_SPR_TILES + 6)
-#define T_PLUS2 (MG_SPR_TILES + 8)
-#define T_HIT_L (MG_SPR_TILES + 10)
-#define T_HIT_R (MG_SPR_TILES + 12)
+#define T_FINISH (MG_SPR_TILES + 4)
+#define T_PLUS2 (MG_SPR_TILES + 6)
+#define T_PLUS1 (MG_SPR_TILES + 8)
+#define T_SBANG (MG_SPR_TILES + 10)
+#define T_DUST (MG_SPR_TILES + 12)
 
-// OAM layout (OAM_MG_FREE = 14 .. 39).
-#define OAM_GATES OAM_MG_FREE        // 3 gates * 3 sprites (L cone, R cone, chevron) = 14..22
-#define OAM_POPUP (OAM_MG_FREE + 9)  // 2 sprites: 23..24
-#define OAM_TRAIL (OAM_MG_FREE + 11) // 3 sprites: 25..27
+#define PAL_CONE 3
+#define PAL_GOLD_FX 4
 
-// --- watchable state (non-static for tests) ---
-uint16_t mg_slalom_points;
-uint16_t mg_slalom_clock;      // frames remaining (2700 -> 0)
-uint8_t mg_slalom_gates;       // gates cleared
-uint8_t mg_slalom_streak;      // consecutive clean gates
+// OAM layout (OAM_MG_FREE = 14 .. 39; slots > OAM_MG_PLAYER 2..9 so players ALWAYS occlude balls!).
+#define OAM_BALL_YOU 14
+#define OAM_SHAD_YOU 15
+#define OAM_BALL_CPU 16
+#define OAM_SHAD_CPU 17
+#define OAM_CONES_YOU 18   // 18..24: 7 rows
+#define OAM_CONES_CPU 25   // 25..31: 7 rows (VS mode)
+#define OAM_FIN 32         // 32..35: checkered finish tape
+#define OAM_FLY 36         // 36: flying bonked cone
+#define OAM_POPUP 37       // 37..38: "+2S!" popup
+#define OAM_DUST 39        // 39: turf dust puff
+
+// --- watchable state (global non-static for tests) ---
+uint8_t mg_slalom_lane;          // 0 = Left lane, 1 = Right lane
+uint8_t mg_slalom_dist;          // YOUR steps completed (0 .. TARGET_DIST)
+uint8_t mg_slalom_cdist;         // CPU steps completed in VS mode (0 .. TARGET_DIST)
+uint8_t mg_slalom_clane;         // CPU lane (0 or 1)
+uint8_t mg_slalom_target;        // TARGET_DIST (40)
+uint16_t mg_slalom_tenths;       // total elapsed (+ penalty in Solo) in 0.1s units
+uint8_t mg_slalom_pen_tenths;    // cone hit penalty in Solo (20 = +2.0s, scaled by CONTROL)
+uint8_t mg_slalom_stumble;       // recovery frames after bonking a cone
+uint8_t mg_slalom_stumble_max;   // stumble duration (scaled by REFLEX & CONTROL)
+uint8_t mg_slalom_hits;          // YOUR cones hit
+uint8_t mg_slalom_chits;         // CPU cones hit
+uint8_t mg_slalom_streak;        // consecutive clean dribble steps
 uint8_t mg_slalom_best_streak;
-uint8_t mg_slalom_hits;        // cones bumped
-uint8_t mg_slalom_outs;        // balls lost out of bounds
-uint8_t mg_slalom_misses;      // gates missed
-uint8_t mg_slalom_loose;       // 1 when a heavy touch knocked the ball loose
-uint8_t mg_slalom_cut_cd;      // cooldown frames for A quick-cut
-uint8_t mg_slalom_stumble;     // recovery frames after cone bump / out
-uint8_t mg_slalom_steer_spd;   // lateral speed (SUB/frame, scaled by REFLEX)
-uint8_t mg_slalom_ctrl;        // control bonus (scaled by CONTROL)
-int16_t mg_slalom_px;          // player x (SUB)
-int16_t mg_slalom_pvx;         // player lateral velocity (SUB/frame)
-int16_t mg_slalom_bx, mg_slalom_by;    // ball screen pos (SUB)
-int16_t mg_slalom_bvx, mg_slalom_bvy;  // ball velocity (SUB/frame)
-uint8_t mg_slalom_spd;         // forward course speed (SUB/frame)
-int16_t mg_slalom_gy[GATE_MAX];        // gate y (SUB)
-uint8_t mg_slalom_gx[GATE_MAX];        // gate center x (px)
-uint8_t mg_slalom_gw[GATE_MAX];        // gate half-width (px)
-uint8_t mg_slalom_gst[GATE_MAX];       // GATE_ACTIVE / CLEARED / MISSED
-uint8_t mg_slalom_ghit[GATE_MAX];      // hit animation timer per gate
-uint8_t mg_slalom_next_side;           // alternates left/right slalom bias
+uint8_t mg_slalom_medal;         // MEDAL_* (Solo)
+uint8_t mg_slalom_row[ROW_COUNT];// visible window course[dist .. dist + 6] (writable by tests!)
+int16_t mg_slalom_px;            // YOUR visual x (px)
+int16_t mg_slalom_bx, mg_slalom_by;  // YOUR visual ball pos (px)
+int16_t mg_slalom_cx;            // CPU visual x (px)
+uint8_t mg_slalom_slide;         // remaining turf scroll slide px (glides 16 -> 0)
+uint8_t mg_slalom_drib_anim;     // YOUR dribble kick animation timer
+uint8_t mg_slalom_foot;          // toggles 0/1 each step for alternating-foot dribble
 
-// --- local visual state ---
-static uint16_t scroll_sub;
-static uint8_t hud_sec, hud_mult;
-static uint16_t hud_pts;
-static uint8_t pop_kind, pop_timer;  // 1=+1, 2=+2, 3=HIT!
+// --- local state ---
+static uint8_t course_you[COURSE_LEN];
+static uint8_t course_cpu[COURSE_LEN];
+static int16_t lane_l, lane_r;
+static uint8_t sub6;
+static uint8_t cpu_cd, cpu_stumble, cpu_drib, cpu_foot, cpu_slide;
+static uint8_t fly_t;
+static int16_t fly_x, fly_y;
+static int8_t fly_vx;
+static uint8_t pop_t;
 static int16_t pop_x, pop_y;
-static uint8_t kick_anim;
-static uint8_t heavy_ticks;  // consecutive high-speed turn frames
-static uint8_t loose_lock;   // brief frames before a knocked-loose ball can re-collect
-static int8_t last_dir;
+static uint8_t dust_t;
+static int16_t dust_x, dust_y;
+static uint16_t shown_tenths;
+static uint8_t shown_a, shown_b;
 
 // --- Mario Tennis GBC style palettes ---
 #define C(r, g, b) RGB8(r, g, b)
-// BG pal 0: bright emerald turf, darker mowed stripe, forest apron, crisp white lines
 static const uint16_t pal_turf[4] = {C(32, 176, 80), C(24, 144, 64), C(16, 80, 40), C(248, 252, 248)};
-// BG pal 1: dark navy frame, crimson board, gold rail/rivets, bright cream highlight
 static const uint16_t pal_boards[4] = {C(24, 24, 56), C(200, 48, 64), C(248, 192, 48), C(255, 244, 216)};
-// OBJ pal 3 (SPR_PAL_TRAIL_POWER): bright white reflective stripe, vivid orange cone, dark ink
 static const uint16_t pal_cone[4] = {0, C(255, 255, 255), C(248, 104, 24), C(24, 20, 32)};
-// OBJ pal 4 (SPR_PAL_TRAIL_CURVE): white core, glowing gold/lime chevron & popups, dark ink
-static const uint16_t pal_gate[4] = {0, C(255, 255, 224), C(254, 208, 40), C(24, 20, 32)};
+static const uint16_t pal_fx[4] = {0, C(255, 255, 224), C(254, 208, 40), C(24, 20, 32)};
 
-static int16_t ab16(int16_t v) { return v < 0 ? -v : v; }
-
-static uint8_t num_cat(char *buf, uint8_t at, uint16_t n) {
-    char tmp[5];
-    uint8_t k = 0;
-    do tmp[k++] = '0' + (uint8_t)(n % 10), n /= 10; while (n);
-    while (k) buf[at++] = tmp[--k];
-    buf[at] = 0;
-    return at;
-}
-
-static uint8_t str_cat(char *buf, uint8_t at, const char *s) {
+static uint8_t put_str(char *buf, uint8_t at, const char *s) {
     while (*s) buf[at++] = *s++;
     buf[at] = 0;
     return at;
 }
 
-static void show_popup(uint8_t kind, int16_t x, int16_t y) {
-    pop_kind = kind;
-    pop_timer = 28;
-    pop_x = x;
-    pop_y = y;
-}
-
-// Half-width of a new gate narrows gradually as more gates are cleared.
-static uint8_t gate_half_width(void) {
-    uint8_t shrink = mg_slalom_gates >> 1;
-    if (shrink > 8) shrink = 8;
-    return 22 - shrink;  // 22 px (44 px gap) down to 14 px (28 px gap)
-}
-
-// Vertical spacing between gates (px) tightens slightly with progress.
-static int16_t gate_spacing_px(void) {
-    uint8_t tighten = mg_slalom_gates;
-    if (tighten > 14) tighten = 14;
-    return 56 - tighten;  // 56 px down to 42 px
-}
-
-static void spawn_gate(uint8_t i, int16_t y_px) {
-    uint8_t gw = gate_half_width();
-    uint8_t lo = LANE_X0 + gw + 4;
-    uint8_t hi = LANE_X1 - gw - 4;
-    uint8_t mid = 80;
-    uint8_t gx;
-    // Alternate left / right halves so it's a real slalom weave.
-    if (mg_slalom_next_side == 0) {
-        uint8_t span = mid > lo ? mid - lo : 1;
-        gx = lo + (uint8_t)(rand() & 31);
-        if (gx > mid - 4) gx = lo + (gx % span);
-    } else {
-        uint8_t span = hi > mid ? hi - mid : 1;
-        gx = mid + 4 + (uint8_t)(rand() & 31);
-        if (gx > hi) gx = mid + (gx % span);
+static uint8_t put_u16(char *buf, uint8_t at, uint16_t n) {
+    static const uint16_t tens[3] = {100, 10, 1};
+    uint8_t started = 0;
+    for (uint8_t k = 0; k < 3; k++) {
+        uint8_t d = 0;
+        while (n >= tens[k]) n -= tens[k], d++;
+        if (d || started || k == 2) buf[at++] = '0' + d, started = 1;
     }
-    if (gx < lo) gx = lo;
-    if (gx > hi) gx = hi;
-    mg_slalom_next_side ^= 1;
-    mg_slalom_gx[i] = gx;
-    mg_slalom_gw[i] = gw;
-    mg_slalom_gy[i] = TO_SUB(y_px);
-    mg_slalom_gst[i] = GATE_ACTIVE;
-    mg_slalom_ghit[i] = 0;
+    buf[at] = 0;
+    return at;
 }
 
-static void hud_draw(uint8_t force) {
-    // 60 frames/sec; approximate remaining seconds cleanly without division per frame:
-    // keep hud_sec tracked, or update every 60 frames via a counter.
-    uint8_t mult = mg_slalom_streak >= 3 ? 2 : 1;
-    if (force) {
+static uint8_t put_time(char *buf, uint8_t at, uint16_t tenths) {
+    uint16_t secs = 0, rem = tenths;
+    while (rem >= 10) rem -= 10, secs++;
+    if (secs > 99) { secs = 99; rem = 9; }
+    at = put_u16(buf, at, secs);
+    buf[at++] = '.';
+    buf[at++] = '0' + (uint8_t)rem;
+    buf[at++] = 'S';
+    buf[at] = 0;
+    return at;
+}
+
+// Build a guaranteed-solvable 40m cone layout:
+// - Steps 0 and 1 are open (CONE_NONE) so you get a clean first stride.
+// - Cones appear in clusters of 1..3 on one side, ALWAYS followed by at least
+//   1 open crossover row (CONE_NONE) before switching to the opposite side!
+//   That guarantees you NEVER get pinched between diagonal adjacent cones.
+static void build_course(uint8_t *arr) {
+    memset(arr, CONE_NONE, COURSE_LEN);
+    uint8_t side = (rand() & 1) ? CONE_LEFT : CONE_RIGHT;
+    uint8_t i = 2;
+    while (i <= TARGET_DIST) {
+        uint8_t r = (uint8_t)rand();
+        uint8_t len = 1 + (r & 1) + ((r & 4) ? 1 : 0);  // 1..3 cones on `side`
+        while (len-- && i <= TARGET_DIST) {
+            arr[i++] = side;
+        }
+        // Mandatory open crossover row before switching sides!
+        i++;
+        if ((r & 8) && i <= TARGET_DIST) i++;  // occasional 2-row open breather
+        side = (side == CONE_LEFT) ? CONE_RIGHT : CONE_LEFT;
+    }
+}
+
+static void sync_window(void) {
+    for (uint8_t r = 0; r < ROW_COUNT; r++) {
+        uint8_t idx = mg_slalom_dist + r;
+        mg_slalom_row[r] = idx < COURSE_LEN ? course_you[idx] : CONE_NONE;
+    }
+}
+
+static void finish_solo(void) {
+    uint8_t at = 0;
+    if (mg_slalom_tenths <= GOLD_TENTHS) {
+        mg_slalom_medal = MEDAL_GOLD;
+        mg_won = 1;
+        at = put_str(mg_detail, 0, "GOLD! ");
+    } else if (mg_slalom_tenths <= SILVER_TENTHS) {
+        mg_slalom_medal = MEDAL_SILVER;
+        mg_won = 1;
+        at = put_str(mg_detail, 0, "SILVER! ");
+    } else if (mg_slalom_tenths <= BRONZE_TENTHS) {
+        mg_slalom_medal = MEDAL_BRONZE;
+        mg_won = 1;
+        at = put_str(mg_detail, 0, "BRONZE! ");
+    } else {
+        mg_slalom_medal = MEDAL_NONE;
+        mg_won = 0;
+        at = put_str(mg_detail, 0, "TIME ");
+    }
+    put_time(mg_detail, at, mg_slalom_tenths);
+
+    uint16_t sc = mg_slalom_tenths < 260 ? ((280 - mg_slalom_tenths) >> 2) : 5;
+    if (mg_slalom_medal == MEDAL_GOLD) sc += 10;
+    else if (mg_slalom_medal == MEDAL_SILVER) sc += 5;
+    mg_finish(sc);
+}
+
+static void finish_vs(uint8_t you_won) {
+    uint8_t at = 0;
+    mg_won = you_won;
+    if (you_won) {
+        mg_slalom_medal = MEDAL_GOLD;
+        at = put_str(mg_detail, 0, "1ST! ");
+        put_time(mg_detail, at, mg_slalom_tenths);
+    } else {
+        mg_slalom_medal = MEDAL_NONE;
+        at = put_str(mg_detail, 0, "2ND  ");
+        at = put_u16(mg_detail, at, mg_slalom_dist);
+        put_str(mg_detail, at, "M / 40M");
+    }
+    uint16_t sc = you_won ? (25 + (TARGET_DIST - mg_slalom_cdist) * 2) : (mg_slalom_dist >> 1);
+    mg_finish(sc);
+}
+
+// Execute one TimberMan dribble step for YOU on `side` (0 = Left, 1 = Right)!
+static void step_dribble(uint8_t side) {
+    mg_slalom_lane = side;
+    mg_slalom_foot ^= 1;
+    mg_slalom_drib_anim = 7;
+
+    int16_t target_x = side ? lane_r : lane_l;
+    dust_t = 7;
+    dust_x = mg_slalom_px - 4;
+    dust_y = PLAYER_Y - 6;
+
+    // Check mg_slalom_row[1] (the cone right in front of you at y=80..94; tests may override mg_slalom_row[]!).
+    uint8_t hazard = mg_slalom_row[1];
+    uint8_t hit = (hazard == (side + 1));
+
+    // Advance 1m forward: shift mg_slalom_row[0..5] from [1..6], pull new row[6] from course_you!
+    mg_slalom_dist++;
+    for (uint8_t r = 0; r < ROW_COUNT - 1; r++) {
+        mg_slalom_row[r] = mg_slalom_row[r + 1];
+    }
+    uint8_t tail = mg_slalom_dist + ROW_COUNT - 1;
+    mg_slalom_row[ROW_COUNT - 1] = tail < COURSE_LEN ? course_you[tail] : CONE_NONE;
+    if (mg_slalom_dist < COURSE_LEN) course_you[mg_slalom_dist] = mg_slalom_row[0];
+
+    uint8_t ns = mg_slalom_slide + STEP_PX;
+    mg_slalom_slide = ns > 32 ? 32 : ns;
+
+    if (hit) {
+        mg_slalom_row[0] = CONE_NONE;
+        if (mg_slalom_dist < COURSE_LEN) course_you[mg_slalom_dist] = CONE_NONE;
+        mg_slalom_hits++;
+        mg_slalom_streak = 0;
+        if (!mg_vs) {
+            mg_slalom_tenths += mg_slalom_pen_tenths;
+            if (mg_slalom_tenths > 999) mg_slalom_tenths = 999;
+            pop_t = 28;
+            pop_x = target_x - 8;
+            pop_y = ROW0_CY - 16;
+        }
+        mg_slalom_stumble = mg_slalom_stumble_max;
+
+        fly_t = 16;
+        fly_x = target_x - 4;
+        fly_y = ROW0_CY - 8;
+        fly_vx = side ? 4 : -4;
+        sfx_play(SFX_BOARD);
+    } else {
+        mg_slalom_streak++;
+        if (mg_slalom_streak > mg_slalom_best_streak) mg_slalom_best_streak = mg_slalom_streak;
+        sfx_play(SFX_TOUCH);
+    }
+
+    if (mg_slalom_dist >= TARGET_DIST) {
+        if (mg_vs) finish_vs(1);
+        else finish_solo();
+    }
+}
+
+// Step CPU racer on the right-hand track in VS mode!
+static void cpu_step(void) {
+    if (!mg_vs) return;
+    if (cpu_slide) {
+        uint8_t s = cpu_slide > 4 ? 4 : cpu_slide;
+        cpu_slide -= s;
+    }
+    if (cpu_drib) cpu_drib--;
+    if (cpu_stumble) {
+        cpu_stumble--;
+        return;
+    }
+    if (cpu_cd) {
+        cpu_cd--;
+        return;
+    }
+
+    // CPU taps at ~3.7 steps/sec (~16 frames/step -> ~11.2s 40m finish), with rare cone clips!
+    uint8_t next_c = (mg_slalom_cdist + 1 < COURSE_LEN) ? course_cpu[mg_slalom_cdist + 1] : CONE_NONE;
+    uint8_t cside = mg_slalom_clane;
+    uint8_t mistake = (next_c != CONE_NONE) && (((uint8_t)rand() & 15) == 0);
+    if (mistake) {
+        cside = (next_c == CONE_LEFT) ? 0 : 1;
+    } else if (next_c == CONE_LEFT) {
+        cside = 1;
+    } else if (next_c == CONE_RIGHT) {
+        cside = 0;
+    } else if (((uint8_t)rand() & 3) == 0) {
+        cside ^= 1;
+    }
+
+    mg_slalom_clane = cside;
+    cpu_foot ^= 1;
+    cpu_drib = 7;
+    mg_slalom_cdist++;
+    cpu_slide = STEP_PX;
+
+    if (next_c == (cside + 1)) {
+        course_cpu[mg_slalom_cdist] = CONE_NONE;
+        mg_slalom_chits++;
+        cpu_stumble = 22;
+        cpu_cd = 16;
+    } else {
+        cpu_cd = 15 + ((uint8_t)rand() & 3);  // 15..18 frames
+    }
+
+    if (mg_slalom_cdist >= TARGET_DIST && mg_run == MG_RUN_LIVE) {
+        finish_vs(0);
+    }
+}
+
+static void hud_draw(void) {
+    if (mg_vs) {
+        if (mg_hud_dirty) {
+            mg_hud_dirty = 0;
+            fill_win_rect(0, 0, SCREEN_TW, 1, 0);
+            win_text(0, 0, "YOU");
+            win_text(6, 0, "M");
+            win_text(12, 0, "CPU");
+            win_text(18, 0, "M");
+            shown_a = shown_b = 0xFF;
+        }
+        uint8_t yrem = mg_slalom_dist >= TARGET_DIST ? 0 : (TARGET_DIST - mg_slalom_dist);
+        uint8_t crem = mg_slalom_cdist >= TARGET_DIST ? 0 : (TARGET_DIST - mg_slalom_cdist);
+        if (yrem != shown_a) win_number(4, 0, shown_a = yrem, 2, 0);
+        if (crem != shown_b) win_number(16, 0, shown_b = crem, 2, 0);
+        return;
+    }
+    if (mg_hud_dirty) {
+        mg_hud_dirty = 0;
         fill_win_rect(0, 0, SCREEN_TW, 1, 0);
         win_text(0, 0, "TIME");
-        win_text(8, 0, "PTS");
-        win_text(17, 0, "X");
-        hud_pts = 0xFFFF;
-        hud_mult = 0xFF;
+        win_text(7, 0, ".");
+        win_text(11, 0, "LEFT");
+        shown_tenths = 0xFFFF;
+        shown_a = 0xFF;
     }
-    if (force || hud_pts != mg_slalom_points) {
-        hud_pts = mg_slalom_points;
-        win_number(12, 0, mg_slalom_points, 3, 0);
+    if (mg_slalom_tenths != shown_tenths) {
+        shown_tenths = mg_slalom_tenths;
+        uint16_t secs = 0, rem = mg_slalom_tenths;
+        while (rem >= 10) rem -= 10, secs++;
+        if (secs > 99) { secs = 99; rem = 9; }
+        win_number(5, 0, secs, 2, 1);
+        win_number(8, 0, rem, 1, 0);
     }
-    if (force || hud_mult != mult) {
-        hud_mult = mult;
-        win_number(18, 0, mult, 1, 0);
+    uint8_t left = mg_slalom_dist >= TARGET_DIST ? 0 : (TARGET_DIST - mg_slalom_dist);
+    if (left != shown_a) {
+        shown_a = left;
+        win_number(16, 0, left, 2, 0);
     }
-    win_number(5, 0, hud_sec, 2, 0);
 }
 
-static void reset_ball_to_feet(void) {
-    mg_slalom_bx = mg_slalom_px;
-    mg_slalom_by = TO_SUB(PLAYER_Y - BALL_HOLD_DY);
-    mg_slalom_bvx = 0;
-    mg_slalom_bvy = 0;
-    mg_slalom_loose = 0;
-    heavy_ticks = 0;
-    loose_lock = 0;
+// Draw a ball in a high OAM slot (> OAM_MG_PLAYER) so players ALWAYS occlude the ball!
+static void draw_ball_slot(uint8_t oam_b, uint8_t oam_s, int16_t cx, int16_t cy, uint8_t spin, uint8_t pal) {
+    uint8_t tile = MG_T_BALL + (spin ? 2 : 0);
+    mg_sprite(oam_b, tile, pal, cx - 4, cy - 4);
+    mg_sprite(oam_s, MG_T_SHADOW, SPR_PAL_UI, cx - 4, cy);
 }
 
 static void draw_scene(void) {
-    uint8_t frame = MG_F_STAND;
-    if (mg_run == MG_RUN_LIVE || mg_run == MG_RUN_OVER) {
-        if (mg_slalom_stumble) frame = MG_F_LOSE;
-        else if (kick_anim) frame = MG_F_KICK;
-        else frame = ((uint8_t)mg_timer & 8) ? MG_F_RUN_A : MG_F_RUN_B;
+    // Hide default shell ball slots 0..1 (we use 14..17 so player sprites 2..9 draw ON TOP of the ball!).
+    move_sprite(OAM_MG_BALL, 0, 0);
+    move_sprite(OAM_MG_SHADOW, 0, 0);
+
+    int16_t target_x = mg_slalom_lane ? lane_r : lane_l;
+    int16_t dx = target_x - mg_slalom_px;
+    if (dx > 1) mg_slalom_px += (dx >> 1) + 1;
+    else if (dx < -1) mg_slalom_px -= ((-dx) >> 1) + 1;
+    else mg_slalom_px = target_x;
+
+    // Ball sits cleanly IN FRONT OF the player's body (y = 89 at rest, darting out to y = 80 on kick!)
+    // AND in OAM slot 14 (> player slots 2..5) so it can NEVER appear on top of your head!
+    int16_t push = (int16_t)mg_slalom_drib_anim + (mg_slalom_drib_anim >> 1);  // 0..10 px push ahead
+    int16_t foot_ofs = mg_slalom_foot ? 2 : -2;
+    mg_slalom_bx = ((mg_slalom_px + target_x) >> 1) + foot_ofs;
+    mg_slalom_by = BALL_REST_Y - push;
+    uint8_t spin = (mg_slalom_drib_anim > 0 || mg_slalom_slide > 0) && ((uint8_t)frame_count & 2);
+    draw_ball_slot(OAM_BALL_YOU, OAM_SHAD_YOU, mg_slalom_bx, mg_slalom_by, spin,
+                   mg_slalom_streak >= 10 ? SPR_PAL_POWER : SPR_PAL_BALL);
+
+    // YOU sprite (slots 2..5)
+    uint8_t f, flip;
+    if (mg_run == MG_RUN_OVER) {
+        f = mg_won ? MG_F_WIN : MG_F_LOSE;
+        flip = 0;
+    } else if (mg_slalom_stumble) {
+        f = MG_F_LOSE;
+        flip = mg_slalom_lane;
+    } else if (mg_slalom_drib_anim >= 4) {
+        f = MG_F_KICK;
+        flip = dx < -2 ? 1 : dx > 2 ? 0 : mg_slalom_foot;
+    } else if (mg_slalom_drib_anim > 0) {
+        f = mg_slalom_foot ? MG_F_RUN_A : MG_F_RUN_B;
+        flip = mg_slalom_foot;
+    } else {
+        f = MG_F_READY;
+        flip = 0;
     }
-    uint8_t flip = mg_slalom_pvx < 0 ? 1 : 0;
-    uint8_t ppal = (mg_slalom_stumble && ((uint8_t)mg_timer & 2)) ? SPR_PAL_FLASH : SPR_PAL_YOU;
-    mg_player(0, MG_FRAME(MG_VIEW_BACK, frame), PX(mg_slalom_px), PLAYER_Y, ppal, flip);
+    uint8_t ppal = (mg_slalom_stumble & 2) ? SPR_PAL_FLASH : SPR_PAL_YOU;
+    mg_player(0, MG_FRAME(MG_VIEW_BACK, f), mg_slalom_px, PLAYER_Y, ppal, flip);
 
-    // Ball: glows fire when on a 3+ gate streak!
-    uint8_t bpal = (mg_slalom_streak >= 3 && !mg_slalom_loose) ? SPR_PAL_POWER : SPR_PAL_BALL;
-    mg_ball(PX(mg_slalom_bx), PX(mg_slalom_by) + 4, mg_slalom_loose ? 2 : 0, 1, bpal);
-
-    // Find the lowest (closest) active gate to show the target chevron.
-    uint8_t nearest = 0xFF;
-    int16_t best_y = -32000;
-    for (uint8_t i = 0; i < GATE_MAX; i++) {
-        if (mg_slalom_gst[i] == GATE_ACTIVE && mg_slalom_gy[i] > best_y) {
-            best_y = mg_slalom_gy[i];
-            nearest = i;
-        }
-    }
-
-    // Draw the 3 cone gates.
-    for (uint8_t i = 0; i < GATE_MAX; i++) {
-        uint8_t o = OAM_GATES + i * 3;
-        int16_t gy = PX(mg_slalom_gy[i]);
-        if (gy < -12 || gy > 142) {
-            mg_hide(o, o + 2);
+    // YOUR cones (rows 0..6: row 0 is beside your feet at cy=96; row 1 is right ahead at cy=80!)
+    for (uint8_t r = 0; r < ROW_COUNT; r++) {
+        uint8_t c = mg_slalom_row[r];
+        if (c == CONE_NONE) {
+            move_sprite(OAM_CONES_YOU + r, 0, 0);
             continue;
         }
-        uint8_t tile = mg_slalom_ghit[i] ? T_CONE_HIT : T_CONE;
-        uint8_t cpal = (mg_slalom_gst[i] == GATE_CLEARED) ? SPR_PAL_TRAIL_CURVE : SPR_PAL_TRAIL_POWER;
-        int16_t lx = (int16_t)mg_slalom_gx[i] - (int16_t)mg_slalom_gw[i] - 4;
-        int16_t rx = (int16_t)mg_slalom_gx[i] + (int16_t)mg_slalom_gw[i] - 4;
-        mg_sprite(o, tile, cpal, lx, gy - 12);
-        mg_sprite(o + 1, tile, cpal, rx, gy - 12);
-        if (i == nearest && ((uint8_t)frame_count & 8)) {
-            mg_sprite(o + 2, T_CHEVRON, SPR_PAL_TRAIL_CURVE, (int16_t)mg_slalom_gx[i] - 4, gy - 10);
-        } else {
-            move_sprite(o + 2, 0, 0);
-        }
+        int16_t cx = (c == CONE_LEFT ? lane_l : lane_r) - 4;
+        int16_t cy = ROW0_CY - (int16_t)(r * STEP_PX) - (int16_t)mg_slalom_slide;
+        mg_sprite(OAM_CONES_YOU + r, T_CONE, PAL_CONE, cx, cy);
     }
 
-    // Floating popup (+1 / +2 / HIT!).
-    if (pop_timer) {
-        int16_t py = pop_y - ((28 - pop_timer) >> 2);
-        if (pop_kind == 1) {
-            mg_sprite(OAM_POPUP, T_PLUS1, SPR_PAL_TRAIL_CURVE, pop_x - 4, py);
-            move_sprite(OAM_POPUP + 1, 0, 0);
-        } else if (pop_kind == 2) {
-            mg_sprite(OAM_POPUP, T_PLUS2, SPR_PAL_POWER, pop_x - 4, py);
-            move_sprite(OAM_POPUP + 1, 0, 0);
+    // VS CPU Racer & CPU Cones on the right track!
+    if (mg_vs) {
+        int16_t ctarget_x = mg_slalom_clane ? VS_CPU_R : VS_CPU_L;
+        int16_t cdx = ctarget_x - mg_slalom_cx;
+        if (cdx > 1) mg_slalom_cx += (cdx >> 1) + 1;
+        else if (cdx < -1) mg_slalom_cx -= ((-cdx) >> 1) + 1;
+        else mg_slalom_cx = ctarget_x;
+
+        // CPU screen Y relative to YOUR camera! If CPU is ahead (cdist > dist), CPU renders higher up!
+        int16_t rel_steps = (int16_t)mg_slalom_cdist - (int16_t)mg_slalom_dist;
+        int16_t cfeet = PLAYER_Y - rel_steps * STEP_PX - (int16_t)mg_slalom_slide + (int16_t)cpu_slide;
+        if (cfeet >= 20 && cfeet <= 148) {
+            int16_t cpush = (int16_t)cpu_drib + (cpu_drib >> 1);
+            int16_t cby = cfeet - (PLAYER_Y - BALL_REST_Y) - cpush;
+            uint8_t cspin = (cpu_drib > 0) && ((uint8_t)frame_count & 2);
+            draw_ball_slot(OAM_BALL_CPU, OAM_SHAD_CPU, mg_slalom_cx + (cpu_foot ? 2 : -2), cby, cspin, SPR_PAL_BALL);
+
+            uint8_t cf;
+            if (mg_run == MG_RUN_OVER) cf = mg_won ? MG_F_LOSE : MG_F_WIN;
+            else if (cpu_stumble) cf = MG_F_LOSE;
+            else if (cpu_drib >= 4) cf = MG_F_KICK;
+            else if (cpu_drib > 0) cf = cpu_foot ? MG_F_RUN_A : MG_F_RUN_B;
+            else cf = MG_F_READY;
+            uint8_t cpal = (cpu_stumble & 2) ? SPR_PAL_FLASH : SPR_PAL_CPU;
+            mg_player(1, MG_FRAME(MG_VIEW_BACK, cf), mg_slalom_cx, cfeet, cpal, cpu_foot);
         } else {
-            mg_sprite(OAM_POPUP, T_HIT_L, SPR_PAL_TRAIL_POWER, pop_x - 8, py);
-            mg_sprite(OAM_POPUP + 1, T_HIT_R, SPR_PAL_TRAIL_POWER, pop_x, py);
+            mg_player_hide(1);
+            mg_hide(OAM_BALL_CPU, OAM_SHAD_CPU);
         }
+
+        // Draw CPU's cones at the exact world steps visible in YOUR camera window (dist .. dist + 6)!
+        for (uint8_t r = 0; r < ROW_COUNT; r++) {
+            uint8_t wstep = mg_slalom_dist + r;
+            uint8_t cc = wstep < COURSE_LEN ? course_cpu[wstep] : CONE_NONE;
+            if (cc == CONE_NONE) {
+                move_sprite(OAM_CONES_CPU + r, 0, 0);
+                continue;
+            }
+            int16_t ccx = (cc == CONE_LEFT ? VS_CPU_L : VS_CPU_R) - 4;
+            int16_t ccy = ROW0_CY - (int16_t)(r * STEP_PX) - (int16_t)mg_slalom_slide;
+            mg_sprite(OAM_CONES_CPU + r, T_CONE, PAL_CONE, ccx, ccy);
+        }
+    } else {
+        mg_player_hide(1);
+        mg_hide(OAM_BALL_CPU, OAM_CONES_CPU + ROW_COUNT - 1);
+    }
+
+    // Checkered finish line across the pitch when TARGET_DIST is within view!
+    int16_t rem_steps = (int16_t)TARGET_DIST - (int16_t)mg_slalom_dist;
+    if (rem_steps >= 0 && rem_steps < ROW_COUNT) {
+        int16_t fy = ROW0_CY - rem_steps * STEP_PX - (int16_t)mg_slalom_slide + 4;
+        mg_sprite(OAM_FIN + 0, T_FINISH, PAL_GOLD_FX, 26, fy);
+        mg_sprite(OAM_FIN + 1, T_FINISH, PAL_GOLD_FX, 34, fy);
+        mg_sprite(OAM_FIN + 2, T_FINISH, PAL_GOLD_FX, 118, fy);
+        mg_sprite(OAM_FIN + 3, T_FINISH, PAL_GOLD_FX, 126, fy);
+    } else {
+        mg_hide(OAM_FIN, OAM_FIN + 3);
+    }
+
+    // Flying knocked-over cone
+    if (fly_t) {
+        fly_t--;
+        fly_x += fly_vx;
+        fly_y -= 2;
+        mg_sprite(OAM_FLY, T_CONE_HIT, PAL_CONE | (fly_vx < 0 ? S_FLIPX : 0), fly_x, fly_y);
+    } else {
+        move_sprite(OAM_FLY, 0, 0);
+    }
+
+    // Penalty popup ("+2S!" or "+1S!" in Solo)
+    if (pop_t) {
+        pop_t--;
+        if (!(pop_t & 1)) pop_y--;
+        uint8_t ptile = mg_slalom_pen_tenths < 16 ? T_PLUS1 : T_PLUS2;
+        mg_sprite(OAM_POPUP, ptile, SPR_PAL_CPU, pop_x, pop_y);
+        mg_sprite(OAM_POPUP + 1, T_SBANG, SPR_PAL_CPU, pop_x + 8, pop_y);
     } else {
         mg_hide(OAM_POPUP, OAM_POPUP + 1);
     }
 
-    // Subtle trail dot behind a loose / quick-cut ball.
-    if (mg_slalom_loose || kick_anim) {
-        mg_sprite(OAM_TRAIL, MG_T_TRAIL + 4, SPR_PAL_TRAIL_CURVE,
-                  PX(mg_slalom_bx - mg_slalom_bvx) - 4, PX(mg_slalom_by - mg_slalom_bvy) - 2);
+    // Turf dust puff behind boots
+    if (dust_t) {
+        dust_t--;
+        mg_sprite(OAM_DUST, T_DUST, PAL_GOLD_FX, dust_x, dust_y);
     } else {
-        move_sprite(OAM_TRAIL, 0, 0);
+        move_sprite(OAM_DUST, 0, 0);
     }
-    mg_hide(OAM_TRAIL + 1, OAM_TRAIL + 2);
 }
 
 void mg_slalom_enter(void) BANKED {
-    uint8_t map_buf[MG_SLALOM_BG_MAP_W * MG_SLALOM_BG_MAP_H];
-    uint8_t attr_buf[MG_SLALOM_BG_MAP_W * MG_SLALOM_BG_MAP_H];
+    mg_load_bg(mg_slalom_bg_tiles, MG_SLALOM_BG_TILE_COUNT, mg_slalom_bg_map, mg_slalom_bg_attr,
+               MG_SLALOM_BG_MAP_W, MG_SLALOM_BG_MAP_H, BANK(mg_slalom_bg));
+    uint8_t strip[20 * 4];
+    get_bkg_tiles(0, 0, 20, 4, strip);
+    for (uint8_t r = 4; r < 32; r += 4) set_bkg_tiles(0, r, 20, 4, strip);
+    VBK_REG = 1;
+    get_bkg_tiles(0, 0, 20, 4, strip);
+    for (uint8_t r = 4; r < 32; r += 4) set_bkg_tiles(0, r, 20, 4, strip);
+    VBK_REG = 0;
 
     memcpy(&pal_base_bg[0], pal_turf, sizeof(pal_turf));
     memcpy(&pal_base_bg[4], pal_boards, sizeof(pal_boards));
-    memcpy(&pal_base_obj[SPR_PAL_TRAIL_POWER << 2], pal_cone, sizeof(pal_cone));
-    memcpy(&pal_base_obj[SPR_PAL_TRAIL_CURVE << 2], pal_gate, sizeof(pal_gate));
-
-    // Tile the seamless 20x4 track 8 times vertically across the 32-row BG map.
-    banked_bkg_data(SCENE_TILES, MG_SLALOM_BG_TILE_COUNT, mg_slalom_bg_tiles, BANK(mg_slalom_bg));
-    banked_memcpy(map_buf, mg_slalom_bg_map, sizeof(map_buf), BANK(mg_slalom_bg));
-    banked_memcpy(attr_buf, mg_slalom_bg_attr, sizeof(attr_buf), BANK(mg_slalom_bg));
-    for (uint8_t ty = 0; ty < 32; ty += MG_SLALOM_BG_MAP_H) {
-        set_bkg_tiles(0, ty, MG_SLALOM_BG_MAP_W, MG_SLALOM_BG_MAP_H, map_buf);
-    }
-    VBK_REG = 1;
-    for (uint8_t ty = 0; ty < 32; ty += MG_SLALOM_BG_MAP_H) {
-        set_bkg_tiles(0, ty, MG_SLALOM_BG_MAP_W, MG_SLALOM_BG_MAP_H, attr_buf);
-    }
-    VBK_REG = 0;
-
     mg_load_spr(mg_slalom_spr_tiles, MG_SLALOM_SPR_TILE_COUNT, BANK(mg_slalom_spr));
+    memcpy(&pal_base_obj[PAL_CONE << 2], pal_cone, sizeof(pal_cone));
+    memcpy(&pal_base_obj[PAL_GOLD_FX << 2], pal_fx, sizeof(pal_fx));
 
-    // Stat scaling: REFLEX boosts steering speed; CONTROL tightens dribble touch.
-    uint8_t rf = stat_lv[STAT_REFLEX];
-    uint8_t ct = stat_lv[STAT_CONTROL];
-    mg_slalom_steer_spd = 20 + (rf >> 1);  // 20 (lv 1) .. 30 (lv 20) SUB/frame
-    mg_slalom_ctrl = ct;                   // 1 .. 20
+    lane_l = mg_vs ? VS_YOU_L : SOLO_LANE_L;
+    lane_r = mg_vs ? VS_YOU_R : SOLO_LANE_R;
 
-    mg_slalom_points = 0;
-    mg_slalom_clock = RUN_FRAMES;
-    hud_sec = RUN_SECS;
-    mg_slalom_gates = 0;
-    mg_slalom_streak = 0;
-    mg_slalom_best_streak = 0;
-    mg_slalom_hits = 0;
-    mg_slalom_outs = 0;
-    mg_slalom_misses = 0;
-    mg_slalom_cut_cd = 0;
+    uint8_t lv_ref = stat_lv[STAT_REFLEX];
+    uint8_t lv_ctl = stat_lv[STAT_CONTROL];
+    if (mg_vs) {
+        // In head-to-head VS race, cone hits cost real-time stumble frames (26 down to 14)!
+        mg_slalom_stumble_max = 26 - (lv_ref >> 2) - (lv_ctl >> 2);
+        if (mg_slalom_stumble_max < 14) mg_slalom_stumble_max = 14;
+    } else {
+        mg_slalom_stumble_max = 12 - (lv_ref >> 2);
+        if (mg_slalom_stumble_max < 6) mg_slalom_stumble_max = 6;
+    }
+    mg_slalom_pen_tenths = 20 - ((lv_ctl * 2) >> 2);
+    if (mg_slalom_pen_tenths < 12) mg_slalom_pen_tenths = 12;
+
+    mg_slalom_lane = 0;
+    mg_slalom_clane = 0;
+    mg_slalom_px = lane_l;
+    mg_slalom_cx = VS_CPU_L;
+    mg_slalom_bx = lane_l - 2;
+    mg_slalom_by = BALL_REST_Y;
+    mg_slalom_dist = 0;
+    mg_slalom_cdist = 0;
+    mg_slalom_target = TARGET_DIST;
+    mg_slalom_tenths = 0;
     mg_slalom_stumble = 0;
-    mg_slalom_spd = 14;
-    mg_slalom_px = TO_SUB(80);
-    mg_slalom_pvx = 0;
-    mg_slalom_next_side = rand() & 1;
-    reset_ball_to_feet();
-
-    scroll_sub = 0;
+    mg_slalom_hits = mg_slalom_chits = 0;
+    mg_slalom_streak = mg_slalom_best_streak = 0;
+    mg_slalom_medal = MEDAL_NONE;
+    mg_slalom_slide = 0;
+    mg_slalom_drib_anim = 0;
+    mg_slalom_foot = 0;
+    sub6 = 0;
+    cpu_cd = 16;
+    cpu_stumble = cpu_drib = cpu_foot = cpu_slide = 0;
+    fly_t = pop_t = dust_t = 0;
+    scroll_x = 0;
     scroll_y = 0;
-    pop_kind = pop_timer = 0;
-    kick_anim = 0;
-    heavy_ticks = 0;
-    last_dir = 0;
 
-    // Place 3 initial gates staggered up the pitch.
-    spawn_gate(0, 48);
-    spawn_gate(1, -8);
-    spawn_gate(2, -64);
+    build_course(course_you);
+    if (mg_vs) build_course(course_cpu);
+    sync_window();
 
+    mg_player_hide(1);
+    mg_player_hide(2);
+    mg_hide(OAM_MG_FREE, OAM_MG_COUNT - 1);
     draw_scene();
 }
 
-static void on_cone_hit(uint8_t g, int16_t cone_x_sub) {
-    if (mg_slalom_ghit[g]) return;
-    mg_slalom_ghit[g] = 24;
-    mg_slalom_hits++;
-    mg_slalom_streak = 0;
-    mg_slalom_stumble = 16;
-    // Knock the ball away from the cone!
-    mg_slalom_loose = 1;
-    loose_lock = 12;
-    mg_slalom_bvx = mg_slalom_bx < cone_x_sub ? -24 : 24;
-    mg_slalom_bvy = 14;
-    sfx_play(SFX_PARRY);
-    show_popup(3, PX(cone_x_sub), PX(mg_slalom_gy[g]) - 14);
-}
-
-static void finish_run(void) {
-    uint8_t n = str_cat(mg_detail, 0, "GATES ");
-    n = num_cat(mg_detail, n, mg_slalom_gates);
-    n = str_cat(mg_detail, n, "  HITS ");
-    num_cat(mg_detail, n, mg_slalom_hits);
-    mg_finish(mg_slalom_points);
-}
-
-static uint8_t sec_tick;
-
 void mg_slalom_update(void) BANKED {
     if (mg_run == MG_RUN_READY) {
-        sec_tick = 0;
-        draw_scene();
-        return;
-    }
-    if (mg_run == MG_RUN_OVER) {
-        if (pop_timer) pop_timer--;
         draw_scene();
         return;
     }
 
-    if (mg_hud_dirty) {
-        mg_hud_dirty = 0;
-        hud_draw(1);
+    if (mg_slalom_slide) {
+        uint8_t step = mg_slalom_slide > 4 ? 4 : mg_slalom_slide;
+        mg_slalom_slide -= step;
+        scroll_y -= step;
     }
+    if (mg_slalom_drib_anim) mg_slalom_drib_anim--;
 
-    // Countdown clock (45 seconds, no division).
-    if (mg_slalom_clock) {
-        mg_slalom_clock--;
-        sec_tick++;
-        if (sec_tick >= 60) {
-            sec_tick = 0;
-            if (hud_sec) hud_sec--;
-            hud_draw(0);
+    if (mg_run == MG_RUN_LIVE) {
+        if (++sub6 >= 6) {
+            sub6 = 0;
+            if (mg_slalom_tenths < 999) mg_slalom_tenths++;
         }
-    }
-    if (!mg_slalom_clock) {
-        finish_run();
-        draw_scene();
-        return;
-    }
-
-    if (mg_slalom_cut_cd) mg_slalom_cut_cd--;
-    if (mg_slalom_stumble) mg_slalom_stumble--;
-    if (kick_anim) kick_anim--;
-    if (pop_timer) pop_timer--;
-    if (loose_lock) loose_lock--;
-
-    // Forward pace ramps with cleared gates, adjusted by UP/DOWN/B/stumble.
-    uint8_t base_spd = 14 + (mg_slalom_gates >> 1);
-    if (base_spd > 28) base_spd = 28;
-    int16_t spd = base_spd;
-    uint8_t trapping = (joy & J_B) != 0;
-    if (mg_slalom_stumble) spd -= 7;
-    else if (trapping) spd -= 5;
-    else if (joy & J_UP) spd += 8;
-    else if (joy & J_DOWN) spd -= 6;
-    if (spd < 6) spd = 6;
-    if (spd > 34) spd = 34;
-    mg_slalom_spd = (uint8_t)spd;
-
-    // Hardware scroll upward (pitch glides down toward player).
-    scroll_sub -= mg_slalom_spd;
-    scroll_y = (uint8_t)(scroll_sub >> 4);
-
-    // Player lateral steering.
-    int8_t dir = ((joy & J_RIGHT) != 0) - ((joy & J_LEFT) != 0);
-    int16_t max_vx = trapping ? (int16_t)(mg_slalom_steer_spd - 4) : (int16_t)mg_slalom_steer_spd;
-    if (mg_slalom_stumble) max_vx >>= 1;
-    int16_t target_vx = dir * max_vx;
-    if (mg_slalom_pvx < target_vx) {
-        mg_slalom_pvx += 6;
-        if (mg_slalom_pvx > target_vx) mg_slalom_pvx = target_vx;
-    } else if (mg_slalom_pvx > target_vx) {
-        mg_slalom_pvx -= 6;
-        if (mg_slalom_pvx < target_vx) mg_slalom_pvx = target_vx;
-    }
-    mg_slalom_px += mg_slalom_pvx;
-    if (mg_slalom_px < TO_SUB(LANE_X0)) mg_slalom_px = TO_SUB(LANE_X0), mg_slalom_pvx = 0;
-    if (mg_slalom_px > TO_SUB(LANE_X1)) mg_slalom_px = TO_SUB(LANE_X1), mg_slalom_pvx = 0;
-
-    // Quick cut / tap (A): snaps the ball sharply in your D-pad direction.
-    if ((joy_pressed & J_A) && !mg_slalom_cut_cd && !mg_slalom_stumble) {
-        int16_t dx_b = ab16(mg_slalom_bx - mg_slalom_px);
-        int16_t dy_b = ab16(mg_slalom_by - TO_SUB(PLAYER_Y - BALL_HOLD_DY));
-        if (!mg_slalom_loose || (dx_b < TO_SUB(18) && dy_b < TO_SUB(18))) {
-            uint8_t cd = 14 - (stat_lv[STAT_REFLEX] >> 2);
-            if (cd < 7) cd = 7;
-            mg_slalom_cut_cd = cd;
-            kick_anim = 8;
-            sfx_play(SFX_KICK);
-            if (dir != 0) {
-                // Crisp sideways cut; higher CONTROL keeps it tighter instead of running away.
-                int16_t kick_vx = dir * (28 - (int16_t)(mg_slalom_ctrl >> 2));
-                mg_slalom_bvx = kick_vx;
-                mg_slalom_bvy = (joy & J_UP) ? -10 : -4;
-                mg_slalom_loose = (joy & J_UP) ? 1 : 0;
-                mg_slalom_bx += dir * TO_SUB(4);
-            } else {
-                // Neutral A: tidy knock-on straight ahead.
-                mg_slalom_bvx = 0;
-                mg_slalom_bvy = -12;
-                mg_slalom_loose = 1;
-            }
-        }
-    }
-
-    // Dribble & heavy-touch physics.
-    if (!mg_slalom_loose) {
-        // Detect sharp high-speed cut without close-control (B): heavy touch knocks ball loose!
-        uint8_t sprinting = (joy & J_UP) != 0 && !trapping;
-        uint8_t reversed = (dir != 0 && last_dir != 0 && dir != last_dir);
-        if (sprinting && dir != 0) {
-            if (heavy_ticks < 255) heavy_ticks++;
+        if (mg_slalom_stumble) {
+            mg_slalom_stumble--;
         } else {
-            heavy_ticks = 0;
-        }
-        // Threshold rises with CONTROL stat (lv 1: 12 frames; lv 20: 21 frames).
-        uint8_t thresh = 12 + (mg_slalom_ctrl >> 1);
-        if ((sprinting && reversed && mg_slalom_ctrl < 14) || heavy_ticks >= thresh) {
-            mg_slalom_loose = 1;
-            loose_lock = 12;
-            heavy_ticks = 0;
-            // Ball knocks ahead and sideways away from your stride!
-            int16_t extra = 22 - (int16_t)(mg_slalom_ctrl >> 1);
-            if (extra < 10) extra = 10;
-            mg_slalom_bvx = mg_slalom_pvx + (dir ? dir * extra : 0);
-            mg_slalom_bvy = -12;
-            sfx_play(SFX_TOUCH);
-        } else {
-            // Soft dribble: ball tracks just ahead of your boots with slight inertia.
-            int16_t want_x = mg_slalom_px + (mg_slalom_pvx >> 1);
-            int16_t want_y = TO_SUB(PLAYER_Y - BALL_HOLD_DY);
-            if (trapping) {
-                mg_slalom_bx += (want_x - mg_slalom_bx) >> 1;
-                mg_slalom_by += (want_y - mg_slalom_by) >> 1;
-            } else {
-                mg_slalom_bx += (want_x - mg_slalom_bx) >> 2;
-                mg_slalom_by += (want_y - mg_slalom_by) >> 2;
-            }
-            mg_slalom_bvx = mg_slalom_pvx;
-            mg_slalom_bvy = 0;
-        }
-    } else {
-        // Loose ball rolls on the grass (relative to scrolling pitch).
-        mg_slalom_bx += mg_slalom_bvx;
-        mg_slalom_by += mg_slalom_bvy + (mg_slalom_spd >> 2);
-        // Grass friction damps velocity.
-        if (mg_slalom_bvx > 0) mg_slalom_bvx--;
-        else if (mg_slalom_bvx < 0) mg_slalom_bvx++;
-        if (mg_slalom_bvy > 0) mg_slalom_bvy--;
-        else if (mg_slalom_bvy < 0) mg_slalom_bvy++;
-
-        // Re-collect when player runs back up to the ball (or immediately on B trap).
-        int16_t reach = trapping ? TO_SUB(18) : TO_SUB(12);
-        if (!mg_slalom_stumble && (trapping || !loose_lock) &&
-            ab16(mg_slalom_bx - mg_slalom_px) < reach &&
-            ab16(mg_slalom_by - TO_SUB(PLAYER_Y - BALL_HOLD_DY)) < reach) {
-            mg_slalom_loose = 0;
-            loose_lock = 0;
-            sfx_play(SFX_TOUCH);
-        }
-
-        // Out of bounds (sidelines or off top/bottom): reset to feet with a penalty.
-        int16_t bx_px = PX(mg_slalom_bx), by_px = PX(mg_slalom_by);
-        if (bx_px < OUT_X0_PX || bx_px > OUT_X1_PX || by_px < 4 || by_px > 132) {
-            mg_slalom_outs++;
-            mg_slalom_streak = 0;
-            mg_slalom_stumble = 14;
-            sfx_play(SFX_BOARD);
-            show_popup(3, bx_px < 30 ? 30 : bx_px > 130 ? 130 : bx_px, PLAYER_Y - 18);
-            reset_ball_to_feet();
-        }
-    }
-    if (dir != 0) last_dir = dir;
-
-    // Advance gates, check cone collisions & gate clears, recycle off-bottom gates.
-    int16_t top_y = 32000;
-    for (uint8_t i = 0; i < GATE_MAX; i++) {
-        if (mg_slalom_gy[i] < top_y) top_y = mg_slalom_gy[i];
-    }
-
-    int16_t bx_px = PX(mg_slalom_bx), by_px = PX(mg_slalom_by);
-    int16_t px_px = PX(mg_slalom_px);
-
-    for (uint8_t i = 0; i < GATE_MAX; i++) {
-        if (mg_slalom_ghit[i]) mg_slalom_ghit[i]--;
-        mg_slalom_gy[i] += mg_slalom_spd;
-        int16_t gy_px = PX(mg_slalom_gy[i]);
-
-        int16_t lx = (int16_t)mg_slalom_gx[i] - (int16_t)mg_slalom_gw[i];
-        int16_t rx = (int16_t)mg_slalom_gx[i] + (int16_t)mg_slalom_gw[i];
-
-        // Cone collision (ball or player clips either cone).
-        if (!mg_slalom_ghit[i]) {
-            if (ab16(by_px - gy_px) < 7) {
-                if (ab16(bx_px - lx) < 6) on_cone_hit(i, TO_SUB(lx));
-                else if (ab16(bx_px - rx) < 6) on_cone_hit(i, TO_SUB(rx));
-            }
-            if (!mg_slalom_ghit[i] && ab16(PLAYER_Y - 4 - gy_px) < 7) {
-                if (ab16(px_px - lx) < 7) on_cone_hit(i, TO_SUB(lx));
-                else if (ab16(px_px - rx) < 7) on_cone_hit(i, TO_SUB(rx));
+            if (joy_pressed & (J_LEFT | J_B)) {
+                step_dribble(0);
+            } else if (joy_pressed & (J_RIGHT | J_A)) {
+                step_dribble(1);
             }
         }
-
-        // Gate crossing check: when the gate line passes the ball.
-        if (mg_slalom_gst[i] == GATE_ACTIVE && gy_px >= by_px) {
-            if (bx_px > lx + 2 && bx_px < rx - 2 && !mg_slalom_ghit[i]) {
-                mg_slalom_gst[i] = GATE_CLEARED;
-                mg_slalom_gates++;
-                mg_slalom_streak++;
-                if (mg_slalom_streak > mg_slalom_best_streak) mg_slalom_best_streak = mg_slalom_streak;
-                uint8_t gain = mg_slalom_streak >= 3 ? 2 : 1;
-                mg_slalom_points = (uint16_t)(mg_slalom_points + gain);
-                sfx_play(gain > 1 ? SFX_CHARGE : SFX_TOUCH);
-                show_popup(gain, mg_slalom_gx[i], gy_px - 22);
-                hud_draw(0);
-            } else {
-                mg_slalom_gst[i] = GATE_MISSED;
-                mg_slalom_misses++;
-                mg_slalom_streak = 0;
-                sfx_play(SFX_BOARD);
-                hud_draw(0);
-            }
-        }
-
-        // Recycle gate once it scrolls off the bottom.
-        if (gy_px > 148) {
-            int16_t ny = PX(top_y) - gate_spacing_px();
-            if (ny > -16) ny = -16;
-            spawn_gate(i, ny);
-            top_y = mg_slalom_gy[i];
-        }
+        if (mg_run == MG_RUN_LIVE) cpu_step();
+        hud_draw();
     }
 
     draw_scene();

@@ -359,6 +359,14 @@ slammed (the Captain Tsubasa feel).
   the outer ring no longer lit, the outer ring's two ends go: four sprites there. Rally
   frames past ten sprites a line: 101 with all six, 33 with that (0.24%), from 358 with
   the dots; what's left is both players on the same lines with an effect playing.
+  **Smaller, and chasing in** (2026-11-25, playtest: "a smaller circle with 3 concentric
+  rings and we can cycle the palette to make it look like it's moving inward"): 32x16,
+  four sprites (build/scratch/zoneart2.mjs), so no ends to drop. The lit ring (yellow)
+  steps in, outer, middle, the spot, and round again, the one it left orange behind it
+  and the third dim: a step every 8 frames while the ball's more than 48 px deep from
+  the spot, 6 past 20, then 4. Then smaller again, the rings 1 px apart (2026-11-25,
+  playtest: "a smaller ring where the rings are all connected, 1px apart"): 16x11, two
+  sprites (build/scratch/zoneart3.mjs).
 - **Home between shots** (2026-11-22 until 2026-11-24, when the playtest said "the player
   seems to auto move still after kicking the ball": you stay put now, the d-pad yours):
   with nothing queued, the d-pad let go and the ball going away, you jog back to the

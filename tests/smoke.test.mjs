@@ -384,8 +384,8 @@ test('B then A is a lob, dropping deep behind the CPU', () => {
 
 test('a lob coming down to you: a flashing marker where to meet it; there and queued, you slam it out of the air', () => {
   const emu = quietRally();
-  // The marker: the slam zone's middle sprite (29-34) for a slam, the small ring (19) for a drop shot.
-  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 31) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
+  // The marker: the slam zone's left sprite (29-30) for a slam, the small ring (19) for a drop shot.
+  const marker = (e) => e.read8(e.symbols.addr('shadow_OAM') + 4 * 29) || e.read8(e.symbols.addr('shadow_OAM') + 4 * 19);
   incoming(emu, 60, 50, 26, 28);
   set16(emu, 'ball_vx', 4);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
@@ -410,7 +410,7 @@ test('a lob coming down to you: a flashing marker where to meet it; there and qu
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
 });
 
-test('the slam zone: three rings, 48 px across, the lit one stepping in to the spot as the lob comes; its palette borrowed and given back', () => {
+test('the slam zone: three rings 1 px apart, 16 px across, the lit one stepping in to the spot over and over, quicker as the lob comes; its palette borrowed and given back', () => {
   const emu = quietRally();
   const oam = (n) => [emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n + 1), emu.read8(emu.symbols.addr('shadow_OAM') + 4 * n)];
   const pal = () => [1, 2, 3].map((k) => at(emu, 'pal_base_obj', 4 * 4 + k, 'u16'));  // the curve trail's, palette 4
@@ -421,14 +421,26 @@ test('the slam zone: three rings, 48 px across, the lit one stepping in to the s
   emu.idle(6);
   assert.equal(at(emu, 'meet_slam', YOU), 1, 'the slam spot');
   assert.equal(emu.v('zone_on'), 1, 'the zone shows');
-  assert.equal(oam(34)[0] - oam(29)[0], 40, 'six sprites in a row: 48 px across');
-  assert.equal(oam(29)[1], oam(34)[1], 'one row: six on its lines');
-  assert.equal(emu.v('zone_lit'), 0, 'far: the outer ring lit');
+  assert.equal(oam(30)[0] - oam(29)[0], 8, 'two sprites: 16 px across');
+  assert.equal(oam(29)[1], oam(30)[1], 'one row');
+  assert.equal(oam(31)[1], 0, 'no more');
   assert.notDeepEqual(pal(), before, 'the palette borrowed');
   matchGolden(emu, 'slam-zone');
-  emu.until((e) => e.v('zone_lit') === 1, 200, 'the middle ring');
-  emu.until((e) => Math.abs(px(e.v('ball_y', 'i16')) - at(e, 'meet_y', YOU, 'i16')) <= 4, 200, 'it reaching the spot');
-  assert.equal(emu.v('zone_lit'), 2, 'there: the spot lit');
+  const steps = (n) => {  // frames between steps in, over n frames
+    const seen = []; let last = emu.v('zone_lit'), t = 0;
+    for (let f = 0; f < n; f++) {
+      emu.idle(1); t++;
+      const l = emu.v('zone_lit');
+      if (l !== last) { assert.equal(l, (last + 1) % 3, 'stepping in, then round to the outer'); seen.push(t); t = 0; last = l; }
+    }
+    return seen;
+  };
+  const far = steps(24);
+  assert.ok(far.length >= 2 && far.slice(1).every((t) => t === 8), `far: a step every 8 frames: ${far}`);
+  emu.until((e) => Math.abs(px(e.v('ball_y', 'i16')) - at(e, 'meet_y', YOU, 'i16')) <= 20, 200, 'it nearing the spot');
+  emu.idle(8);
+  const near = steps(12);
+  assert.ok(near.slice(1).every((t) => t === 4), `near: every 4: ${near}`);
   assert.equal(oam(19)[1], 0, 'no small ring meanwhile');
   emu.until((e) => e.v('ball_landings') > 0 || e.v('goal_timer'), 120, 'it landing');
   emu.idle(2);

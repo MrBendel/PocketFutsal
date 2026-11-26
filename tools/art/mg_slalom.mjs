@@ -1,12 +1,7 @@
-// CONE SLALOM (src/mg_slalom.c): seamless 20x4 vertical-scrolling training pitch
-// and 8x16 sprites (striped traffic cones, gate target chevron, popups).
-//
-// BG palettes (set in src/mg_slalom.c):
-//   0  turf: 0 bright emerald, 1 darker mowed stripe, 2 deep apron/shadow, 3 crisp white lines
-//   1  side boards: 0 dark navy frame, 1 crimson panel, 2 gold rail/rivets, 3 bright cream trim
-// SPR palettes (reusing SPR_PAL_TRAIL_POWER / SPR_PAL_TRAIL_CURVE in src/mg_slalom.c):
-//   SPR_PAL_TRAIL_POWER (3): cone palette — 1 crisp white stripe, 2 vivid orange, 3 dark outline
-//   SPR_PAL_TRAIL_CURVE (4): gate & popup palette — 1 bright white, 2 gold/lime glow, 3 dark outline
+// CONE SLALOM (src/mg_slalom.c): TimberMan-style two-lane dribble sprint!
+// Seamless 20x4 vertical-scrolling training pitch (two 16 px grass bands matching
+// STEP_PX = 16 so cones stay locked to the turf as you step!) and 8x16 sprites
+// (striped cones, flying hit cone, checkered finish banner, +2S! penalty popup, turf dust).
 import { BLANK, canvas, toBackground } from './common.mjs';
 
 function buildBg() {
@@ -25,12 +20,12 @@ function buildBg() {
   cv.rect(22, 0, 2, 32, 3);
   cv.rect(136, 0, 2, 32, 3);
 
-  // Subtle dashed center track guide (8 px dash, 8 px gap).
-  cv.rect(79, 4, 2, 8, 3);
-  cv.rect(79, 20, 2, 8, 3);
+  // Dashed center lane divider (splits Left dribble lane x=52 & Right dribble lane x=108).
+  cv.rect(79, 3, 2, 10, 3);
+  cv.rect(79, 19, 2, 10, 3);
 
   // Subtle grass-tuft accents (color 2) on the mowed bands.
-  for (const [tx, ty] of [[38, 6], [116, 11], [54, 22], [102, 26]]) {
+  for (const [tx, ty] of [[36, 6], [120, 11], [66, 22], [94, 26]]) {
     cv.plot(tx, ty, 2);
     cv.plot(tx - 1, ty + 1, 2);
     cv.plot(tx + 1, ty + 1, 2);
@@ -39,23 +34,17 @@ function buildBg() {
   // Stadium side perimeter boards (left cols 0..1, right cols 18..19, pal 1).
   for (const side of [0, 1]) {
     const x0 = side === 0 ? 0 : 144;
-    // Outer dark wall base (0)
     cv.rect(x0, 0, 16, 32, 0);
-    // Crimson stadium board face (1)
     cv.rect(x0 + 2, 1, 12, 30, 1);
-    // Horizontal panel seams every 16 px
     cv.hline(x0, x0 + 15, 0, 0);
     cv.hline(x0, x0 + 15, 16, 0);
-    // Gold vertical rail & rivets (2)
     const railX = side === 0 ? x0 + 13 : x0 + 2;
     cv.vline(railX, 0, 31, 2);
     cv.vline(side === 0 ? x0 + 14 : x0 + 1, 0, 31, 3);
-    // Inner bright trim & panel rivets
     for (const ry of [4, 12, 20, 28]) {
       cv.plot(x0 + 4, ry, 2);
       cv.plot(x0 + 10, ry, 2);
     }
-    // Decorative gold stripe block in each 16 px panel
     cv.rect(x0 + 5, 6, 5, 4, 2);
     cv.rect(x0 + 6, 7, 3, 2, 3);
     cv.rect(x0 + 5, 22, 5, 4, 2);
@@ -111,29 +100,19 @@ const coneHitBot = [
   '........',
 ];
 
-// Gate target chevron (centered between the next gate's cones): bright gold/white.
-const gateChevron = [
-  '.33..33.',
-  '31233213',
-  '32122123',
-  '.321123.',
-  '..3113..',
-  '...33...',
-  '........',
+// Checkered finish line banner strip (8x8 top tile).
+const finishChecker = [
+  '33333333',
+  '11331133',
+  '11331133',
+  '33113311',
+  '33113311',
+  '11331133',
+  '33333333',
   '........',
 ];
 
-// Popups: "+1", "+2", "HI"/"T!", "OU"/"T!" (outlined 8x8 in top half of 8x16).
-const plus1 = [
-  '....33..',
-  '.3.3113.',
-  '313.313.',
-  '313.313.',
-  '.3..313.',
-  '...31113',
-  '...33333',
-  '........',
-];
+// Penalty popups: "+2", "+1", "S!" (outlined 8x8 in top half of 8x16).
 const plus2 = [
   '...3333.',
   '.3.32123',
@@ -144,34 +123,45 @@ const plus2 = [
   '...33333',
   '........',
 ];
-const hitL = [
-  '33.33.33',
-  '31313313',
-  '31113313',
-  '31313313',
-  '31313313',
-  '33.33.33',
-  '........',
+const plus1 = [
+  '....33..',
+  '.3.3113.',
+  '313.313.',
+  '313.313.',
+  '.3..313.',
+  '...31113',
+  '...33333',
   '........',
 ];
-const hitR = [
-  '33333.33',
-  '33133313',
-  '.313.313',
-  '.313..33',
-  '.313.313',
+const secBang = [
+  '.3333.33',
+  '31223313',
+  '3123.313',
+  '.3123313',
+  '..312333',
+  '32213313',
   '.333..33',
+  '........',
+];
+
+// Turf dust puff kicked up behind boots on each dribble tap.
+const turfDust = [
+  '........',
+  '..3..3..',
+  '.313313.',
+  '31211213',
+  '.332233.',
+  '........',
   '........',
   '........',
 ];
 
-// Order must match T_* constants in src/mg_slalom.c (2 tiles per 8x16 sprite).
 export const SPR = [
-  coneTop, coneBot,       // +0  T_CONE
-  coneHitTop, coneHitBot, // +2  T_CONE_HIT
-  gateChevron, BLANK,     // +4  T_CHEVRON
-  plus1, BLANK,           // +6  T_PLUS1
-  plus2, BLANK,           // +8  T_PLUS2
-  hitL, BLANK,            // +10 T_HIT_L
-  hitR, BLANK,            // +12 T_HIT_R
+  coneTop, coneBot,       // +0: T_CONE
+  coneHitTop, coneHitBot, // +2: T_CONE_HIT
+  finishChecker, BLANK,   // +4: T_FINISH
+  plus2, BLANK,           // +6: T_PLUS2
+  plus1, BLANK,           // +8: T_PLUS1
+  secBang, BLANK,         // +10: T_SBANG ("S!")
+  turfDust, BLANK,        // +12: T_DUST
 ];
