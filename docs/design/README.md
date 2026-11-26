@@ -143,7 +143,7 @@ getting up), win, lose. PocketFutsal's, per view:
 | kick | a ground strike (the ball under 5 px up) |
 | volley | the ball 5-15 px up: faster and flatter |
 | header | the ball 16-27 px up, in front: driven down at the other half |
-| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way |
+| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way. Tuck, strike, recover (24x24, below) |
 | slide | (one set, both views) feet first, for a ball out of reach: seven 32x24 frames, brake, plant, extend, contact, decelerate, kneel, ready (below) |
 | lying | (one set, both views) knocked down |
 | win / lose | a point: six-frame cycles, both players facing you (below) |
@@ -284,6 +284,17 @@ slammed (the Captain Tsubasa feel).
   (turn, centre, turn back) to the end. A step every 8 frames of the point's 110.
   Streamed into the slide's tiles the same way (all twelve frames, 1536 bytes, in
   RAM; a frame's 8 tiles by DMA as it changes).
+- **The bicycle kick's frames** (2026-11-26, the library's generated bicycle cycles,
+  which replaced the malformed ones): tuck, strike, recover, 24x24, your back view
+  and the CPU's front, with the slide's (tools/export-slide.mjs), drawn and streamed
+  the same way: tucked past 20 of its 24 frames, striking past 10, recovering past 4,
+  then ready. Its lift as before. **The streamed art lives in WRAM bank 2** (0xD000,
+  the slide's and the bicycle's 2272 bytes, then the reactions' 1536 at 0xD900): the
+  GBC's banks 2-7, which nothing else uses. src/art_ram.s copies it in as the match
+  loads and starts the DMAs in vblank, switching bank 2 in only where it neither
+  touches the stack nor a variable (GBDK's stack is at 0xD000-0xDFFF in bank 1). A
+  DMA asked for with the queue full, or after a frame ran long, waits for the next
+  frame (gfx_dma returns 0).
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it

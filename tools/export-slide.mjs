@@ -1,33 +1,42 @@
-// The Futnet slide: Codex's feet-first slide (artwork/players/slide/study-v1,
-// native-32x24, spiky) as 8x16 sprites, only the occupied ones, into
+// Futnet's big poses, from the spiky player's complete library
+// (artwork/players/roster/spiky/complete.json): Codex's feet-first slide (32x24,
+// facing right: brake, plant, extend, contact, decelerate, kneel, ready; the
+// approach is the run before it) and the bicycle kick (24x24, front and back views:
+// tuck, strike, recover). As 8x16 sprites, only the occupied ones, into
 // src/slide_art.c / .h. Run: node tools/export-slide.mjs
-// Frames, facing right: brake, plant, extend, contact, decelerate, kneel, ready
-// (the approach is the run before it). Each sprite: its 8x16 tile pair (32 bytes)
-// and its place in the 32x24 frame.
+// The tiles go to WRAM bank 2 at SLIDE_ART_RAM as the match loads (art_copy,
+// vram_queue.s), for the DMA to send a frame at a time; the frame tables and the
+// metasprites to the caller's RAM.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const src = JSON.parse(fs.readFileSync(new URL('../artwork/players/slide/study-v1/native-32x24.json', import.meta.url)));
-const PHASES = ['brake', 'plant', 'extend', 'contact', 'decelerate', 'kneel', 'ready'];
-const MAX = 6;  // sprites a frame: the player's four and two more
-const c = src.characters.find((c) => c.id === 'spiky');
-assert.deepEqual(c.palette.map((p) => p.slice(0, 3)), [[0, 0, 0], [248, 200, 136], [40, 120, 232], [24, 32, 48]], 'the players\' palette order');
+const lib = JSON.parse(fs.readFileSync(new URL('../artwork/players/roster/spiky/complete.json', import.meta.url)));
+assert.deepEqual(lib.palette.map((p) => p.slice(0, 3)), [[0, 0, 0], [248, 200, 136], [40, 120, 232], [24, 32, 48]], 'the players\' palette order');
+const FRAMES = [
+  ...['brake', 'plant', 'extend', 'contact', 'decelerate', 'kneel', 'ready'].map((p) => ['slide-right', p, p]),
+  ...['tuck', 'strike', 'recover'].map((p) => ['bicycle-front', p, 'bike_front_' + p]),
+  ...['tuck', 'strike', 'recover'].map((p) => ['bicycle-back', p, 'bike_back_' + p]),
+];
+const MAX = 6;           // sprites a frame: the player's four and two more
+const RAM = 0xD000;      // WRAM bank 2 (reaction_art's follows at 0xD900)
+const RAM_SIZE = 0x900;
 const bytes = [], first = [], count = [], xy = [];
-for (const name of PHASES) {
-  const f = c.frames.find((f) => f.phase === name);
-  assert.ok(f, name);
-  assert.equal(f.rows.length, 24); assert.equal(f.rows[0].length, 32);
+for (const [anim, phase] of FRAMES) {
+  const f = lib.animations.find((a) => a.name === anim)?.frames.find((f) => f.name === phase);
+  assert.ok(f, `${anim} ${phase}`);
+  const w = f.rows[0].length, off = (32 - w) >> 1;  // centred in a 32-wide frame
+  assert.equal(f.rows.length, 24); assert.ok(w === 32 || w === 24, `${anim} ${phase}: ${w} wide`);
   // Occupied 8x16 cells, worked out again from the pixels (the JSON's list is the check).
   const cells = [];
-  for (const y of [0, 16]) for (let x = 0; x < 32; x += 8) {
+  for (const y of [0, 16]) for (let x = 0; x < w; x += 8) {
     let any = false;
     for (let yy = y; yy < Math.min(y + 16, 24); yy++) for (let xx = x; xx < x + 8; xx++) if (f.rows[yy][xx] !== '.') any = true;
     if (any) cells.push({ x, y });
   }
-  assert.deepEqual(cells.map((p) => p.x + ',' + p.y).sort(), f.spriteColumns8x16.map((p) => p.x + ',' + p.y).sort(), name + ': occupied cells');
-  assert.ok(cells.length <= MAX, `${name}: ${cells.length} sprites`);
+  assert.deepEqual(cells.map((p) => p.x + ',' + p.y).sort(), f.spriteColumns8x16.map((p) => p.x + ',' + p.y).sort(), `${anim} ${phase}: occupied cells`);
+  assert.ok(cells.length <= MAX, `${anim} ${phase}: ${cells.length} sprites`);
   first.push(count.reduce((a, b) => a + b, 0)); count.push(cells.length);
   for (const { x, y } of cells) {
-    xy.push(x, y);
+    xy.push(x + off, y);
     for (let yy = y; yy < y + 16; yy++) {
       let lo = 0, hi = 0;
       for (let xx = 0; xx < 8; xx++) {
@@ -38,12 +47,14 @@ for (const name of PHASES) {
     }
   }
 }
+assert.ok(bytes.length <= RAM_SIZE, `${bytes.length} bytes: past reaction_art's`);
+const n = FRAMES.length;
 // Metasprites (GBDK's {dy, dx, dtile, props}, each after the first relative to the
 // one before; METASPR_TERM is dy -128): for each frame, facing right then left, its
 // first four sprites (the player's own OAM) then the rest (two more). Origin: the
-// frame's top-left, hardware (sx - 8, sy - 7) for feet at (sx, sy).
+// 32x24 frame's top-left, hardware (sx - 8, sy - 7) for feet at (sx, sy).
 const meta = [], at = [];
-for (let k = 0; k < n0(); k++) for (const left of [0, 1]) {
+for (let k = 0; k < n; k++) for (const left of [0, 1]) {
   const s0 = first[k], cells = [];
   for (let s = 0; s < count[k]; s++) cells.push([xy[(s0 + s) * 2 + 1], left ? 24 - xy[(s0 + s) * 2] : xy[(s0 + s) * 2], s * 2]);
   for (const part of [cells.slice(0, 4), cells.slice(4)]) {
@@ -53,28 +64,29 @@ for (let k = 0; k < n0(); k++) for (const left of [0, 1]) {
     meta.push(-128, 0, 0, 0);
   }
 }
-function n0() { return PHASES.length; }
-const hex = (a) => { const out = []; for (let i = 0; i < a.length; i += 16) out.push('    ' + a.slice(i, i + 16).map((b) => '0x' + b.toString(16).padStart(2, '0')).join(', ') + ','); return out.join('\n'); };
-const n = PHASES.length;
+const hex = (a) => { const out = []; for (let i = 0; i < a.length; i += 16) out.push('    ' + a.slice(i, i + 16).map((b) => '0x' + b.toString(16).padStart(2, '0')).join(', ') + ','); return out.join(String.fromCharCode(10)); };
+const rows = (a) => { const o = []; for (let i = 0; i < a.length; i += 16) o.push('    ' + a.slice(i, i + 16).join(', ') + ','); return o.join(String.fromCharCode(10)); };
 fs.writeFileSync(new URL('../src/slide_art.h', import.meta.url), `// Generated by tools/export-slide.mjs: do not edit.
 #ifndef SLIDE_ART_H
 #define SLIDE_ART_H
 #include <gb/gb.h>
-#define SLIDE_ART_FRAMES ${n}  // ${PHASES.join(', ')}
+#define SLIDE_ART_FRAMES ${n}
 #define SLIDE_ART_MAX ${MAX}     // sprites a frame
-${PHASES.map((p, i) => `#define SLIDE_${p.toUpperCase()} ${i}`).join('\n')}
+${FRAMES.map(([, , name], i) => `#define SLIDE_${name.toUpperCase()} ${i}`).join(String.fromCharCode(10))}
 #define SLIDE_ART_SPRITES ${count.reduce((a, b) => a + b, 0)}
 #define SLIDE_ART_META ${meta.length}  // bytes of metasprites
-// Copies every frame's tiles (32 bytes a sprite, frame after frame) to tiles, its
-// first tile to first, how many sprites to count, and its metasprites to meta, with
-// where each starts in it to at: [frame * 4 + left * 2 + part] (part 0: the first
-// four sprites, 1: the rest).
-void slide_art_load(uint8_t *tiles, uint8_t *first, uint8_t *count, uint8_t *meta, uint16_t *at) BANKED;
+// The tiles (32 bytes a sprite, frame after frame): WRAM bank 2.
+#define SLIDE_ART_RAM ((uint8_t *)0x${RAM.toString(16).toUpperCase()})
+// Copies the tiles to SLIDE_ART_RAM, each frame's first sprite to first, how many
+// to count, and its metasprites to meta, with where each starts in it to at:
+// [frame * 4 + left * 2 + part] (part 0: the first four sprites, 1: the rest).
+void slide_art_load(uint8_t *first, uint8_t *count, uint8_t *meta, uint16_t *at) BANKED;
 #endif
 `);
 fs.writeFileSync(new URL('../src/slide_art.c', import.meta.url), `// Generated by tools/export-slide.mjs: do not edit.
 #pragma bank 255
 #include <string.h>
+#include "gfx.h"
 #include "slide_art.h"
 static const uint8_t slide_tiles[${bytes.length}] = {
 ${hex(bytes)}
@@ -82,15 +94,18 @@ ${hex(bytes)}
 static const uint8_t slide_first[${n}] = { ${first.join(', ')} };
 static const uint8_t slide_count[${n}] = { ${count.join(', ')} };
 static const int8_t slide_meta[${meta.length}] = {
-${(() => { const o = []; for (let i = 0; i < meta.length; i += 16) o.push('    ' + meta.slice(i, i + 16).join(', ') + ','); return o.join(String.fromCharCode(10)); })()}
+${rows(meta)}
 };
 static const uint16_t slide_at[${at.length}] = { ${at.join(', ')} };
-void slide_art_load(uint8_t *tiles, uint8_t *first, uint8_t *count, uint8_t *meta, uint16_t *at) BANKED {
-    memcpy(tiles, slide_tiles, sizeof slide_tiles);
+void slide_art_load(uint8_t *first, uint8_t *count, uint8_t *meta, uint16_t *at) BANKED {
+    art_copy_dst = SLIDE_ART_RAM;
+    art_copy_src = slide_tiles;
+    art_copy_len = sizeof slide_tiles;
+    CRITICAL { art_copy(); }
     memcpy(first, slide_first, sizeof slide_first);
     memcpy(count, slide_count, sizeof slide_count);
     memcpy(meta, slide_meta, sizeof slide_meta);
     memcpy(at, slide_at, sizeof slide_at);
 }
 `);
-console.log(`slide: ${n} frames, sprites ${count.join(' ')}, ${bytes.length} bytes`);
+console.log(`big poses: ${n} frames, sprites ${count.join(' ')}, ${bytes.length} bytes`);

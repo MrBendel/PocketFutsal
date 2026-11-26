@@ -411,13 +411,14 @@ static void draw_player(uint8_t i, uint8_t tile, uint8_t lie, int16_t sx, int16_
 // (the CPU), VRAM bank 0 (free in Futnet: past the bursts' 160-175), by DMA in vblank
 // from a buffer here. Brake, plant, extend as the lunge starts, contact through the
 // lunge and lying there, then decelerate, kneel, ready to get up (the move's timers,
-// and what a slide reaches, as they were). All seven frames' tiles are copied to RAM
-// as the match loads (a frame's 192 bytes copied as it changed took ~15k cycles).
+// and what a slide reaches, as they were). All the frames' tiles are copied to WRAM
+// bank 2 as the match loads (a frame's 192 bytes copied as it changed took ~15k
+// cycles). The bicycle kick's are with them (2026-11-26: the library's generated
+// tuck, strike, recover, 24x24, your back and the CPU's front): tucked past 20 of
+// its 24 frames, striking past 10, recovering past 4, then ready as before.
 #define S_SLIDE 192        // 16 a player
 #define OAM_SLIDE_X 31     // 2 a player
 uint8_t slide_shown[2];    // the frame whose tiles are loaded (0xFF: none)
-static uint8_t slide_ram[SLIDE_ART_SPRITES * 32 + 16];  // (16 spare: aligned for the DMA)
-static uint8_t *slide_tiles;
 static uint8_t slide_first[SLIDE_ART_FRAMES], slide_count[SLIDE_ART_FRAMES];
 static uint8_t slide_meta[SLIDE_ART_META];
 static uint16_t slide_at[SLIDE_ART_FRAMES * 4];
@@ -428,8 +429,8 @@ static uint8_t slide_frame(uint8_t t) {
 static void draw_slide(uint8_t i, uint8_t k, int16_t sx, int16_t sy, uint8_t pal, uint8_t left) {
     uint8_t tile = S_SLIDE + (i << 4), c = slide_count[k];
     if (slide_shown[i] != k) {
-        gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), slide_tiles + ((uint16_t)slide_first[k] << 5), c << 1);
-        slide_shown[i] = k;
+        if (gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), SLIDE_ART_RAM + ((uint16_t)slide_first[k] << 5), c << 1))
+            slide_shown[i] = k;
     }
     // By metasprite (generated, both ways round): a loop over the six in C cost ~4k
     // cycles a frame, twice the lying pose's. (sx, sy): under the middle of the
@@ -449,8 +450,6 @@ static void draw_slide(uint8_t i, uint8_t k, int16_t sx, int16_t sy, uint8_t pal
 // doubled; the loser stands, crouches, then shakes their head (turn, centre, turn
 // back, settle) to the end. A step every 8 frames of the point's 110. Streamed into
 // the slide's tiles (no slide during one), the same way: all twelve frames in RAM.
-static uint8_t react_ram[REACTION_ART_FRAMES * 128 + 16];  // (16 spare: aligned)
-static uint8_t *react_tiles;
 static const uint8_t react_win[14] = { 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1 };
 static const uint8_t react_loss[14] = { 6, 7, 8, 9, 10, 11, 8, 9, 10, 11, 8, 9, 10, 11 };
 static const uint8_t react_lift[REACTION_ART_FRAMES] = REACTION_ART_LIFTS;
@@ -459,8 +458,8 @@ static void draw_reaction(uint8_t i, uint8_t won, int16_t sx, int16_t sy, uint8_
     if (step > 13) step = 13;
     uint8_t r = won ? react_win[step] : react_loss[step], tile = S_SLIDE + (i << 4);
     if (slide_shown[i] != (0x80 | r)) {
-        gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), react_tiles + ((uint16_t)r << 7), 8);
-        slide_shown[i] = 0x80 | r;
+        if (gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), REACTION_ART_RAM + ((uint16_t)r << 7), 8))
+            slide_shown[i] = 0x80 | r;
     }
     gfx_actor(i ? (ball_oam == 8 ? 4 : 5) : (ball_oam ? 0 : 1), tile, 0, sx, sy - (react_lift[r] << 1), pal, 0);
 }
@@ -567,7 +566,10 @@ static void draw(void) {
         int16_t py = PX(pl_y[i]);
         int16_t sx = proj_x(PX(pl_x[i]), py);
         int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - draw_lift;
-        if (m == MOVE_SLIDE && !goal_timer) draw_slide(i, slide_frame(pl_move_timer[i]), sx, sy, pal, pl_slide_vx[i] < 0);
+        uint8_t t = pl_move_timer[i];
+        if (m == MOVE_SLIDE && !goal_timer) draw_slide(i, slide_frame(t), sx, sy, pal, pl_slide_vx[i] < 0);
+        else if (m == MOVE_BICYCLE && t > 4 && !goal_timer)
+            draw_slide(i, (i == SIDE_YOU ? SLIDE_BIKE_BACK_TUCK : SLIDE_BIKE_FRONT_TUCK) + (t > 20 ? 0 : t > 10 ? 1 : 2), sx, sy, pal, 0);
         else {
             if (goal_timer) draw_reaction(i, last_scorer == i, sx, sy, pal);
             else draw_player(i, tile, draw_lie, sx, sy, pal, flip);
@@ -1464,10 +1466,8 @@ void play_enter(void) BANKED {
     }
     zone_on = 0;
     slide_shown[0] = slide_shown[1] = 0xFF;
-    slide_tiles = (uint8_t *)(((uint16_t)slide_ram + 15) & 0xFFF0);
-    slide_art_load(slide_tiles, slide_first, slide_count, slide_meta, slide_at);
-    react_tiles = (uint8_t *)(((uint16_t)react_ram + 15) & 0xFFF0);
-    reaction_art_load(react_tiles);
+    slide_art_load(slide_first, slide_count, slide_meta, slide_at);
+    reaction_art_load();
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     hud_init();  // the score board in the court art, the faces, the gauges

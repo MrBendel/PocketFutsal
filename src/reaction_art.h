@@ -7,6 +7,8 @@
 #define REACTION_ART_LOSS 6  // the first loss frame
 // The library's jump lift for each frame, px.
 #define REACTION_ART_LIFTS { 0, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0 }
-// Copies every frame's tiles to dst (REACTION_ART_FRAMES * 128 bytes).
-void reaction_art_load(uint8_t *dst) BANKED;
+// The tiles: WRAM bank 2, after slide_art's.
+#define REACTION_ART_RAM ((uint8_t *)0xD900)
+// Copies every frame's tiles to REACTION_ART_RAM (REACTION_ART_FRAMES * 128 bytes).
+void reaction_art_load(void) BANKED;
 #endif
