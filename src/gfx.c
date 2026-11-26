@@ -22,6 +22,13 @@ typedef struct {
 } Copy;
 Copy copies[COPY_MAX];
 uint8_t copy_count;
+typedef struct {
+    const uint8_t *src;
+    uint8_t *dst;
+    uint8_t blocks;
+} Dma;
+Dma dmas[DMA_MAX];
+uint8_t dma_count;
 void vram_queue_write(void);  // vram_queue.s
 
 // The palettes on screen (gfx_set_fade fills them), and whether the vblank
@@ -69,8 +76,16 @@ void gfx_vram_copy(uint8_t *dst, const uint8_t *src, uint8_t len, uint8_t bank) 
     c->bank = bank;
 }
 
+void gfx_dma(uint8_t *dst, const uint8_t *src, uint8_t blocks) {
+    if (dma_count == DMA_MAX || vram_ready) gfx_flush();
+    Dma *d = &dmas[dma_count++];
+    d->src = src;
+    d->dst = dst;
+    d->blocks = blocks;
+}
+
 void gfx_commit(void) {
-    if (strip_count || copy_count) vram_ready = 1;
+    if (strip_count || copy_count || dma_count) vram_ready = 1;
 }
 
 // Write everything queued, outside vblank: directly with the display off, or with
@@ -91,6 +106,17 @@ static void write_queued(uint8_t wait) {
     }
     SWITCH_ROM(saved);
     copy_count = 0;
+    for (uint8_t i = 0; i < dma_count; i++) {  // (the DMA's for vblank: here, by bytes)
+        uint8_t *d = dmas[i].dst;
+        const uint8_t *src = dmas[i].src;
+        uint16_t n = (uint16_t)dmas[i].blocks << 4;
+        if (wait) {
+            while (n--) set_vram_byte(d++, *src++);
+        } else {
+            while (n--) *d++ = *src++;
+        }
+    }
+    dma_count = 0;
     write_strips(wait);  // gfx_strips.c (banked: the rare slow path)
     strip_count = 0;
     vram_ready = 0;
@@ -155,6 +181,17 @@ void gfx_vbl(void) {
         // what this interrupted, so switch to 0 and back.
         uint8_t vbk = VBK_REG;
         VBK_REG = 0;
+        if (dma_count) {  // (rare: kept off the every-frame path)
+            for (uint8_t i = 0; i < dma_count; i++) {
+                Dma *d = &dmas[i];
+                HDMA1_REG = (uint16_t)d->src >> 8;
+                HDMA2_REG = (uint8_t)(uint16_t)d->src;
+                HDMA3_REG = (uint16_t)d->dst >> 8;
+                HDMA4_REG = (uint8_t)(uint16_t)d->dst;
+                HDMA5_REG = d->blocks - 1;  // bit 7 clear: all at once
+            }
+            dma_count = 0;
+        }
         vram_queue_write();
         VBK_REG = vbk;
         copy_count = 0;

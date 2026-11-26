@@ -722,18 +722,20 @@ test('stumbling feet cannot intercept the dribble on the last recovery frame',()
 
 
 test('futsal defaults to Casual; menu pace and Watch/Play are independent',()=>{
- const e=bootToTitle();e.tap('DOWN').idle(40);
+ const e=bootToTitle();
+ // (Held two frames: the title takes one or two a loop after a press, so a one-frame tap can fall between its reads.)
+ const press=b=>e.hold(b,2).idle(2);e.tap('DOWN').idle(40);
  assert.equal(e.v('fs_pace'),0);
  assert.equal(e.v('fs_spectator'),1);
- e.tap('SELECT').idle(10);assert.equal(e.v('fs_spectator'),0);
+ press('SELECT').idle(10);assert.equal(e.v('fs_spectator'),0);
  e.shot('menu-futsal-casual');
- e.tap('RIGHT');assert.equal(e.v('fs_pace'),1);
- e.tap('RIGHT');assert.equal(e.v('fs_pace'),2);
+ press('RIGHT');assert.equal(e.v('fs_pace'),1);
+ press('RIGHT');assert.equal(e.v('fs_pace'),2);
  assert.equal(e.v('fs_spectator'),0,'changing pace keeps the chosen player mode');
- e.tap('RIGHT');assert.equal(e.v('fs_pace'),0,'pace wraps through three settings');
- e.tap('LEFT');assert.equal(e.v('fs_pace'),2);
- e.tap('LEFT');assert.equal(e.v('fs_pace'),1);
- e.tap('SELECT');assert.equal(e.v('fs_pace'),1);
+ press('RIGHT');assert.equal(e.v('fs_pace'),0,'pace wraps through three settings');
+ press('LEFT');assert.equal(e.v('fs_pace'),2);
+ press('LEFT');assert.equal(e.v('fs_pace'),1);
+ press('SELECT');assert.equal(e.v('fs_pace'),1);
  assert.equal(e.v('fs_spectator'),1);
  settle(e.tap('START'),PLAY,'chosen futsal pace');assert.equal(e.v('fs_pace'),1);
 });

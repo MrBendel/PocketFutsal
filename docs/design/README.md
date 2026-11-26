@@ -144,7 +144,8 @@ getting up), win, lose. PocketFutsal's, per view:
 | volley | the ball 5-15 px up: faster and flatter |
 | header | the ball 16-27 px up, in front: driven down at the other half |
 | bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way |
-| lying | (one set, both views) a slide, feet first, for a ball out of reach; knocked down |
+| slide | (one set, both views) feet first, for a ball out of reach: seven 32x24 frames, brake, plant, extend, contact, decelerate, kneel, ready (below) |
+| lying | (one set, both views) knocked down |
 | win / lose | the end of the match |
 
 ### Rules
@@ -258,6 +259,23 @@ slammed (the Captain Tsubasa feel).
   that has distinct lines"; Sparks Medium A was tried first). A frame's sprites go only
   to its drawn columns, and tiles past 127 go on from 160, after the HUD's, so a wider
   effect can come later.
+- **The slide's frames** (2026-11-26, Codex's feet-first study, artwork/players/slide/study-v1,
+  the playtest: "Sprites are all pushed ... make sure they're all working"): the
+  spiky player's seven 32x24 frames (tools/export-slide.mjs makes src/slide_art.c) in
+  place of the one lying pose. Brake, plant, extend as the lunge starts (the timer
+  past 61, 58, 54), contact through the lunge and lying there, then decelerate (20),
+  kneel (12), ready (4); the move's timers and reach are as they were. Facing the way
+  you slide, mirrored for left. Up to six 8x16 sprites: the player's four and two
+  more (OAM 31-32 you, 33-34 the CPU), so four on a line where lying was three.
+  Their tiles are streamed: all seven frames (1152 bytes) copied to RAM as the match
+  loads, and a frame's tiles sent by the GBC's general DMA in vblank (gfx_dma: whole
+  tiles, 16 bytes in a few cycles where the byte queue takes ~25 a byte) into sprite
+  tiles 192-203 (you) and 208-219 (the CPU), VRAM bank 0, free in Futnet. Drawn by
+  metasprites generated both ways round (a C loop over the six sprites took ~4k
+  cycles a frame). Worst Futnet frame 61,220 (the frame a slide starts; 58,060 with
+  the lying pose). The other three players' slides, the win/loss cycles and the
+  keeper dive are in the library (artwork/players/roster/COMPLETE-LIBRARY.md), not
+  in the match yet.
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it
