@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {CHARACTERS} from './player-art.mjs';
 import {ANIMATION_ROWS,playerAnimations} from './player-animation-library.mjs';
 import {writePng,spriteColumns} from './study-raster.mjs';
+import {decodePng} from './assets.mjs';
 const root=new URL('../artwork/players/roster/',import.meta.url);
-const cell=32,columns=10,width=cell*columns,height=cell*ANIMATION_ROWS.length;
+const cell=32,columns=8,width=cell*columns,height=cell*ANIMATION_ROWS.length;
+const font=decodePng(fs.readFileSync(new URL('../artwork/Fonts for GB Studio/light/default/ascii.png',import.meta.url)));
 let total=0;const library=[];
 for(const id of CHARACTERS){
  const c=playerAnimations(id),pixels=Array.from({length:height},()=>Array(width).fill('.'));
@@ -36,9 +38,15 @@ for(const id of CHARACTERS){
  }
  fs.writeFileSync(new URL(`${id}/complete.2bpp`,root),Buffer.from(bytes));
  fs.writeFileSync(new URL(`${id}/complete.json`,root),JSON.stringify(data,null,2)+'\n');
- // One compact review sheet per player: source pixels stay at integer 3x scale.
- writePng(new URL(`${id}/complete-preview.png`,root),width*3,height*3,(xx,yy)=>{
-  const x=Math.floor(xx/3),y=Math.floor(yy/3),v=Number(pixels[y][x])||0;
+ // Labeled review rows are separate from native atlas rectangles.
+ writePng(new URL(`${id}/complete-preview.png`,root),width*3,44*ANIMATION_ROWS.length*3,(xx,yy)=>{
+  const x=Math.floor(xx/3),py=Math.floor(yy/3),row=Math.floor(py/44),ly=py%44;
+  if(ly<12){
+   const text=ANIMATION_ROWS[row].toUpperCase()+(c.animations.some(a=>a.sheetRow===row)?'':' (NOT AUTHORED)'),char=text[Math.floor((x-4)/8)];
+   if(x>=4&&char&&ly>=2&&ly<10){const code=char.charCodeAt(0)-32,p=((Math.floor(code/16)*8+ly-2)*font.width+(code%16)*8+(x-4)%8)*4;if(font.rgba[p]+font.rgba[p+1]+font.rgba[p+2]<300)return [248,240,208,255];}
+   return [24,32,48,255];
+  }
+  const y=row*32+ly-12,v=Number(pixels[y][x])||0;
   return v?c.palette[v]:((Math.floor(x/4)+Math.floor(y/4))%2?[56,72,88,255]:[64,80,96,255]);
  });
 }
