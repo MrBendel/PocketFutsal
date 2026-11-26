@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import assert from 'node:assert/strict';
 import {CHARACTERS,character,fullTiles,basicTiles} from './player-art.mjs';
+import './export-player-library.mjs';
 const root=new URL('../artwork/players/roster/',import.meta.url);
 const names=['idle','run-a','run-b','ready','kick','volley','header','bicycle','win','lose'];
 function png(file,w,h,pixel) {
