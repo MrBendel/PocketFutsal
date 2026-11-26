@@ -5,6 +5,32 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## The match's stats (2026-11-26): the levers for each character
+
+From the user: **Speed** (moving, and getting up off a slide), **Power** (the A shot:
+its pace, how easily it charges, how far it goes), **Technique** (the B shot: how much
+it curves, how easily it charges), **Control** (accuracy near the lines, and the
+**defensive stat**: returning hard and spinning balls without popping them up). Hard
+or spinning shots are tough to return: met short of the charge, they pop up, a lob to
+the other side. Raising one stat costs another, through the physics where it can
+(a faster player coasts further and turns wider; a harder hit strays further; a
+bigger curve travels slower) and a shared budget of points.
+
+Each player's levels are `pl_speed_lv`, `pl_control_lv` (1-8, 4 the old fixed
+tuning; play.c, "the players' stats"), turned into numbers by tables as the match
+loads. So far:
+
+| stat | level 1 | 4 | 8 |
+| --- | --- | --- | --- |
+| Speed: top speed (SUB a frame; the CPU 2 less) | 16 | 22 | 30 |
+| Speed: on the floor after a missed slide | ~93 frames | 64 | ~48 |
+| Control: charge that meets a ball on fire clean (yours; the CPU's +4) | 14 | 8 | 4 |
+| Control: the CPU's pressure before it mishits | 18 | 30 | 46 |
+
+Next: Power and Technique, Control's accuracy, the budget, and reading the levels
+from the saved progression (training's POWER, CONTROL, AIM, REFLEX: to reconcile
+with these four).
+
 ## Training mode (2026-11-22): mini games and stats
 
 The RPG side: your player has four stats, raised by playing training mini games, and

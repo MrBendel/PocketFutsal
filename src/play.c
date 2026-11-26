@@ -95,6 +95,29 @@
 // first press after it's struck: no mashing) returns it, on fire; else it knocks you
 // down. The CPU times it CPU_SP_TIMED times in 8.
 #define POWER_GAIN 1
+
+// --- the players' stats (2026-11-26: the RPG's levers, Speed and Control first) ---
+// Levels 1-8 (STAT_MID the old fixed tuning), set before the match (the RPG; tests
+// write them at the title); play_enter turns them into the numbers below, through
+// tables: nothing worked out each frame.
+// Speed: top running speed (2 SUB a frame a level; ACCEL and GRIP fixed, so a faster
+// player takes longer to get there and coasts further letting go), and getting up
+// off a slide: after the lunge the floor time runs 1/16 faster or slower a step.
+// Control, the defensive stat: the charge it takes to meet a ball on fire cleanly
+// (less, a level up), and for the CPU how much running and pace it takes before it
+// mishits (PRESSURE_FREE, 4 more a level). The CPU's side keeps its old handicaps
+// at every level: 2 SUB a frame slower (SPEED_YOU - SPEED_CPU), and FIRE_MEET to your
+// FIRE_MEET_YOU (its meter fills by itself).
+#define STAT_MID 4
+uint8_t pl_speed_lv[2] = { STAT_MID, STAT_MID };
+uint8_t pl_control_lv[2] = { STAT_MID, STAT_MID };
+static const int8_t speed_top[8] = { 16, 18, 20, 22, 24, 26, 28, 30 };  // yours (SPEED_YOU at the middle)
+static const int8_t speed_rise[8] = { -6, -4, -2, 0, 2, 4, 6, 8 };   // sixteenths a frame
+static const int8_t control_meet[8] = { 6, 4, 2, 0, -1, -2, -3, -4 }; // + FIRE_MEET(_YOU)
+uint8_t pl_fire_meet[2];  // the charge that meets a ball on fire cleanly
+int8_t pl_rise[2];        // Speed's floor time after a slide (speed_rise)
+uint8_t pl_rise_acc[2];
+int8_t cpu_calm;          // PRESSURE_FREE by the CPU's Control
 #define SPECIAL_SPEED 88
 #define SPECIAL_WINDOW 5
 #define CPU_SP_TIMED 2
@@ -662,13 +685,13 @@ static void meet(uint8_t i, uint8_t move) {
         else knock_down(i);
         return;
     }
-    if (ball_power && pl_charge[i] < (ball_gold || ball_smash ? CHARGE_MAX : i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
+    if (ball_power && pl_charge[i] < (ball_gold || ball_smash ? CHARGE_MAX : pl_fire_meet[i])) {
         pop_up(i, move, KICK_FRAMES);
         return;
     }
     if (i == SIDE_CPU && last_touch == SIDE_YOU) {
         int16_t p = ((abs16(PX(pl_x[i]) - cpu_from_x) + abs16(PX(pl_y[i]) - cpu_from_y)) >> 2) +
-                    (ball_speed() >> 1) - PRESSURE_FREE;
+                    (ball_speed() >> 1) - cpu_calm;
         uint8_t r = rand() & 63;
         if (p > (int16_t)r) {
             cpu_rattled++;
@@ -688,6 +711,7 @@ static void slide(uint8_t i, int8_t vx, int8_t vy) {
     pl_face[i] = vx < 0;
     pl_move[i] = MOVE_SLIDE;
     pl_move_timer[i] = SLIDE_FRAMES;  // the strike stays readied: slide and return
+    pl_rise_acc[i] = 0;
     if (i == SIDE_YOU) you_leap = 0;
     dust(i);
     sfx_play(SFX_CATCH);
@@ -726,6 +750,18 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         if (pl_move[i] != MOVE_SLIDE) return;
         if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_LUNGE) {
             if (pl_shot[i]) unready(i);  // the lunge over, not there: missed
+            // On the floor: Speed's sixteenths a frame off (or onto) the time left.
+            // (Never back up into the lunge: it's 48 at most after this frame's tick.)
+            int8_t r = pl_rise[i];
+            if (r) {
+                uint8_t a = pl_rise_acc[i] + (uint8_t)(r < 0 ? -r : r);
+                if (a >= 16) {
+                    a -= 16;
+                    if (r > 0) { if (pl_move_timer[i]) pl_move_timer[i]--; }
+                    else if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_LUNGE - 1) pl_move_timer[i]++;
+                }
+                pl_rise_acc[i] = a;
+            }
             return;
         }
         // The slide: along the court, reaching for it, the strike still readied.
@@ -737,7 +773,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
             // Got there: slide and return it, the strike by its height; at full
             // stretch (the lunge's last third), only a pop-up (on fire, without
             // the meter to meet it: down you go).
-            if (ball_special ? !special_timed(i) : ball_power && pl_charge[i] < (i == SIDE_YOU ? FIRE_MEET_YOU : FIRE_MEET)) {
+            if (ball_special ? !special_timed(i) : ball_power && pl_charge[i] < pl_fire_meet[i]) {
                 knock_down(i);
                 return;
             }
@@ -1119,10 +1155,17 @@ void play_enter(void) BANKED {
     proj_init();
     initrand(game_seed);
     for (uint8_t i = 0; i < 2; i++) {
-        pl_top[i] = i ? SPEED_CPU : SPEED_YOU;
+        uint8_t s = pl_speed_lv[i], c = pl_control_lv[i];
+        if (s < 1 || s > 8) s = STAT_MID;
+        if (c < 1 || c > 8) c = STAT_MID;
+        pl_top[i] = speed_top[s - 1] - (i ? SPEED_YOU - SPEED_CPU : 0);
+        pl_rise[i] = speed_rise[s - 1];
+        pl_fire_meet[i] = (i ? FIRE_MEET : FIRE_MEET_YOU) + control_meet[c - 1];
         pl_accel[i] = ACCEL;
         pl_grip[i] = GRIP;
     }
+    cpu_calm = PRESSURE_FREE + (int8_t)((pl_control_lv[SIDE_CPU] - STAT_MID) << 2);
+    if (pl_control_lv[SIDE_CPU] < 1 || pl_control_lv[SIDE_CPU] > 8) cpu_calm = PRESSURE_FREE;
     score[0] = score[1] = 0;
     sets[0] = sets[1] = 0;
     set_won = 0;
