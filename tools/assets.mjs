@@ -33,6 +33,7 @@ import {BALL_EXTRA} from './ball-art.mjs';
 import {GOAL_BG_ENDS} from './goal-background.mjs';
 import {STADIUM_PITCH,STADIUM_MAP,SCORE_TILES} from './stadium-art.mjs';
 import {REACTION_TILES} from './reaction-art.mjs';
+import {KEEPER_TILES,SHOOTOUT_REACTIONS} from './shootout-player-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -76,6 +77,8 @@ export const ASSETS = [
   { name: 'ball_extra', bank: true, ascii: BALL_EXTRA, src: 'artwork/ball/v1/ball.json' },
   // The players' frames, both views (VRAM bank 1).
   { name: 'players', bank: true, ascii: fullTiles('spiky'), src: 'artwork/players/roster/spiky/player.json' },
+  {name:'shootout_keeper',bank:true,ascii:KEEPER_TILES,src:'tools/shootout-player-art.mjs',deps:['artwork/players/keeper-dive/study-v1/native-32x24.json']},
+  {name:'shootout_reactions',bank:true,ascii:SHOOTOUT_REACTIONS,src:'tools/shootout-player-art.mjs',deps:['tools/player-art.mjs','artwork/players/roster/reactions/study-v2/native-16x24.json']},
   ...CHARACTERS.map(id => ({ name: `futsal_${id}`, bank: true, ascii: basicTiles(id), src: `artwork/players/roster/${id}/player.json` })),
   ...CHARACTERS.map(id => ({ name: `action_${id}`, bank: true, ascii: actionTiles(id), src: `artwork/players/roster/${id}/player.json` })),
   {name:'futsal_reactions',bank:true,ascii:REACTION_TILES,src:'tools/reaction-art.mjs',deps:CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`)},

@@ -51,7 +51,7 @@ function sequence(move,timer,name){
  set16(e,'ball_vx',0);set16(e,'ball_vy',0);set16(e,'ball_vz',0);
  const tiles=new Set(),shots=[];
  for(let i=0;i<timer;i++){
-  e.idle();const tile=e.read8(0xfe06)&248;tiles.add(tile);
+  e.idle();const tile=e.read8(0xfe06)&248;tiles.add(tile+':'+at(e,'slide_shown',0));  // (the slide's frames stream into the same tiles: slide_shown tells them apart)
   if(i===1||i===Math.floor(timer/3)||i===timer-7||i===timer-3)shots.push(e.frameBuffer().slice());
  }
  assert.ok(tiles.size>=4,`${name} should show launch, action, landing and recovery`);

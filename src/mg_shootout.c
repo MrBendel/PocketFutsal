@@ -32,6 +32,8 @@
 #include "progress.h"
 #include "mg_shootout_bg.h"
 #include "mg_shootout_spr.h"
+#include "shootout_keeper.h"
+#include "shootout_reactions.h"
 
 // --- the pitch (tools/art/mg_shootout.mjs draws it to match) ---
 #define GOAL_LINE 88
@@ -89,6 +91,17 @@
 #define OAM_MARKS 22     // 10: yours 22..26, the CPU's 27..31
 #define OAM_BANNER 32    // 6
 #define BANNER_MAX 6
+#define OAM_KEEPER_SHADOW 38
+#define OAM_SHOOTER_SHADOW 39
+// Stream only the current pose into unused bank-0 sprite tiles. Other mini games
+// retain the shared resident player bank and their four-sprite actor helpers.
+#define T_KEEPER 64        // 16 tiles, four 8px columns
+#define T_SHOOTER_REACT 80 // 8 tiles, two columns
+#define T_KEEPER_REACT 88  // 8 tiles
+// Bank-0 sprite tiles 128..255 alias signed background tiles: stay below 128.
+#if T_KEEPER < MG_SPR_TILES + MG_SHOOTOUT_SPR_TILE_COUNT || T_KEEPER_REACT + 8 > 128
+#error Shootout animation streams overlap scene tiles
+#endif
 
 // --- sprite tiles (tools/art/mg_shootout.mjs SPR order) ---
 #define T_MARK_GOAL (MG_SPR_TILES + 0)
@@ -137,11 +150,18 @@ int16_t mg_shootout_contact;    // clock at the kick (or -1 before it)
 // The ball, in sixteenths: x, its ground line y, its height z, and their speeds.
 int16_t mg_shootout_bx, mg_shootout_by, mg_shootout_bz;
 int16_t mg_shootout_bvx, mg_shootout_bvy, mg_shootout_bvz;
+uint8_t mg_shootout_keeper_anim;       // 0..7 low, 8..15 high; 255 standing
+uint8_t mg_shootout_shooter_reaction;  // 0..5 win, 6..11 loss; 255 normal
+uint8_t mg_shootout_keeper_reaction;
 
 static uint8_t hud_shown;      // what the HUD shows (redraw on change)
 static uint8_t shooter_x, shooter_feet;
 static uint16_t recip[49];      // 4096 / n: speeds without dividing a frame
 static uint8_t banner_n;
+static uint8_t keeper_loaded, shooter_react_loaded, keeper_react_loaded;
+// Nonempty 8x16 columns from keeper-dive/study-v1/native-32x24.json.
+static const uint8_t keeper_masks[16] = {60,60,254,254,254,254,254,126,60,60,126,126,126,126,254,62};
+static const uint8_t win_lift[6] = {0,0,1,3,0,0};
 
 static const uint8_t col_x[3] = {52, 80, 108};
 static const uint8_t row_z[2] = {6, 36};
@@ -418,7 +438,58 @@ static void finish(void) {
 }
 
 // --- drawing ---
+static void stream_pose(uint8_t tile, const uint8_t *data, uint8_t bank, uint8_t wide) {
+    uint8_t *dst = (uint8_t *)(0x8000u + ((uint16_t)tile << 4));
+    gfx_vram_copy(dst, data, 128, bank);
+    if (wide) gfx_vram_copy(dst + 128, data + 128, 128, bank);
+}
+static void actor_pose(uint8_t first, uint8_t tile, uint8_t cols, uint8_t mask,
+                       int16_t x, int16_t y, uint8_t pal, uint8_t flip, uint8_t short_lower) {
+    for (uint8_t c = 0; c < cols; c++) {
+        uint8_t source = flip ? cols - 1 - c : c, n = first + (c << 1);
+        uint8_t t = tile + (source << 2), prop = pal | (flip ? S_FLIPX : 0);
+        if (mask & (1 << (source << 1))) mg_sprite(n, t, prop, x + (c << 3), y);
+        else move_sprite(n, 0, 0);
+        if (mask & (2 << (source << 1))) mg_sprite(n + 1, t + 2, prop, x + (c << 3), y + (short_lower ? 8 : 16));
+        else move_sprite(n + 1, 0, 0);
+    }
+    if (first == 6 && cols == 2) mg_hide(10, 13);
+}
+static void ground_shadow(uint8_t n, int16_t x, int16_t feet) {
+    mg_sprite(n, MG_T_SHADOW, SPR_PAL_UI, x - 4, feet - 4);
+}
+static void reaction(uint8_t keeper, uint8_t won, int16_t x, int16_t feet, uint8_t pal) {
+    uint8_t t = mg_shootout_t + (mg_run == MG_RUN_OVER ? (uint8_t)mg_timer : 0);
+    uint8_t phase = t >> 3;
+    while (phase >= 6) phase -= 6;
+    uint8_t pose = phase + (won ? 0 : 6);
+    uint8_t *loaded = keeper ? &keeper_react_loaded : &shooter_react_loaded;
+    uint8_t tile = keeper ? T_KEEPER_REACT : T_SHOOTER_REACT;
+    if (*loaded != pose) {
+        stream_pose(tile, shootout_reactions_tiles + ((uint16_t)pose << 7), BANK(shootout_reactions), 0);
+        *loaded = pose;
+    }
+    if (keeper) mg_shootout_keeper_reaction = pose;
+    else mg_shootout_shooter_reaction = pose;
+    ground_shadow(keeper ? OAM_KEEPER_SHADOW : OAM_SHOOTER_SHADOW, x, feet);
+    actor_pose(keeper ? 6 : 2, tile, 2, 15, x - 8, feet - 23 - (won ? win_lift[phase] : 0), pal, 0, 1);
+}
+static void keeper_pose(uint8_t anim, int16_t x, int16_t y, uint8_t pal, uint8_t flip) {
+    mg_shootout_keeper_anim = anim;
+    if (keeper_loaded != anim) {
+        stream_pose(T_KEEPER, shootout_keeper_tiles + ((uint16_t)anim << 8), BANK(shootout_keeper), 1);
+        keeper_loaded = anim;
+    }
+    ground_shadow(OAM_KEEPER_SHADOW, x, KEEPER_FEET);
+    actor_pose(6, T_KEEPER, 4, keeper_masks[anim], x - 16, y, pal, flip, 1);
+}
+static void shooter_result(void) {
+    reaction(0, mg_shootout_result == R_GOAL, shooter_x, shooter_feet,
+             mg_shootout_kicker == KICK_YOU ? SPR_PAL_YOU : SPR_PAL_CPU);
+}
 static void draw_shooter(uint8_t frame, uint8_t flip) {
+    mg_shootout_shooter_reaction = 255;
+    ground_shadow(OAM_SHOOTER_SHADOW, shooter_x, shooter_feet);
     mg_player(0, MG_FRAME(MG_VIEW_BACK, frame), shooter_x, shooter_feet,
               mg_shootout_kicker == KICK_YOU ? SPR_PAL_YOU : SPR_PAL_CPU, flip);
 }
@@ -427,33 +498,53 @@ static void draw_shooter(uint8_t frame, uint8_t flip) {
 static void draw_keeper(void) {
     uint8_t pal = mg_shootout_kicker == KICK_YOU ? SPR_PAL_CPU : SPR_PAL_YOU;
     int16_t since = mg_shootout_clock - mg_shootout_dive_at;
+    mg_shootout_keeper_anim = mg_shootout_keeper_reaction = 255;
     if (!mg_shootout_dived || since < 0) {
         // A little sway from side to side while it waits.
         int8_t sway = ((uint8_t)mg_shootout_clock & 32) ? 1 : -1;
         if (mg_shootout_phase == P_INTRO || mg_shootout_phase == P_AIM || mg_shootout_phase == P_POWER) sway = 0;
-        mg_player(1, MG_FRAME(MG_VIEW_FRONT, MG_F_READY), 80 + sway, KEEPER_FEET, pal, 0);
+        if (mg_shootout_phase == P_RESULT && mg_shootout_t >= 46) reaction(1, mg_shootout_result != R_GOAL, 80, KEEPER_FEET, pal);
+        else {
+            keeper_pose(0, 80 + sway, KEEPER_FEET - 23, pal, 0);
+            mg_shootout_keeper_anim = 255;
+        }
         return;
     }
     uint8_t m = mg_shootout_kmove ? mg_shootout_kmove : 1;
     uint8_t k = since >= m ? m : (uint8_t)since;  // 0 .. m
-    uint16_t frac = ((uint16_t)k * recip[m]) >> 4;  // 0 .. 256
+    uint16_t frac = k == m ? 256 : ((uint16_t)k * recip[m]) >> 4;
     uint8_t col = mg_shootout_kguess, up = mg_shootout_kup;
     if (col == 1) {
-        uint8_t lift = up ? (uint8_t)((14 * frac) >> 8) : 0;
+        if (mg_shootout_phase == P_RESULT && mg_shootout_t >= 46) {
+            reaction(1, mg_shootout_result != R_GOAL, 80, KEEPER_FEET, pal);
+            return;
+        }
+        uint8_t lift = up ? (uint8_t)((23 * frac) >> 8) : 0;
         if (mg_shootout_phase == P_RESULT && mg_shootout_t > 30) lift = 0;
-        mg_player(1, MG_FRAME(MG_VIEW_FRONT, up ? MG_F_HEADER : MG_F_READY), 80, KEEPER_FEET - lift, pal, 0);
+        keeper_pose(0, 80, KEEPER_FEET - 23 - lift, pal, 0);
+        mg_shootout_keeper_anim = 255;
         return;
     }
-    int16_t dx = (int16_t)col_x[col] - 80;
-    int16_t cy_end = up ? 52 : 79;
-    int16_t x = 80 + (int16_t)((dx * (int16_t)frac) >> 8);
-    int16_t cy = 72 + (int16_t)(((cy_end - 72) * (int16_t)frac) >> 8);
-    // After the kick, a high dive drops back to the floor.
-    if (mg_shootout_phase == P_RESULT && up && mg_shootout_t > 20) {
-        uint8_t f = mg_shootout_t - 20;
-        cy += f > 27 ? 27 : f;
+    // The full-extension hand meets the existing shot target. The body travels
+    // behind it; mirroring the source's rightward dive also mirrors this anchor.
+    int16_t end_x = col_x[col] + (col == 0 ? (up ? 10 : 11) : -(up ? 9 : 10));
+    int16_t x = 80 + (int16_t)(((end_x - 80) * (int16_t)frac) >> 8);
+    int16_t y = 63 + (int16_t)(((up ? -19 : 3) * (int16_t)frac) >> 8);
+    uint8_t pose = frac >> 6;
+    if (mg_shootout_phase == P_RESULT) {
+        uint8_t t = mg_shootout_t;
+        if (t >= 46) {
+            reaction(1, mg_shootout_result != R_GOAL, end_x, KEEPER_FEET, pal);
+            return;
+        }
+        if (t >= 34) pose = 7;
+        else if (t >= 22) pose = 6;
+        else if (t >= 10) pose = 5;
+        if (up && t > 10) y += t - 10 > 19 ? 19 : t - 10;
+        if (pose >= 6 && (!up || t >= 29)) y = 63;
     }
-    mg_player_lying(1, x, cy, pal, col == 0);
+    uint8_t anim = pose + (up ? 8 : 0);
+    keeper_pose(anim, x, y, pal, col == 0);
 }
 
 static void draw_ball(void) {
@@ -736,9 +827,7 @@ static void update_result(void) {
         mg_shootout_bx = -16 << 4;
     }
     // The kicker celebrates or hangs its head.
-    uint8_t happy = (r == R_GOAL) == (mg_shootout_kicker == KICK_YOU);
-    (void)happy;
-    draw_shooter(r == R_GOAL ? MG_F_WIN : MG_F_LOSE, 0);
+    shooter_result();
     if (mg_shootout_t >= RESULT_FRAMES) {
         banner_hide();
         if (decided()) finish();
@@ -748,6 +837,8 @@ static void update_result(void) {
 
 // --- the entry points ---
 void mg_shootout_enter(void) BANKED {
+    keeper_loaded = shooter_react_loaded = keeper_react_loaded = 255;
+    mg_shootout_keeper_anim = mg_shootout_keeper_reaction = mg_shootout_shooter_reaction = 255;
     memcpy(pal_base_bg, bg_pals, sizeof(bg_pals));
     memcpy(&pal_base_obj[PAL_MARKS << 2], marks_pal, sizeof(marks_pal));
     memcpy(&pal_base_obj[PAL_METER << 2], meter_pal, sizeof(meter_pal));
@@ -783,6 +874,7 @@ void mg_shootout_update(void) BANKED {
         return;
     }
     if (mg_run == MG_RUN_OVER) {
+        shooter_result();
         draw_keeper();
         draw_ball();
         return;

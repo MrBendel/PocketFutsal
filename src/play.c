@@ -24,6 +24,7 @@
 #include <gb/gb.h>
 #include <gb/cgb.h>
 #include <rand.h>
+#include <gb/metasprites.h>
 #include "sfx.h"
 #include "state.h"
 #include "input.h"
@@ -31,6 +32,8 @@
 #include "game.h"
 #include "futnet_core.h"
 #include "player_anim.h"
+#include "slide_art.h"
+#include "reaction_art.h"
 #include "pitch.h"
 #include "play_hud.h"
 #include "vfx.h"
@@ -93,7 +96,7 @@ uint8_t ball_oam;  // 0, 4 or 8: before, between or behind the players
 #define OAM_AIM 10    // where your queued strike will land
 #define OAM_SLAM 19   // where to meet a lob or a pop-up coming down (flashing): a ring,
 #define OAM_SLAM_R 28 // its right half
-// OAM_PLAYER_SHADOW 15, two a player (with the power gauge in them): play_hud.h. 31-34 and 37-39 free.
+// OAM_PLAYER_SHADOW 15, two a player (with the power gauge in them): play_hud.h. 31-34 the slide's two more a player (draw_slide); 37-39 free.
 #define OAM_TRAIL 11  // 4: the ball's trail
 #define TRAIL_MAX 4
 
@@ -401,6 +404,66 @@ static void draw_player(uint8_t i, uint8_t tile, uint8_t lie, int16_t sx, int16_
     gfx_actor(n, tile, lie, sx, sy, pal | S_BANK, flip);
 }
 
+// The slide (2026-11-26: Codex's feet-first study, artwork/players/slide/study-v1, by
+// tools/export-slide.mjs): 32x24 frames facing right (mirrored for left), up to six
+// 8x16 sprites, the player's four and two more (OAM 31-32 you, 33-34 the CPU). Their
+// tiles are loaded as the frame changes, into sprite tiles 192-203 (you) and 208-219
+// (the CPU), VRAM bank 0 (free in Futnet: past the bursts' 160-175), by DMA in vblank
+// from a buffer here. Brake, plant, extend as the lunge starts, contact through the
+// lunge and lying there, then decelerate, kneel, ready to get up (the move's timers,
+// and what a slide reaches, as they were). All the frames' tiles are copied to WRAM
+// bank 2 as the match loads (a frame's 192 bytes copied as it changed took ~15k
+// cycles). The bicycle kick's are with them (2026-11-26: the library's generated
+// tuck, strike, recover, 24x24, your back and the CPU's front): tucked past 20 of
+// its 24 frames, striking past 10, recovering past 4, then ready as before.
+#define S_SLIDE 192        // 16 a player
+#define OAM_SLIDE_X 31     // 2 a player
+uint8_t slide_shown[2];    // the frame whose tiles are loaded (0xFF: none)
+static uint8_t slide_first[SLIDE_ART_FRAMES], slide_count[SLIDE_ART_FRAMES];
+static uint8_t slide_meta[SLIDE_ART_META];
+static uint16_t slide_at[SLIDE_ART_FRAMES * 4];
+static uint8_t slide_frame(uint8_t t) {
+    return t > 61 ? SLIDE_BRAKE : t > 58 ? SLIDE_PLANT : t > 54 ? SLIDE_EXTEND : t > 20 ? SLIDE_CONTACT :
+        t > 12 ? SLIDE_DECELERATE : t > 4 ? SLIDE_KNEEL : SLIDE_READY;
+}
+static void draw_slide(uint8_t i, uint8_t k, int16_t sx, int16_t sy, uint8_t pal, uint8_t left) {
+    uint8_t tile = S_SLIDE + (i << 4), c = slide_count[k];
+    if (slide_shown[i] != k) {
+        if (gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), SLIDE_ART_RAM + ((uint16_t)slide_first[k] << 5), c << 1))
+            slide_shown[i] = k;
+    }
+    // By metasprite (generated, both ways round): a loop over the six in C cost ~4k
+    // cycles a frame, twice the lying pose's. (sx, sy): under the middle of the
+    // frame's bottom.
+    uint8_t *m = slide_meta + slide_at[(k << 2) + (left << 1)];
+    uint8_t x0 = (uint8_t)(sx - 8), y0 = (uint8_t)(sy - 7), o = i ? OAM_SLIDE_X + 2 : OAM_SLIDE_X;
+    if (left) pal |= S_FLIPX;
+    move_metasprite_ex((const metasprite_t *)m, tile, pal, i ? (ball_oam == 8 ? 4 : 5) : (ball_oam ? 0 : 1), x0, y0);
+    if (c > 4) move_metasprite_ex((const metasprite_t *)(slide_meta + slide_at[(k << 2) + (left << 1) + 1]), tile, pal, o, x0, y0);
+    else shadow_OAM[o].y = shadow_OAM[o + 1].y = 0;
+}
+
+// A point's reactions (2026-11-26: the library's generated win and loss cycles,
+// artwork/players/roster/spiky/complete.json, by tools/export-reactions.mjs): six
+// 16x24 front-view frames each, both players turned to face you. The winner's cycle
+// (anticipate, raise a fist, take off, the top, come down, land) loops, its lift
+// doubled; the loser stands, crouches, then shakes their head (turn, centre, turn
+// back, settle) to the end. A step every 8 frames of the point's 110. Streamed into
+// the slide's tiles (no slide during one), the same way: all twelve frames in RAM.
+static const uint8_t react_win[14] = { 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1 };
+static const uint8_t react_loss[14] = { 6, 7, 8, 9, 10, 11, 8, 9, 10, 11, 8, 9, 10, 11 };
+static const uint8_t react_lift[REACTION_ART_FRAMES] = REACTION_ART_LIFTS;
+static void draw_reaction(uint8_t i, uint8_t won, int16_t sx, int16_t sy, uint8_t pal) {
+    uint8_t step = (uint8_t)(GOAL_FRAMES - goal_timer) >> 3;
+    if (step > 13) step = 13;
+    uint8_t r = won ? react_win[step] : react_loss[step], tile = S_SLIDE + (i << 4);
+    if (slide_shown[i] != (0x80 | r)) {
+        if (gfx_dma((uint8_t *)(0x8000 + ((uint16_t)tile << 4)), REACTION_ART_RAM + ((uint16_t)r << 7), 8))
+            slide_shown[i] = 0x80 | r;
+    }
+    gfx_actor(i ? (ball_oam == 8 ? 4 : 5) : (ball_oam ? 0 : 1), tile, 0, sx, sy - (react_lift[r] << 1), pal, 0);
+}
+
 static void draw_trail(int16_t sx, int16_t wy) {
     if (goal_timer) trail_len = 0;
     fc_trail_draw(OAM_TRAIL, sx, wy, cam_y);
@@ -503,7 +566,17 @@ static void draw(void) {
         int16_t py = PX(pl_y[i]);
         int16_t sx = proj_x(PX(pl_x[i]), py);
         int16_t sy = (int16_t)proj_y[PROJ_I(py)] - cam_y - draw_lift;
-        draw_player(i, tile, draw_lie, sx, sy, pal, flip);
+        uint8_t t = pl_move_timer[i];
+        if (m == MOVE_SLIDE && !goal_timer) draw_slide(i, slide_frame(t), sx, sy, pal, pl_slide_vx[i] < 0);
+        else if (m == MOVE_BICYCLE && t > 4 && !goal_timer)
+            draw_slide(i, (i == SIDE_YOU ? SLIDE_BIKE_BACK_TUCK : SLIDE_BIKE_FRONT_TUCK) + (t > 20 ? 0 : t > 10 ? 1 : 2), sx, sy, pal, 0);
+        else {
+            if (goal_timer) draw_reaction(i, last_scorer == i, sx, sy, pal);
+            else draw_player(i, tile, draw_lie, sx, sy, pal, flip);
+            // (Constant addresses: shadow_OAM[OAM_SLIDE_X + (i << 1)] took ~1.9k cycles.)
+            if (i) shadow_OAM[OAM_SLIDE_X + 2].y = shadow_OAM[OAM_SLIDE_X + 3].y = 0;
+            else shadow_OAM[OAM_SLIDE_X].y = shadow_OAM[OAM_SLIDE_X + 1].y = 0;
+        }
         if (i == SIDE_YOU) you_sx = sx, you_sy = sy;
         // Ground position never inherits the body's jump lift.
         gfx_player_shadow(OAM_PLAYER_SHADOW + (i << 1), sx,
@@ -1392,6 +1465,9 @@ void play_enter(void) BANKED {
         move_sprite(OAM_ZONE + k, 0, 0);
     }
     zone_on = 0;
+    slide_shown[0] = slide_shown[1] = 0xFF;
+    slide_art_load(slide_first, slide_count, slide_meta, slide_at);
+    reaction_art_load();
     banked_sprite_data_vbk1(0, PLAYERS_TILE_COUNT, players_tiles, BANK(players));
     load_pitch();
     hud_init();  // the score board in the court art, the faces, the gauges

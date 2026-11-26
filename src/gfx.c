@@ -22,6 +22,17 @@ typedef struct {
 } Copy;
 Copy copies[COPY_MAX];
 uint8_t copy_count;
+typedef struct {
+    const uint8_t *src;
+    uint8_t *dst;
+    uint8_t blocks;
+} Dma;
+Dma dmas[DMA_MAX];
+uint8_t dma_count;
+uint8_t *art_copy_dst;
+const uint8_t *art_copy_src;
+uint16_t art_copy_len;
+void dma_queue_write(void);  // art_ram.s
 void vram_queue_write(void);  // vram_queue.s
 
 // The palettes on screen (gfx_set_fade fills them), and whether the vblank
@@ -69,8 +80,17 @@ void gfx_vram_copy(uint8_t *dst, const uint8_t *src, uint8_t len, uint8_t bank) 
     c->bank = bank;
 }
 
+uint8_t gfx_dma(uint8_t *dst, const uint8_t *src, uint8_t blocks) {
+    if (dma_count == DMA_MAX || vram_ready) return 0;
+    Dma *d = &dmas[dma_count++];
+    d->src = src;
+    d->dst = dst;
+    d->blocks = blocks;
+    return 1;
+}
+
 void gfx_commit(void) {
-    if (strip_count || copy_count) vram_ready = 1;
+    if (strip_count || copy_count || dma_count) vram_ready = 1;
 }
 
 // Write everything queued, outside vblank: directly with the display off, or with
@@ -90,7 +110,7 @@ static void write_queued(uint8_t wait) {
         }
     }
     SWITCH_ROM(saved);
-    copy_count = 0;
+    copy_count = 0;  // (the DMAs stay queued: their source is in WRAM bank 2, for vblank)
     write_strips(wait);  // gfx_strips.c (banked: the rare slow path)
     strip_count = 0;
     vram_ready = 0;
@@ -155,6 +175,7 @@ void gfx_vbl(void) {
         // what this interrupted, so switch to 0 and back.
         uint8_t vbk = VBK_REG;
         VBK_REG = 0;
+        dma_queue_write();
         vram_queue_write();
         VBK_REG = vbk;
         copy_count = 0;

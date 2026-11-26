@@ -53,6 +53,21 @@ uint8_t *gfx_strip_attr(uint8_t x, uint8_t y, uint8_t vertical, uint8_t len);
 // frame (two columns) can land on one frame; a seventh flushes, waiting per byte.
 #define COPY_MAX 6
 void gfx_vram_copy(uint8_t *dst, const uint8_t *src, uint8_t len, uint8_t bank);
+// Whole tiles into VRAM bank 0 by the GBC's general DMA in vblank: 16 bytes in a few
+// cycles, where the byte copies above take ~25 a byte (a 32x24 sprite frame, 192
+// bytes, would be most of vblank). src in WRAM bank 2 (art_copy put it there), both
+// 16-byte aligned; blocks: 16 bytes each, 1-128. Two a frame: returns 0, nothing
+// queued, when two are or this frame's queue is already handed over (a frame run
+// long): ask again next frame.
+#define DMA_MAX 2
+uint8_t gfx_dma(uint8_t *dst, const uint8_t *src, uint8_t blocks);
+// Copies art_copy_len bytes (not 0) from art_copy_src (ROM with its bank in, or
+// 0xC000-0xCFFF) into WRAM bank 2 at art_copy_dst (0xD000-0xDFFF). With interrupts
+// off (CRITICAL): art_ram.s.
+extern uint8_t *art_copy_dst;
+extern const uint8_t *art_copy_src;
+extern uint16_t art_copy_len;
+void art_copy(void);
 // Mark this frame's queued updates ready for the next vblank.
 void gfx_commit(void);
 // Ground ellipse, two sprites in VRAM bank 0; x/y are the projected feet.

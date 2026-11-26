@@ -1,0 +1,25 @@
+Use case: stylized-concept.
+Asset type: higher-fidelity goalkeeper save animation sprite-sheet mockup for PocketFutsal's Shootout mini game, to reduce later into native pixel art.
+Input image 1 is the exact CHARACTER IDENTITY reference: the original spiky dark-haired, light-skinned player in a royal blue jersey, dark shorts, blue socks and dark shoes. Input image 2 is a STYLE reference: match its polished, readable higher-fidelity pixel-art construction and the spiky player in its first row; do not include the other characters.
+Primary request: draw a genuine athletic goalkeeper DIVE TO SAVE, visibly different from a slide tackle. The arms and open hands lead toward an imaginary ball, head follows the reach, torso leaves the ground, one knee bends and the feet trail behind. Keep a connected neck, recognizable spiky head, natural elbows/shoulders and readable body volume. Small pale keeper gloves are fine. Maintain the character's big-head, compact-body sports-game proportions, simple black eyes and restrained facial expression. Preserve identity throughout; no elongated heads, extra limbs, disconnected hands or flattened dead-looking poses.
+Composition: ONE square sprite sheet, EXACTLY 4 columns by 4 rows of equally sized cells. Each cell has generous transparent padding, a consistent scale and fixed front/three-quarter camera. Full body visible, including the fingers and the trailing feet. Sprite bodies can become wider than their standing height when stretched. All dives travel toward the VIEWER'S RIGHT, for later horizontal mirroring. Pose frames should stay within their own cells. No ball inside the sprites: the game renders the ball separately. No text, numbers, borders, arrows, floor, net, scene, shadows, speed lines or decorative effects. Actual transparent alpha around every isolated sprite, no opaque backdrop or glow.
+Read the frames in row-major order:
+FIRST EIGHT CELLS (rows 1-2): LOW lateral save.
+1 keeper ready, knees bent, hands in front;
+2 compress and plant the left pushing foot, gaze right;
+3 forceful push-off to the right, arms reaching right, trailing knee bends;
+4 airborne lateral extension, head and shoulders after the hands, feet clearly trailing left;
+5 maximum low save reach, both open hands ahead of the face, body approximately horizontal and fully off the ground;
+6 descending with a natural bend, landing on the right side/hip/shoulder while protecting the arms;
+7 compact side tuck and one bent knee, gathering the body for recovery;
+8 pushing back up into a crouch.
+LAST EIGHT CELLS (rows 3-4): HIGH diagonal save.
+1 keeper ready;
+2 deeper plant and preload;
+3 spring up and right, hands reaching toward the upper right;
+4 airborne rising diagonal body, rear knee bent;
+5 apex fingertip save reach up and right, hands leading above the head, legs behind and below;
+6 falling back toward the right side, arms beginning to come in;
+7 soft side landing with flexed knees;
+8 recovery toward a ready crouch.
+Motion must be hand-animated through the actual joints, not a rigid rotated idle sprite. Never a feet-first lunge, seated slide, outstretched kicking foot or stiff corpse pose. Clean pixel clusters, controlled shading and bold readable silhouettes suitable for reduction.
