@@ -1,10 +1,13 @@
-// Dedicated head-only source art, reduced for opaque background/window tiles.
+// Dedicated head-only source art; v2 reserves index zero for transparency.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {decodePng} from './assets.mjs';
 import {silhouettes,writePng} from './study-raster.mjs';
-const dir=new URL('../artwork/players/mugshots/v1/',import.meta.url);
-const im=decodePng(fs.readFileSync(new URL('generated-source.png',dir)));
+const version=Number(process.argv[2]??2);
+assert.ok(version===1||version===2,'Supported mugshot versions: 1, 2');
+const dir=new URL('../artwork/players/mugshots/v'+version+'/',import.meta.url);
+fs.mkdirSync(dir,{recursive:true});
+const im=decodePng(fs.readFileSync(new URL('../artwork/players/mugshots/v1/generated-source.png',import.meta.url)));
 const {labels,frames}=silhouettes(im,2,2,200);
 const ids=['spiky','cap','crop','bandana'];
 // Preserve the source's isolated mouth stroke when area voting erases it.
@@ -24,8 +27,10 @@ function mouthBounds(box){
  assert.equal(found.length,1,'Expected one isolated source mouth');return found[0];
 }
 const characters=frames.map((source,i)=>{
- const scale=Math.min(14/(source.right-source.left+1),14/(source.bottom-source.top+1));
+ const extent=version===2?16:14;
+ const scale=Math.min(extent/(source.right-source.left+1),extent/(source.bottom-source.top+1));
  const palette=[i===2?[112,64,40,255]:[192,136,88,255],i===2?[184,120,72,255]:[248,200,136,255],i===1?[248,232,192,255]:i===3?[232,64,72,255]:[48,56,80,255],[24,32,48,255]];
+ if(version===2)palette[0]=[0,0,0,0];
  const cx=(source.left+source.right)/2,cy=(source.top+source.bottom)/2;
  const rows=Array.from({length:16},()=>Array(16).fill('0'));
  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
@@ -35,7 +40,7 @@ const characters=frames.map((source,i)=>{
    inside++;const p=(sy*im.width+sx)*4,[r,g,b]=im.rgba.subarray(p,p+3);let v=3;
    if(i===3&&r>g*2&&r>b*1.6&&r>80)v=2;
    else if(i===1&&r+g+b>600)v=2;
-   else if(r>g*1.06&&g>b*1.12&&r>65)v=g<(i===2?95:140)&&r<(i===2?165:220)?0:1;
+   else if(r>g*1.06&&g>b*1.12&&r>65)v=version===2?1:(g<(i===2?95:140)&&r<(i===2?165:220)?0:1);
    else if((i===0||i===2)&&r+g+b>110)v=2;
    votes[v]++;
   }
@@ -58,11 +63,13 @@ for(const c of characters){
  fs.writeFileSync(new URL(c.id+'-16.2bpp',dir),Buffer.from(bytes));
  writePng(new URL(c.id+'-16.png',dir),16,16,(x,y)=>c.palette[+c.rows[y][x]]);
 }
-fs.writeFileSync(new URL('mugshots-16.json',dir),JSON.stringify({version:1,width:32,height:32,opaque:true,tileOrder:'row-major 8x8 tiles; low/high bitplanes per row',characters},null,2)+'\n');
+fs.writeFileSync(new URL('mugshots-16.json',dir),JSON.stringify({version,width:32,height:32,opaque:version===1,tileOrder:'row-major 8x8 tiles; low/high bitplanes per row',characters},null,2)+'\n');
 writePng(new URL('mugshots-16.png',dir),32,32,(x,y)=>{const c=characters[Math.floor(y/16)*2+Math.floor(x/16)];return c.palette[+c.rows[y%16][x%16]];});
 writePng(new URL('mugshots-preview.png',dir),360,360,(x,y)=>{
  const xx=Math.floor(x/10),yy=Math.floor(y/10),c=characters[Math.floor(yy/18)*2+Math.floor(xx/18)],lx=xx%18-1,ly=yy%18-1;
- return lx>=0&&ly>=0&&lx<16&&ly<16?c.palette[+c.rows[ly][lx]]:[24,32,48,255];
+ const v=lx>=0&&ly>=0&&lx<16&&ly<16?+c.rows[ly][lx]:0;
+ if(version===2)return v?c.palette[v]:((Math.floor(xx/3)+Math.floor(yy/3))%2?[56,72,88,255]:[64,80,96,255]);
+ return lx>=0&&ly>=0&&lx<16&&ly<16?c.palette[v]:[24,32,48,255];
 });
 const font=decodePng(fs.readFileSync(new URL('../artwork/Fonts for GB Studio/light/default/ascii.png',import.meta.url)));
 const pixels=Array.from({length:32},()=>Array.from({length:160},()=>[24,32,48,255]));
@@ -70,7 +77,7 @@ function rect(x,y,w,h,col){for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)pix
 function text(s,x,y,col){for(const ch of s){const n=ch.charCodeAt(0)-32;for(let yy=0;yy<8;yy++)for(let xx=0;xx<8;xx++){const p=((Math.floor(n/16)*8+yy)*font.width+n%16*8+xx)*4;if(font.rgba[p]+font.rgba[p+1]+font.rgba[p+2]<300)pixels[y+yy][x+xx]=col;}x+=8;}}
 rect(0,0,160,2,[248,232,192,255]);rect(0,30,160,2,[248,232,192,255]);
 rect(4,5,38,22,[40,120,232,255]);rect(118,5,38,22,[232,64,72,255]);
-characters.forEach((c,i)=>{const x=[6,24,120,138][i];c.rows.forEach((r,y)=>[...r].forEach((v,xx)=>{pixels[y+8][x+xx]=c.palette[+v];}));});
+characters.forEach((c,i)=>{const x=[6,24,120,138][i];c.rows.forEach((r,y)=>[...r].forEach((v,xx)=>{if(version===1||v!=='0')pixels[y+8][x+xx]=c.palette[+v];}));});
 text('2 - 1',60,12,[248,232,192,255]);
 writePng(new URL('scoreboard-native.png',dir),160,32,(x,y)=>pixels[y][x]);
 writePng(new URL('scoreboard-preview.png',dir),640,128,(x,y)=>pixels[Math.floor(y/4)][Math.floor(x/4)]);

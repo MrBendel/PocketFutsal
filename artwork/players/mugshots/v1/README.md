@@ -2,7 +2,7 @@
 
 Dedicated head-only portraits of the original four PocketFutsal characters: spiky, cap, crop and bandana. Built-in ImageGen created `generated-source.png` using the original dialogue portrait source as an identity reference. The complete generation request is in `prompt.txt`. These are new head compositions, not crops of walking sprites. No Nintendo source pixels are included.
 
-Run `node tools/export-scoreboard-mugshots.mjs` to reproduce the native exports. Each connected source head is fit proportionally into a 14×14 area within its 16×16 tile block. Area voting reduces flat materials to four palette indices. The isolated source mouth is detected and retained as a two-pixel stroke at its projected location; this prevents mouths from disappearing during reduction.
+Run `node tools/export-scoreboard-mugshots.mjs 1` to reproduce the native exports. Each connected source head is fit proportionally into a 14×14 area within its 16×16 tile block. Area voting reduces flat materials to four palette indices. The isolated source mouth is detected and retained as a two-pixel stroke at its projected location; this prevents mouths from disappearing during reduction.
 
 The icons are opaque background/window art: palette 0 is a warm backdrop also used for skin shadow; 1 is skin; 2 is cream cap, red bandana, or a navy hair highlight; 3 is dark hair/outline/eyes/mouth. All exported native PNG pixels have alpha 255. Palettes differ per character and must be assigned per tile when integrating. Sprite rendering would reserve palette 0 for transparency and needs a separate conversion.
 
