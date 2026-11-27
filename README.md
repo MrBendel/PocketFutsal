@@ -38,12 +38,14 @@ the ball, players, shadows and effects cannot push their net/frame out of the
 Game Boy's ten-sprites-per-scanline list. Their collision and displacement
 remain separate from the renderer.
 
-A stadium stand and centered scoreboard sit behind the far goal. The board is
-part of the scrolling background and uses the original Pocket Sports numerals
-in muted gold. Each score changes through a queued six-tile update; the main
-score/control strip stays separate. The extra 32 pixels of stadium headroom
-leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
-`artwork/scoreboard/v3`.
+The court is seen from a fixed three-quarter view (2026-11-27): no vanishing
+point, every row the same width, depth at a constant 6/7. It fills a 20x32-tile
+map (160x256 px, both goals on it) and the camera follows the ball the length of
+it, a little ahead of whoever has it. Play keeps its court units (x 8..152, depth
+0..224), so only the drawing changed. The art is drawn in code in
+`tools/futsal-court-art.mjs`; `tools/goal-background.mjs` composites the goals
+onto it. The stadium stand and scoreboard behind the far goal (`tools/stadium-art.mjs`,
+`artwork/scoreboard/v3`) went with the old view: the score is in the bottom row.
 
 The lob landing ring reserves the first two sprite slots so its complete
 outline survives crowded scanlines. Players and the ball retain their depth

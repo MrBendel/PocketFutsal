@@ -1,10 +1,9 @@
 // Goals are composited into bank-one BG tiles, so OBJ scanline limits cannot
 // remove the frame. Precompute small displacement poses; runtime only uploads.
-import {projY} from './tile-art.mjs';
-import {STADIUM_PITCH as FUTSAL_PITCH,STADIUM_OFFSET,COURT_PALETTES,pitchTile} from './stadium-art.mjs';
+import {FUTSAL_COURT as FUTSAL_PITCH,COURT_PALETTES,courtTile as pitchTile,courtY} from './futsal-court-art.mjs';
 import {GOAL_NATIVE,GOAL_W,GOAL_H} from './goal-art.mjs';
 export const PATCH_W=8,PATCH_H=4,PATCH_X=6,POSES=16;
-export const PATCH_Y=[4,19];
+export const PATCH_Y=[0,25];  // map rows: the top goal's patch, the bottom one's
 export const GOAL_TILES=24;
 export const GOAL_PALETTES=[
  [[40,132,172],[24,20,32],[136,152,168],[248,248,232]],
@@ -19,7 +18,7 @@ export function buildGoalBackground(){
  const tiles=[],map=[],attrs=[];
  for(let end=0;end<2;end++)for(let pose=0;pose<POSES;pose++){
   const amount=pose?Math.floor((pose-1)/3)+1:0,dir=pose?(pose-1)%3-1:0;
-  const gx=60+dir*amount,gy=STADIUM_OFFSET+projY(end?224:0)-GOAL_H+(end?amount:-amount);
+  const gx=60+dir*amount,gy=courtY(end?224:0)-GOAL_H+(end?amount:-amount);
   if(gx<PATCH_X*8||gx+GOAL_W>(PATCH_X+PATCH_W)*8||gy<PATCH_Y[end]*8||gy+GOAL_H>(PATCH_Y[end]+PATCH_H)*8)throw new Error('Goal knockback leaves its BG patch');
   let used=0;
   for(let local=0;local<PATCH_W*PATCH_H;local++){
@@ -27,12 +26,12 @@ export function buildGoalBackground(){
    const original=FUTSAL_PITCH.tiles[FUTSAL_PITCH.map[index]],oldPal=FUTSAL_PITCH.attrs[index];
    const ink=Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>goalPixel(tx*8+x-gx,ty*8+y-gy)));
    const covered=ink.some(r=>r.some(Boolean));
-   const count=[0,0];for(const r of original)for(const c of r)if(c==='0'||c==='1')count[Number(c)]++;
-   const pal=oldPal===0?(count[1]>count[0]?4:5):6;
+   const count=[0,0,0];for(const r of original)for(const c of r)if(c<'3')count[Number(c)]++;
+   const pal=oldPal===0&&count[2]<=count[0]+count[1]?(count[1]>count[0]?4:5):6;
    const rows=original.map((r,y)=>[...r].map((c,x)=>ink[y][x]?(ink[y][x]===1?'3':ink[y][x]===2?'2':'1'):String(nearest(courtPalettes[oldPal][Number(c)],GOAL_PALETTES[pal-4]))).join(''));
    if(covered)tiles.push(rows);
    map.push(covered?end*GOAL_TILES+used++:pitchTile(FUTSAL_PITCH.map[index]));
-   attrs.push(covered?8|pal:oldPal|(FUTSAL_PITCH.map[index]>=134?8:0));
+   attrs.push(covered?8|pal:oldPal);
   }
   if(used>GOAL_TILES)throw new Error('Goal exceeds its compact tile buffer');
   while(used++<GOAL_TILES)tiles.push(Array(8).fill('00000000'));

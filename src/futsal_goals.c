@@ -58,8 +58,8 @@ static void prepare_patch(uint8_t end,uint8_t pose,uint8_t base){
     for(uint8_t i=0;i<GOAL_CELLS;i++)if((patch_attrs[i]&8)&&(patch_attrs[i]&7)>=4&&(patch_attrs[i]&7)<=6)patch_map[i]=base+patch_map[i]-end*GOAL_TILES;
 }
 static void commit_patch(uint8_t end){
-    VBK_REG=1;set_bkg_tiles(6,end?19:4,8,4,patch_attrs);
-    VBK_REG=0;set_bkg_tiles(6,end?19:4,8,4,patch_map);
+    VBK_REG=1;set_bkg_tiles(6,end?25:0,8,4,patch_attrs);  // tools/goal-background.mjs PATCH_Y
+    VBK_REG=0;set_bkg_tiles(6,end?25:0,8,4,patch_map);
     fs_goal_uploads++;
 }
 void futsal_goals_draw(uint8_t cam) BANKED{

@@ -22,7 +22,6 @@
 #include "futsal_zone.h"
 #include "futsal_fx.h"
 #include "futsal_goals.h"
-#include "futsal_stadium.h"
 #if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
 #error Futsal court overlaps side sprite atlas
 #endif
@@ -34,7 +33,9 @@
 
 uint8_t fs_pace,fs_pace_phase,fs_pace_mask;
 uint8_t fs_input_pending,fs_input_pad,fs_pressed,fs_pressed_pad;
-uint8_t fs_spectator = 1, fs_paused, fs_owner, fs_goal_timer, fs_cam_y;
+uint8_t fs_spectator = 1, fs_paused, fs_owner, fs_goal_timer, fs_cam_y, fs_cam_target;
+#define FS_CAM_MAX 112  // map px: the most the camera scrolls (256-row map, 136 rows showing; the grass past the bottom goal mostly hidden)
+#define FS_CAM_LEAD 16  // px ahead of the carrier
 int16_t fs_pl_x[4], fs_pl_y[4], fs_ball_x, fs_ball_y, fs_ball_vx, fs_ball_vy;
 uint16_t fs_sim_ticks, fs_pass_count, fs_shot_count, fs_tackle_count;
 int8_t fs_vx[4], fs_vy[4], fs_slide_vx[4], fs_slide_vy[4];
@@ -195,7 +196,6 @@ static void place(uint8_t n, int16_t x, int16_t y) {
     else move_sprite(n,(uint8_t)x,(uint8_t)y);
 }
 static void hud(void) {
-    futsal_stadium_score();
     char line[] = "BLUE 0 - 0 RED  WATCH";
     line[5] += score[0]; line[9] += score[1];
     if (!fs_spectator) { line[15]='P'; line[16]='L'; line[17]='A'; line[18]='Y'; line[19]=' '; }
@@ -609,8 +609,17 @@ static void draw(void) {
     static uint8_t by,bx,ball_sx,ball_wy,marker_x;
     static int16_t marker_y;
     by=(uint16_t)fs_ball_y>>4;bx=(uint16_t)fs_ball_x>>4;
-    uint8_t row=fs_projection_y[by];
-    fs_cam_y=row<=68?0:row>=132?64:row-68;scroll_y=fs_cam_y;
+    // The camera follows the ball, a little ahead of whoever has it (the way
+    // they're attacking), easing a quarter of the way there a frame.
+    {
+        int16_t t=(int16_t)fs_projection_y[by]-68;
+        if(fs_owner!=NOBODY)t+=team(fs_owner)?FS_CAM_LEAD:-FS_CAM_LEAD;
+        if(t<0)t=0;else if(t>FS_CAM_MAX)t=FS_CAM_MAX;
+        fs_cam_target=(uint8_t)t;
+        t=(int16_t)fs_cam_target-fs_cam_y;
+        if(t>3||t<-3)fs_cam_y+=t>>2;else fs_cam_y=fs_cam_target;
+    }
+    scroll_y=fs_cam_y;
     ball_sx=sx(bx,by)+4;ball_wy=fs_projection_y[by]+12;
     // Assign nearer players lower OAM indexes so overlapping bodies sort by depth.
     static uint8_t order[4]={0,1,2,3};
@@ -693,12 +702,11 @@ static void draw(void) {
     }
 }
 void futsal_enter(void) BANKED {
-    uint8_t buf[FUTSAL_PITCH_MAP_W*FUTSAL_PITCH_MAP_H];
+    uint8_t buf[FUTSAL_PITCH_MAP_W*8];  // eight rows at a time
     palettes_futsal();
     gfx_ball_init(116);
     futsal_fx_load();
     futsal_goals_load();
-    futsal_stadium_load();
     banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
     set_sprite_tile(0,124);set_sprite_tile(1,126);
     for(uint8_t k=0;k<3;k++){set_sprite_tile(20+k,8+(k<<1));set_sprite_prop(20+k,4);move_sprite(20+k,0,0);}
@@ -716,12 +724,17 @@ void futsal_enter(void) BANKED {
     banked_sprite_data_vbk1(64,FUTSAL_CAP_TILE_COUNT,futsal_cap_tiles,BANK(futsal_cap));
     banked_sprite_data_vbk1(128,FUTSAL_CROP_TILE_COUNT,futsal_crop_tiles,BANK(futsal_crop));
     banked_sprite_data_vbk1(192,FUTSAL_BANDANA_TILE_COUNT,futsal_bandana_tiles,BANK(futsal_bandana));
-    banked_memcpy(buf,futsal_pitch_map,sizeof(buf),BANK(futsal_pitch)); set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf);
-    banked_memcpy(buf,futsal_pitch_attr,sizeof(buf),BANK(futsal_pitch)); VBK_REG=1; set_bkg_tiles(0,0,FUTSAL_PITCH_MAP_W,FUTSAL_PITCH_MAP_H,buf); VBK_REG=0;
-    for(int16_t y=0;y<=224;y++) {
-        fs_projection_y[y]=64+((int32_t)92*y*448+(int32_t)72*y*y)/114688L;
-        fs_projection_s[y]=111+17*y/224;
+    for(uint8_t r=0;r<FUTSAL_PITCH_MAP_H;r+=8){
+        banked_memcpy(buf,futsal_pitch_map+r*FUTSAL_PITCH_MAP_W,sizeof(buf),BANK(futsal_pitch)); set_bkg_tiles(0,r,FUTSAL_PITCH_MAP_W,8,buf);
+        banked_memcpy(buf,futsal_pitch_attr+r*FUTSAL_PITCH_MAP_W,sizeof(buf),BANK(futsal_pitch)); VBK_REG=1; set_bkg_tiles(0,r,FUTSAL_PITCH_MAP_W,8,buf); VBK_REG=0;
     }
+    // A fixed three-quarter view (tools/futsal-court-art.mjs): depth at 6/7 from map
+    // row 32, no vanishing point; across, as it is (sx() at scale 128 is x).
+    for(int16_t y=0;y<=224;y++) {
+        fs_projection_y[y]=32+(uint8_t)((y*6)/7);
+        fs_projection_s[y]=128;
+    }
+    fs_cam_y=fs_cam_target=0;
     initrand(game_seed); score[0]=score[1]=sets[0]=sets[1]=0;
     match_sets=1; winner=NOBODY; fs_paused=fs_goal_timer=fs_hud_pending=0;
     fs_sim_ticks=fs_pass_count=fs_shot_count=fs_tackle_count=fs_completed_passes=fs_dribble_touches=fs_ankle_count=0;

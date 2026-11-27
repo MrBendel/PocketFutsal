@@ -4,7 +4,7 @@ import {assert,bootToTitle,at,set16,GAME_OVER,settle} from './helpers.mjs';
 import {sideAtlas} from '../tools/player-art.mjs';
 import {REACTION_TILES} from '../tools/reaction-art.mjs';
 import {asciiTile,FUTSAL_GOAL,FUTSAL_ZONE} from '../tools/tile-art.mjs';
-import {STADIUM_PITCH as FUTSAL_PITCH,STADIUM_OFFSET,pitchTile,SCORE_TILES} from '../tools/stadium-art.mjs';
+import {FUTSAL_COURT as FUTSAL_PITCH,courtTile as pitchTile,courtY} from '../tools/futsal-court-art.mjs';
 import {GOAL_H} from '../tools/goal-art.mjs';
 import {GOAL_BG,GOAL_TILES,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
 const PLAY=3;
@@ -373,7 +373,7 @@ test('all four side cycles are resident in VRAM without replacing front/back or 
  const expected=Buffer.from(sideAtlas().flatMap(t=>asciiTile(t))),vram=e.snapshot().vram;
  assert.deepEqual(Buffer.from(vram.subarray(214*16,242*16)),expected);
  for(let n=0;n<FUTSAL_PITCH.tiles.length;n++){
-  const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
+  const tile=pitchTile(n),offset=0x1000+(tile<128?tile:tile-256)*16;
   assert.deepEqual(Buffer.from(vram.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])),'court tile survives sprite uploads');
  }
 });
@@ -805,15 +805,29 @@ test('slower pace settings finish the same match within the per-frame budget',()
 });
 
 
-test('fast court projection preserves every horizontal pixel at every perspective scale',()=>{
- const e=startGame(),rows=new Map();
- for(let y=0;y<=224;y++){const scale=e.read8(e.symbols.addr('fs_projection_s')+y);if(!rows.has(scale))rows.set(scale,y);}
- assert.equal(rows.size,18);
- for(const [scale,y] of rows)for(let x=0;x<=160;x++){
-  put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',x*16);set16(e,'fs_ball_y',y*16);set16(e,'fs_ball_z',0);e.idle();
-  const projected=e.read8(e.symbols.addr('shadow_OAM')+e.v('fs_ball_oam')*4+1);
-  assert.equal(projected,84+Math.floor((x-80)*scale/128),`x ${x}, scale ${scale}`);
+test('the court is a fixed view: depth at 6/7, every row the same width, matching the art',()=>{
+ const e=startGame();
+ for(let y=0;y<=224;y++){
+  assert.equal(e.read8(e.symbols.addr('fs_projection_y')+y),courtY(y),`row for depth ${y}`);
+  assert.equal(e.read8(e.symbols.addr('fs_projection_s')+y),128,'no narrowing with depth');
  }
+ for(const y of [0,112,224])for(const x of [10,80,150]){
+  put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',x*16);set16(e,'fs_ball_y',y*16);set16(e,'fs_ball_z',0);e.idle();
+  assert.equal(e.read8(e.symbols.addr('shadow_OAM')+e.v('fs_ball_oam')*4+1),x+4,`x ${x} at depth ${y}: as it is`);
+ }
+});
+
+test('the camera follows the ball the length of the court, easing, and shows both goals',()=>{
+ const e=startGame();put(e,'fs_goal_timer',250);
+ const settleOn=(y)=>{set16(e,'fs_ball_y',y*16);set16(e,'fs_ball_z',0);e.idle(30);return e.v('fs_cam_y');};
+ assert.equal(settleOn(0),0,'top goal: the top of the map');
+ const bottom=settleOn(224);
+ assert.ok(bottom>=100&&bottom<=112,`bottom goal: scrolled to ${bottom}`);
+ assert.ok(courtY(224)-bottom<136,'the bottom goal line is on screen above the score row');
+ set16(e,'fs_ball_y',0);e.idle(1);
+ const step=e.v('fs_cam_y');
+ assert.ok(step<bottom&&step>0,'eases rather than jumps');
+ e.shot('futsal-fixed-view');
 });
 
 
@@ -900,30 +914,6 @@ function backgroundPixel(e,x,y){
  return ((v[offset]>>(7-(x&7)))&1)|(((v[offset+1]>>(7-(x&7)))&1)<<1);
 }
 
-test('stadium background scores update both teams without changing the housing or player tiles',()=>{
- for(const end of [0,1]){
-  const e=goalCrossing(end,{x:80,z:4});e.idle(8);
-  const v=e.snapshot().vram;
-  for(let team=0;team<2;team++){
-   assert.equal(at(e,'fs_board_score',team),team===end?1:0);
-   const pose=(team===end?1:0)*12+team*6;
-   for(let tile=0;tile<6;tile++)assert.deepEqual(Buffer.from(v.subarray(0x1500+team*96+tile*16,0x1510+team*96+tile*16)),Buffer.from(asciiTile(SCORE_TILES[pose+tile])));
-   const ink=[];
-   for(let y=13;y<=28;y++)for(let x=team?85:46;x<=(team?113:74);x++)if(backgroundPixel(e,x,y)===3)ink.push([x,y]);
-   const xs=ink.map(p=>p[0]),ys=ink.map(p=>p[1]);
-   assert.ok(Math.abs((Math.min(...xs)+Math.max(...xs))/2-(team?99:60))<=0.5,'score face is horizontally centered in its recess');
-   assert.equal((Math.min(...ys)+Math.max(...ys))/2,20.5,'score face is vertically centered in its recess');
-  }
-  // Fence and housing data stay resident through scoring and scrolling.
-  for(let n=12;n<FUTSAL_PITCH.tiles.length;n++){
-   const tile=pitchTile(n),offset=(n>=134?0x2000:0)+0x1000+(tile<128?tile:tile-256)*16;
-   assert.deepEqual(Buffer.from(v.subarray(offset,offset+16)),Buffer.from(asciiTile(FUTSAL_PITCH.tiles[n])));
-  }
-  assert.equal(e.read8(e.symbols.addr('fs_projection_y')),64,'court has stadium headroom');
-  if(end===0)e.shot('futsal-stadium-scoreboard');
- }
-});
-
 test('both movable goals are centred on the court in BG tiles and use no OBJ slots',()=>{
  const e=startGame(),expected=Buffer.from(FUTSAL_GOAL.slice(4).flatMap(t=>asciiTile(t)));
  assert.deepEqual(Buffer.from(e.snapshot().vram.subarray(254*16,256*16)),expected,'compact shadow art stays resident');
@@ -945,7 +935,7 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  const e=startGame();put(e,'fs_goal_timer',200);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',224*16);set16(e,'fs_ball_z',0);
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,112);
  for(const n of ['fs_action','fs_tackling','fs_aerial','fs_moving','fs_side'])e.writeBytes(e.symbols.addr(n),[0,0,0,0]);
- e.idle(3);const before=Uint8Array.from(e.frameBuffer()),top=STADIUM_OFFSET+144-GOAL_H-e.v('fs_cam_y');
+ e.idle(30);const before=Uint8Array.from(e.frameBuffer()),top=e.read8(e.symbols.addr('fs_projection_y')+224)-GOAL_H-e.v('fs_cam_y');
  for(let i=0;i<4;i++)setPlayer(e,i,128+i*4,216);
  e.idle(3);const after=e.frameBuffer(),o=e.snapshot().oam;
  let peak=0;
