@@ -313,9 +313,17 @@ uint8_t you_roll;       // frames left for the other button to make a lob or a d
 // the d-pad only aims (playtest 2026-11-26: "it should only lock if you're flashing /
 // powering up. Just pressing a or b should kick").
 uint8_t you_planted;
+// A press is a kick, now (playtest 2026-11-26: "make it kick on press and only do
+// power ups on repeated presses ... closer to the Mario Tennis model"): you swing for
+// SWING_FRAMES, planted, and the ball in reach meanwhile is struck; if it never comes,
+// a whiff, the strike gone. A second press in the swing (ROLL_FRAMES: the same
+// button, or the other for a lob or a drop shot) calls the kick off for a power-up,
+// queued till the ball comes, as before.
+#define SWING_FRAMES ROLL_FRAMES
+uint8_t you_swing;      // frames left of your kick (0: none)
 static void unready(uint8_t i) {
     fc_unready(i);
-    if (i == SIDE_YOU) you_leap = you_roll = you_planted = 0;
+    if (i == SIDE_YOU) you_leap = you_roll = you_planted = you_swing = 0;
 }
 static void ball_plain(void) { fc_ball_plain(); }
 
@@ -719,6 +727,7 @@ static void slide(uint8_t i, int8_t vx, int8_t vy) {
     pl_slide_vy[i] = vy;
     pl_face[i] = vx < 0;
     pl_move[i] = MOVE_SLIDE;
+    if (i == SIDE_YOU) you_swing = 0;  // the kick's a slide now: the strike stays readied
     pl_move_timer[i] = SLIDE_FRAMES;  // the strike stays readied: slide and return
     pl_rise_acc[i] = 0;
     if (i == SIDE_YOU) you_leap = 0;
@@ -797,7 +806,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     // (playtest: "powering up doesn't feel like it's locking correctly"; the other
     // button calls it off, so pressing early no longer leaves you stuck); the CPU
     // once the ball's over the net into its half. Serving: along the line only.
-    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU ? you_planted && pl_charge[i] >= CHARGE_MAX / 2 : in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU ? you_swing || (you_planted && pl_charge[i] >= CHARGE_MAX / 2) : in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];
@@ -1236,6 +1245,7 @@ void play_update(void) BANKED {
     // calls it off.
     if (joy_pressed & J_SELECT && phase == PHASE_RALLY) unready(SIDE_YOU);
     if (you_roll) you_roll--;
+    if (you_swing && !--you_swing) unready(SIDE_YOU);  // the kick over, nothing met: a whiff
     if (sp_age[SIDE_YOU] != 255) sp_age[SIDE_YOU]++;
     if ((joy_pressed & (J_A | J_B)) && ball_special && last_touch == SIDE_CPU && !sp_try[SIDE_YOU]) {
         sp_try[SIDE_YOU] = 1;  // your one try at timing the power slam
@@ -1270,6 +1280,7 @@ void play_update(void) BANKED {
             // (B, A) or a drop shot (A, B); any later it calls the strike off (playtest:
             // "if you're locked into an A power up, B cancels and vice versa").
             uint8_t s = pl_shot[SIDE_YOU];
+            you_swing = 0;  // a second press: not the kick, a power-up
             if (joy_pressed & (you_first ? J_B : J_A)) {
                 ready(SIDE_YOU, you_first);
                 if (s == SHOT_LOB || s == SHOT_DROP) pl_shot[SIDE_YOU] = s;
@@ -1283,12 +1294,13 @@ void play_update(void) BANKED {
         } else if (pl_shot[SIDE_YOU]) {
             ready(SIDE_YOU, b);  // the serve's toss: it charges
         } else if (phase == PHASE_RALLY && !pl_move_timer[SIDE_YOU]) {
-            ready(SIDE_YOU, b);  // queue it any time: it charges once the ball's coming
+            ready(SIDE_YOU, b);  // the kick (or the first press of a power-up)
             you_first = b;
             you_roll = ROLL_FRAMES;
+            you_swing = SWING_FRAMES;
             if (!b && (joy_pressed & J_B)) {
                 ready(SIDE_YOU, 1);  // A and B at once: a drop shot
-                you_roll = 0;
+                you_roll = you_swing = 0;
             }
         }
     }

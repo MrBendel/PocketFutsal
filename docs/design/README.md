@@ -207,7 +207,13 @@ slammed (the Captain Tsubasa feel).
   you (`you_planted`). **And only powering up locks you** (2026-11-26, playtest:
   "it should only lock if you're flashing / powering up. Just pressing a or b should
   kick"): a press or two queues a kick and you run on to meet it; from half a meter,
-  where you start flashing, the d-pad only aims. The CPU plays by the same lock, from the ball
+  where you start flashing, the d-pad only aims. **A press is a kick, now; repeated
+  presses power up** (2026-11-26, playtest: "make it kick on press and only do power
+  ups on repeated presses ... closer to the Mario tennis model"): one press swings at
+  once (the kick pose, planted, 12 frames, `you_swing`), and a ball in reach meanwhile
+  is struck; too early, a whiff, the strike gone. A second press within those 12 frames
+  (the same button, or the other for a lob or a drop shot) calls the kick off for a
+  power-up, queued till the ball comes. The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;

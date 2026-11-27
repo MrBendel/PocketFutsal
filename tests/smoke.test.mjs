@@ -152,19 +152,19 @@ test('the match opens 0-0 on your serve: the d-pad aims it, A tosses it up and s
 test('A queues a strike any time: it waits until the ball comes, a tap leaves you running, powered up the d-pad only aims, and it goes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
-  emu.tap('A');
+  emu.tap('A').tap('A');  // two presses: a power-up, not a kick
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_POWER, 'queued, with it going away');
   const x0 = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('RIGHT', 6);
-  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'the press’s charge, no more');
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'the presses’ charge, no more');
   assert.ok(at(emu, 'pl_x', YOU, 'i16') > x0, 'a tap is a kick: you still run');
   assert.equal(at(emu, 'pl_aim', YOU), 2, 'aimed right');
   placePlayer(emu, YOU, 80, 190);
   emu.write8(emu.symbols.addr('pl_vx') + YOU, 0);
   ballAt(emu, 80, 120, 0, 0, 40);
   emu.idle(4);
-  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'it doesn’t fill by itself, coming either');
-  emu.tap('A').tap('A').tap('A');  // powering up: half a meter, flashing
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'it doesn’t fill by itself, coming either');
+  emu.tap('A').tap('A');  // powering up: half a meter, flashing
   const x = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('LEFT', 6);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'planted: LEFT does nothing (the ball is straight at you)');
@@ -177,13 +177,13 @@ test('A queues a strike any time: it waits until the ball comes, a tap leaves yo
 test('your meter fills only as you press (not waiting, not holding); full, the strike is on fire, aimed with RIGHT', () => {
   const emu = quietRally();
   incoming(emu, 80, 40, 20, 40);
-  emu.tap('A');
-  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'the first press');
+  emu.tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'two presses: a power-up');
   emu.idle(12);
-  assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'waiting adds nothing');
+  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'waiting adds nothing');
   emu.hold('A', 12);
-  assert.equal(at(emu, 'pl_charge', YOU), 2 * YOU_TAP, 'holding adds nothing after its press');
-  emu.idle(1).tap('A').tap('A');
+  assert.equal(at(emu, 'pl_charge', YOU), 3 * YOU_TAP, 'holding adds nothing after its press');
+  emu.idle(1).tap('A');
   assert.equal(at(emu, 'pl_charge', YOU), 4 * YOU_TAP, 'each press adds');
   for (let k = 0; k < 8; k++) emu.tap('A');
   assert.equal(at(emu, 'pl_charge', YOU), CHARGE_MAX, 'pressed full: no cap on presses');
@@ -243,7 +243,7 @@ test('every strike arcs over the net', () => {
 test('B is a curve: set off wide, it bends in to the side you hold', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, 30);
-  emu.tap('B');
+  emu.tap('B').tap('B');
   assert.equal(at(emu, 'pl_shot', YOU), SHOT_CURVE);
   emu.until((e) => { e.hold('RIGHT', 1); return at(e, 'pl_shots', YOU) > 0; }, 80, 'the strike');
   assert.ok(emu.v('ball_curve', 'i8') > 0, 'bending right');
@@ -406,7 +406,7 @@ test('a lob coming down to you: a flashing marker where to meet it; there and qu
   set16(low, 'ball_vx', 4);
   low.write8(low.symbols.addr('ball_lob'), 1);
   standAtMeet(low);
-  low.tap('A');
+  low.tap('A').tap('A');
   low.until((e) => at(e, 'pl_shots', YOU) > 0 || e.v('goal_timer'), 120, 'the header');
   assert.equal(at(low, 'pl_last_move', YOU), MOVE_HEADER, 'less than half a meter: still out of the air');
   assert.equal(low.v('ball_power'), 0, 'a header, not a slam');
@@ -675,7 +675,7 @@ test('a ball on fire knocks down a player who meets it unready, and goes on', ()
 test('LEFT or RIGHT while planted sets your aim, and it sticks', () => {
   const emu = quietRally();
   ballAt(emu, 80, 120, 0, 0, 40);
-  emu.tap('A').hold('LEFT', 2).idle(1);
+  emu.tap('A').tap('A').hold('LEFT', 2).idle(1);
   assert.equal(at(emu, 'pl_aim', YOU), 0);
   emu.until((e) => at(e, 'pl_shots', YOU) > 0, 80, 'the strike');
   assert.ok(emu.v('ball_vx', 'i16') < 0, 'to the left, nothing held as it went');

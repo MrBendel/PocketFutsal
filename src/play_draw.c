@@ -243,7 +243,7 @@ void play_draw(void) BANKED {
         draw_lift = 0;
         uint8_t m = pl_move_timer[i] ? pl_move[i] : MOVE_NONE;
         if (goal_timer) f = last_scorer == i ? F_WIN : F_LOSE;
-        else if (m == MOVE_KICK) f = F_KICK;
+        else if (m == MOVE_KICK || (i == SIDE_YOU && you_swing)) f = F_KICK;
         else if (m == MOVE_VOLLEY || m == MOVE_CONTROL) f = F_VOLLEY;
         else if (m >= MOVE_HEADER && m <= MOVE_DOWN) special = 1;
         else if ((pl_shot[i] && !(pl_vx[i] | pl_vy[i])) || (phase == PHASE_TOSS && server == i)) f = F_READY;
