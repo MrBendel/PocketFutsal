@@ -27,8 +27,8 @@ read passes and react without changing the physical relationships or AI tactics.
 These are pace settings, independent of future AI skill tiers. Quick A/B taps
 and their aim are buffered across held simulation frames; pause stays immediate.
 
-Futsal is an arcade prototype: two outfield players per team and an AI keeper
-each, first to five goals. The court has goals at both baselines and
+Futsal is an arcade prototype: two outfield players per team, no goalkeepers
+(futsal has none here), first to five goals. The court has goals at both baselines and
 rebounding walls outside the goal mouths. Both ends now use the same 40x24
 dimensional portable-goal artwork and matching collision dimensions. Posts and the crossbar
 rebound the ball and knock the goal out of position. A short FRAME! stoppage
@@ -80,11 +80,12 @@ tackle, a pass or a shot moves it.
   **B** switches to the other blue.
 - Each completed pass in a row adds charge to the next shot (two at most); the
   reds winning the ball ends the run.
-- Each goal has a keeper. It shadows the ball across its goal, and dives as a shot
-  is struck: it saves what it can reach in the shot's flight, so a full shot from
-  close into a corner beats it, a slow or a long one doesn't. A save parries the
-  ball back out, loose. A carrier near goal also finds the last defender guarding
-  its mouth, there to block a shot short of full.
+- No keepers: what stops a shot is its aim and the defence. A snatched shot sprays
+  twice as wide, a part charge half as much again; a full one is true. A volley is
+  full only within 64 px of goal. With the ball you're slower than a defender (19
+  to 24), so they get back. A carrier near goal finds the last defender out a
+  quarter of the way toward them, narrowing the angle; a shot short of full is
+  blocked within 11 px of a player (6 for a full one).
 
 D-pad moves. Passes and shots travel on ballistic arcs, with a shadow marking
 their ground position; high deliveries clear ground tackles, and a receiver

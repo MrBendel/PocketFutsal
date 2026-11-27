@@ -32,26 +32,30 @@ did three things by context, hidden timings, and shots whose spread was luck.
 - **Charged shots and runs of passes**: the charge sets the pace (64 SUB a tick to 128,
   on fire at full) and, under half, doubles the spread. Each completed pass in a row
   adds 8 to the next shot's charge (two at most).
-- **Keepers** (`src/futsal_keeper.c`): with the ball held and no keeper, 48 of 52 AI
-  shots went in. One on each line, AI: it shadows the ball across the mouth and, as a
-  shot is struck, dives; it saves if the distance is within the dive (24 SUB a tick
-  over the shot's flight) plus a reach of 3 px (a full shot) to 10 (a snatched one).
-  A save parries it out, loose. And the last defender guards the mouth when a carrier
-  is within 80 px of goal; a shot short of full is blocked within 9 px.
-- **Numbers** (`node tools/futsal-balance.mjs 16`, all four AI): 112 goals from 211
-  shots (53%), the wins 8-8; a match about a minute (3,500 frames).
+- **No keepers** (playtest: "No goalkeepers they don't exist in futsal"; for a day
+  there were: with the ball held and nothing in goal, 48 of 52 AI shots went in).
+  What stops a shot instead: its aim (a snatched one sprays twice as wide, a part
+  charge half as much again, a full one is true; ±3 px close in, ±7 to 96, ±15 past
+  it and half as much again past 112; a volley is full only within 64 px of goal),
+  and the defence: a carrier runs at 19 (22 before) to a defender's 24, so they get
+  back; the AI carrier dodges only a slide it sees coming (half the time), not on a
+  whim; a missed slide recovers in 40 ticks (65); and the last defender, a carrier
+  within 80 px of goal, stands a quarter of the way out toward them on the line to
+  the goal's middle; a shot short of full is blocked within 11 px (6 for a full one).
+- **Numbers** (`node tools/futsal-balance.mjs 16`, all four AI): 123 goals from 157
+  shots (78%), the wins 6-10; a match about 45 seconds (1,700-3,250 frames). Still
+  high: with no keeper, a shot from inside 50 px finds a 40 px goal unless a body's
+  in the way.
 - **Frame budget**: the busiest frame stays under the half-frame line (64,752 of
-  65,664). Making room: the AI's shot or pass and the keeper's dive each on a tick of
-  their own, as are a volley's strike, the restart after a goal or a frame hit, and the
+  65,664). Making room: the AI's shot or pass on a tick of
+  its own, as are a volley's strike, the restart after a goal or a frame hit, and the
   goal's reset; the score row and the goal's reset queued for vblank; a shot's launch
-  with one division (no 16-bit multiply, a table for its flight); the keeper drawn in
-  bytes at fixed OAM addresses (it cost 1.5k a frame, 5k as it changed pose); the end
+  with one division (no 16-bit multiply, a table for its flight); the end
   wall's crossing sweep only near the posts. `node harness/profile.mjs futsal --seed=N`
   profiles a match (its names for code in futsal's banks aren't reliable).
 
-Not done: keepers have only the front-facing art (the bottom one shows it too); the
-stadium and scoreboard behind the far goal went with the old view. Not yet played by
-hand.
+Not done: the stadium and scoreboard behind the far goal went with the old view. Not
+yet played by hand.
 
 ## What ends rallies (2026-11-26)
 

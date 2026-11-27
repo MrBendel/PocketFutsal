@@ -15,7 +15,3 @@ export const KEEPER_TILES=[...KEEPER.low,...KEEPER.high].flatMap(f=>{
 export const KEEPER_MASKS=[...KEEPER.low,...KEEPER.high].map(f=>f.spriteColumns8x16.reduce((m,c)=>m|(1<<((c.x/8)*2+c.y/16)),0));
 export const SHOOTOUT_REACTIONS=[...REACTIONS.win,...REACTIONS.loss].flatMap(f=>[0,8].flatMap(x=>[cut(f.rows,x,0),cut(f.rows,x,8),empty,cut(f.rows,x,16)]));
 
-// The 2v2 keepers (src/futsal_keeper.c): the ready frame trimmed to its middle 16 px
-// (2 columns), then the low and high save poses (4 columns each), as above.
-export const FUTSAL_KEEPER=[[KEEPER.low[0],[8,16]],[KEEPER.low[KEEPER.savePose],[0,8,16,24]],[KEEPER.high[KEEPER.savePose],[0,8,16,24]]]
- .flatMap(([f,xs])=>xs.flatMap(x=>[cut(f.rows,x,0),cut(f.rows,x,8),empty,cut(f.rows,x,16)]));

@@ -89,7 +89,7 @@ test('a slide that gets there puts the carrier down and pops the ball loose; sev
  e.writeBytes(e.symbols.addr('fs_pl_x')+4,[x&255,x>>8]);
  e.writeBytes(e.symbols.addr('fs_pl_y')+4,[(y-16*16)&255,(y-16*16)>>8]);
  set16(e,'fs_ball_x',x); set16(e,'fs_ball_y',y-9*16);
- e.write8(e.symbols.addr('fs_think')+2,40);
+ e.write8(e.symbols.addr('fs_think')+2,40);e.write8(e.symbols.addr('fs_cooldown')+2,200);  // (no dodge)
  e.writeBytes(e.symbols.addr('fs_ai_tx')+4,[x&255,x>>8]);
  e.writeBytes(e.symbols.addr('fs_ai_ty')+4,[(y-16*16)&255,(y-16*16)>>8]);
  e.tap('A'); assert.equal(e.v('fs_tackle_count','u16'),0,'crouch is not instant possession');
@@ -395,21 +395,6 @@ test('A and B together dodge: a burst no slide can stop',()=>{
  assert.equal(e.v('fs_dodges','u16'),1);
 });
 
-test('the keeper shadows the ball, saves what it can reach, and is beaten in the corner up close',()=>{
- const shoot=(range,dir,full)=>{
-  const e=humanSpace();setPlayer(e,0,80,range);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',(range-5)*16);
-  e.idle(20);  // the keeper settles opposite the ball
-  e.hold('A',full?FULL:1);if(dir)e.hold(dir+'+A',1);e.idle(1);  // aimed on the last frame held
-  for(let f=0;f<120&&!e.v('fs_goal_timer')&&!e.v('fs_saves','u16')&&!e.v('fs_frame_timer')&&e.v('fs_is_shot');f++)e.idle();
-  return e.v('fs_goal_timer')?'goal':e.v('fs_saves','u16')?'saved':e.v('fs_frame_timer')?'frame':'wide';
- };
- assert.equal(shoot(90,'',true),'saved','from far, even full: saved');
- assert.equal(shoot(40,'',false),'saved','snatched, near the middle: saved');
- assert.equal(shoot(36,'LEFT',true),'goal','full, close, into a corner: in');
- const e=humanSpace();setPlayer(e,0,30,60);set16(e,'fs_ball_x',30*16);set16(e,'fs_ball_y',55*16);e.idle(30);
- assert.ok(at(e,'fs_kp_x',0,'i16')<80*16,'the top keeper leans toward the ball');
-});
-
 test('the ball stays at the carrier’s feet, the way they face; standing on it doesn’t take it',()=>{
  const e=humanSpace();
  for(const [dir,dx,dy] of [['RIGHT',6,0],['LEFT',-6,0],['UP',0,-5]]){
@@ -491,7 +476,7 @@ test('a timed jump meets the descending lob with a bicycle kick and grounded sha
  e.tap('A');assert.ok(e.v('fs_aerial')>0);assert.equal(e.v('fs_aerial_count','u16'),0,'windup before contact');
  e.until(e=>e.v('fs_aerial_count','u16')===1,18,'airborne foot meeting lob');
  assert.equal(e.v('fs_shot_count','u16'),1);assert.ok(e.v('fs_ball_z','i16')>0,'shot starts from actual contact height');
- assert.equal(e.v('fs_lob'),0);assert.ok(e.v('fs_power_trail')>0);
+ assert.equal(e.v('fs_lob'),0);assert.equal(e.v('fs_shot_speed'),96,'from this far (180 px): a part charge');
  assert.ok(e.v('fs_fx_timer')>0,'pack impact starts on real airborne contact');
  assert.equal(at(e,'fs_pl_x',0,'i16'),x);assert.equal(at(e,'fs_pl_y',0,'i16'),y);
  e.idle(5).tap('START').idle(3);
@@ -529,8 +514,8 @@ test('one-two, charged lob return, run into zone and bicycle finish form a playa
  for(let f=0;f<25&&!e.v('fs_aerial_count','u16');f++)step('');
  assert.equal(e.v('fs_aerial_count','u16'),1,'real returned lob is struck in the air');
  assert.ok(e.v('fs_completed_passes','u16')>=2,'both passes count, including the first-time finish');
- for(let f=0;f<80&&!at(e,'score',0)&&!e.v('fs_saves','u16');f++)step('');
- assert.ok(at(e,'score',0)===1||e.v('fs_saves','u16')===1,'the aerial strike goes in, or the keeper saves it');
+ for(let f=0;f<80&&!at(e,'score',0);f++)step('');
+ assert.equal(at(e,'score',0),1,'aerial strike can finish in the goal');
  assert.ok(worst<65664,`lob-to-bicycle sequence budget: ${worst}`);
 });
 test('releasing a charged pass during pause delivers it on resume without sticking in charge',()=>{
@@ -658,6 +643,8 @@ function leaningPresser(e,{far=false,lean=12,sliding=false}={}){
  setPlayer(e,2,far?140:x+16,y);setPlayer(e,3,x-16,y);
  e.write8(e.symbols.addr('fs_presser')+1,2);
  e.write8(e.symbols.addr('fs_vx')+2,lean&255);
+ // (There to be wrong-footed: their slides on cooldown, or the presser goes in at once.)
+ e.write8(e.symbols.addr('fs_cooldown')+2,200);e.write8(e.symbols.addr('fs_cooldown')+3,200);
  if(sliding)e.write8(e.symbols.addr('fs_tackling')+2,12);
 }
 
@@ -842,9 +829,9 @@ test('shooting accuracy tightens near goal and full-court attempts target well w
    e.hold('A',FULL).idle(1);assert.equal(e.v('fs_shot_range'),range);  // full: no spray
    const error=e.v('fs_shot_error','i8');total+=Math.abs(error);
    const tx=e.v('fs_target_x','i16')/16;
-   if(range===24)assert.ok(Math.abs(error)<=1,'close finish stays precise');
+   if(range===24)assert.ok(Math.abs(error)<=3,'close finish stays precise (futsal has no keepers: aim is what stops it)');
    if(range===80)assert.ok(Math.abs(error)<=7);
-   if(range===128)assert.ok(Math.abs(error)<=15);
+   if(range===128)assert.ok(Math.abs(error)<=22);
    if(range===192)assert.ok(tx<=32||tx>=128,'full-court attempt cannot aim inside the goal');
   }
   errors.push(total);
@@ -925,7 +912,7 @@ test('both movable goals are centred on the court in BG tiles and use no OBJ slo
   assert.equal(backgroundPixel(e,80,baseline-14),3,'crossbar stays centred at collision height');
   assert.equal(backgroundPixel(e,60,baseline-1),1,'bottom rail stays inside the baseline');
  }
- for(let i=38;i<40;i++)assert.equal(e.read8(0xfe00+i*4),0,'goal OBJ slot is free');  // (30..37: the keeper in front of it)
+ for(let i=30;i<40;i++)assert.equal(e.read8(0xfe00+i*4),0,'goal OBJ slot is free');
  const uploads=e.v('fs_goal_uploads','u16');
  for(const y of [0,112,224]){set16(e,'fs_ball_y',y*16);e.idle(3);}
  assert.equal(e.v('fs_goal_uploads','u16'),uploads,'scrolling moves the BG without per-frame tile uploads');
@@ -943,7 +930,7 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  for(let y=top;y<top+GOAL_H;y++){
   let count=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])count++;
   peak=Math.max(peak,count);
-  for(let x=60;x<100;x++)if(x<72||x>=88){  // (the ball, and the keeper standing in the mouth: sprites)
+  for(let x=60;x<100;x++)if(x<76||x>=84){
    const at=(y*160+x)*3;
    assert.deepEqual([...after.subarray(at,at+3)],[...before.subarray(at,at+3)],`goal remains intact at ${x},${y}`);
   }

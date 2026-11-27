@@ -1,5 +1,5 @@
 // The 2v2 match's drawing (futsal_draw.c), out of futsal.c's bank: the camera, the
-// players by depth, the ball, its trail and shadow, your marker, the lob ring, the keeper.
+// players by depth, the ball, its trail and shadow, your marker, the lob ring.
 #ifndef FUTSAL_DRAW_H
 #define FUTSAL_DRAW_H
 #include <gb/gb.h>

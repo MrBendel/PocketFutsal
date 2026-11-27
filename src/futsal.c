@@ -22,7 +22,6 @@
 #include "futsal_zone.h"
 #include "futsal_fx.h"
 #include "futsal_goals.h"
-#include "futsal_keeper.h"
 #include "futsal_draw.h"
 #if SCENE_TILES + FUTSAL_PITCH_TILE_COUNT > 214
 #error Futsal court overlaps side sprite atlas
@@ -77,6 +76,8 @@ uint16_t fs_switches;
 #define FS_FOOT_Y (5*16)  // ... and in depth
 #define FS_DOWN 36        // ticks on the floor, tackled
 #define FS_TACKLE_RANGE (18*16)  // an AI presser slides in from this near the ball
+#define FS_CARRY_SPEED 19  // SUB a tick with the ball (24 without): a defender gets back, as in Strikers (22 before)
+#define FS_TACKLE_COOL 40  // ticks before a slide again (65 before: a miss left the attack a second)
 // Strikers' shooting: hold A to charge (slowed, open to a tackle), release to shoot.
 // The charge sets its pace (64 SUB a tick at none to 128 full, on fire) and, under
 // half, doubles its spread. Each completed pass in a row adds FS_CHAIN_BONUS to the
@@ -94,7 +95,6 @@ uint8_t fs_shot_speed;    // its pace
 uint8_t fs_chain,fs_chain_team;  // completed passes in a row, and whose
 uint8_t fs_dodge[4];
 uint16_t fs_dodges,fs_blocks;
-uint8_t fs_kp_pending;
 uint8_t fs_ai_act;  // the AI carrier's next strike: 1 a shot, 2 a pass, 3 a lob (struck the tick after)
 int8_t fs_ai_aim;
 uint8_t fs_ai_who;
@@ -187,7 +187,7 @@ static void hud(void) {
     else if (fs_frame_timer) win_text_queued(6,0,"FRAME!");
 }
 static void kickoff(uint8_t side) {
-    futsal_goals_reset();fs_goal_refresh=1;futsal_keeper_reset();fs_kp_pending=fs_ai_act=0;
+    futsal_goals_reset();fs_goal_refresh=1;fs_ai_act=0;
     fs_pl_x[0]=52*16; fs_pl_y[0]=142*16;
     fs_pl_x[1]=108*16; fs_pl_y[1]=178*16;
     fs_pl_x[2]=108*16; fs_pl_y[2]=82*16;
@@ -297,15 +297,17 @@ static void shoot(uint8_t i, int8_t aim) {
         // Full-court efforts are wild clearances, not goal-seeking lasers.
         x=(roll&1)?128+(roll&7):32-(roll&7);fs_shot_error=x-80;
     }else{
-        if(fs_shot_range>96)fs_shot_error=(roll&15)-(roll>>4);
+        if(fs_shot_range>96){fs_shot_error=(roll&15)-(roll>>4);if(fs_shot_range>112)fs_shot_error+=fs_shot_error>>1;}
         else if(fs_shot_range>48)fs_shot_error=(roll&7)-((roll>>3)&7);
-        else fs_shot_error=(roll&1)-((roll>>1)&1);
-        if(power<FS_CHARGE_MAX/2)fs_shot_error<<=1;  // a snatched shot sprays
+        else fs_shot_error=(roll&3)-((roll>>2)&3);
+        // Futsal has no keepers: what stops a shot is its aim. A snatched one sprays
+        // twice as wide, a part charge half as much again; only a full one is true.
+        if(power<FS_CHARGE_MAX/2)fs_shot_error<<=1;
+        else if(power<FS_CHARGE_MAX)fs_shot_error+=fs_shot_error>>1;
         x+=fs_shot_error;
     }
     fs_receiver=NOBODY;fs_is_shot=1;fs_lob=0;
     kick(i,x*16,team(i)?224*16:0);fs_power_trail=power>=FS_CHARGE_MAX?48:0;fs_shot_count++;
-    fs_kp_pending=team(i)+1;  // the keeper reacts next tick (this one's busy enough)
     futsal_fx_start(fs_ball_x,fs_ball_y,fs_ball_z,fs_aerial[i]!=0);
 }
 static uint8_t aerial_try(uint8_t i){
@@ -324,7 +326,8 @@ static void aerial_update(uint8_t i){
         if(fs_owner!=NOBODY||fs_kicked)return;
         fs_air_shot=1;fs_thought=1;
         if(fs_receiver==i)fs_completed_passes++;
-        fs_shot_power=FS_CHARGE_MAX;  // met in the air: full
+        // Met in the air: full near goal (64 px); from farther, a part charge (it sprays).
+        fs_shot_power=(team(i)?224*16-fs_ball_y:fs_ball_y)<64*16?FS_CHARGE_MAX:FS_CHARGE_MAX/2;
         shoot(i,HUMAN(i)?((joy&J_RIGHT)!=0)-((joy&J_LEFT)!=0):0);
         fs_aerial_count++;
         return;
@@ -362,13 +365,12 @@ static void pass_input(int8_t dx,int8_t dy){
 static void dodge(uint8_t i){
     fs_dodge[i]=FS_DODGE;fs_burst[i]=10;fs_cooldown[i]=FS_DODGE_COOL;fs_dodges++;sfx_play(SFX_TICK);
 }
-// The AI aims for the side of the goal its keeper isn't (side: the shooter's team; its
-// target's keeper is fs_kp_x[side]: team 0 shoots at the top goal, 0).
-static int8_t away(uint8_t side){
-    return fs_kp_x[side]>80*16?-1:fs_kp_x[side]<80*16?1:((rand()&1)?1:-1);
+// The AI aims for the far post: across the goal from where it shoots.
+static int8_t away(void){
+    return fs_ball_x<80*16?1:fs_ball_x>80*16?-1:((rand()&1)?1:-1);
 }
 static void tackle(uint8_t i) {
-    fs_tackling[i]=18;fs_action[i]=18;fs_cooldown[i]=65;fs_burst[i]=10;
+    fs_tackling[i]=18;fs_action[i]=18;fs_cooldown[i]=FS_TACKLE_COOL;fs_burst[i]=10;
     int16_t dx=fs_ball_x-fs_pl_x[i],dy=fs_ball_y-fs_pl_y[i];
     int8_t vx=dx<-4*16?-36:dx>4*16?36:0,vy=dy<-4*16?-36:dy>4*16?36:0;
     if(vx&&vy){vx=vx<0?-27:27;vy=vy<0?-27:27;}
@@ -387,7 +389,7 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     x=fs_pl_x[i];y=fs_pl_y[i];dx=tx-x;dy=ty-y;
     vx=fs_vx[i];vy=fs_vy[i];want_x=want_y=0;
     slide=fs_tackling[i];burst=fs_burst[i];
-    speed=fs_owner==i?22:24;if(burst)speed=44;
+    speed=fs_owner==i?FS_CARRY_SPEED:24;if(burst)speed=44;
     if(HUMAN(i)&&(fs_pass_charge||fs_shot_charge))speed=12;
     if(slide>14||(slide&&slide<=4))speed=8;
     if((dx>12||dx<-12)&&(dy>12||dy<-12))speed-=speed>>2;
@@ -468,6 +470,15 @@ think:
 
     static uint8_t mate,own,side,mark,presser,defender;
     static int16_t goal,tx,ty,pressure,mate_space,d,forward;
+    // An AI carrier sees a slide coming (in its crouch, near) and dodges it, half the time.
+    if(fs_owner==i&&!fs_cooldown[i]){
+        mate=(i&2)^2;
+        if((fs_tackling[mate]>14&&distance(mate,fs_ball_x,fs_ball_y)<FS_TACKLE_RANGE+6*16)||
+           (fs_tackling[mate+1]>14&&distance(mate+1,fs_ball_x,fs_ball_y)<FS_TACKLE_RANGE+6*16)){
+            fs_cooldown[i]=8;  // (a look either way, not every tick)
+            if(rand()&1)dodge(i);
+        }
+    }
     // The presser goes in as soon as the carrier's in range, between its decisions
     // too (they come every 8 ticks or so: a carrier runs 11 px between them).
     if(fs_owner!=NOBODY&&team(fs_owner)!=team(i)&&fs_presser[team(i)]==i&&!fs_cooldown[i]&&!fs_tackling[i]
@@ -493,10 +504,9 @@ think:
         if(pressure<64*16&&ab(fs_pl_x[defender]-fs_pl_x[i])<40*16)tx=fs_pl_x[defender]<80*16?120*16:40*16;
         forward=side?fs_pl_y[mate]-fs_pl_y[i]:fs_pl_y[i]-fs_pl_y[mate];
         if(distance(i,fs_ball_x,fs_ball_y)>12*16){tx=fs_ball_x;ty=fs_ball_y;}
-        else if(pressure<20*16&&!fs_cooldown[i]&&!(rand()&3))dodge(i);
-        else if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16){fs_shot_power=12+(rand()&15);fs_ai_act=1;fs_ai_who=i;fs_ai_aim=away(side);}
+        else if(fs_held_ticks>10&&ab(fs_pl_y[i]-goal)<48*16&&pressure>14*16){fs_shot_power=12+(rand()&15);fs_ai_act=1;fs_ai_who=i;fs_ai_aim=away();}
         else if(fs_held_ticks>12&&mate_space>18*16&&forward>-32*16&&distance(mate,fs_ball_x,fs_ball_y)>24*16&&(pressure<48*16||fs_held_ticks>100)){fs_ai_act=2+((fs_pass_count&3)==3);fs_ai_who=i;}
-        else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16){fs_shot_power=8+(rand()&15);fs_ai_act=1;fs_ai_who=i;fs_ai_aim=away(side);}
+        else if(fs_held_ticks>18&&ab(fs_pl_y[i]-goal)<64*16){fs_shot_power=8+(rand()&15);fs_ai_act=1;fs_ai_who=i;fs_ai_aim=away();}
     }else if(own){
         fs_role[i]=2;
         // Keep the far lane through the middle of the court instead of
@@ -538,9 +548,14 @@ think:
             if(ab(tx-fs_ball_x)<28*16&&ab(ty-fs_ball_y)<32*16)
                 tx=fs_ball_x<80*16?128*16:32*16;
             // A carrier near our goal: the last defender guards its mouth, between the
-            // ball and the goal's middle, there to block a shot (no keepers in 2v2).
+            // ball and the goal's middle, there to block a shot (futsal has no keepers).
             d=side?fs_ball_y:224*16-fs_ball_y;
-            if(fs_owner!=NOBODY&&d<FS_GUARD_RANGE){tx=80*16+((fs_ball_x-80*16)>>2);ty=side?14*16:210*16;}
+            // Out a quarter of the way to the ball, on its line to the goal's middle:
+            // narrowing the angle, the way a futsal defender does (no keeper behind).
+            if(fs_owner!=NOBODY&&d<FS_GUARD_RANGE){
+                tx=80*16+((fs_ball_x-80*16)>>2);
+                ty=side?12*16+(fs_ball_y>>2):212*16-((224*16-fs_ball_y)>>2);
+            }
         }else{
             tx=fs_ball_x+fs_ball_vx*6;ty=fs_ball_y+fs_ball_vy*6;
             if(tx<16*16)tx=16*16;else if(tx>144*16)tx=144*16;
@@ -572,7 +587,6 @@ static void ball_update(void) {
     }
     old_x=fs_ball_x;old_y=fs_ball_y;old_z=fs_ball_z;
     fs_ball_x+=fs_ball_vx; fs_ball_y+=fs_ball_vy;
-    futsal_keeper_check(old_y);
     if(fs_flight_left&&!--fs_flight_left&&!fs_is_shot){
         // A delivery sheds pace as it lands instead of rolling through a
         // missed receiver and carrying all the way into the goal.
@@ -608,7 +622,7 @@ static void ball_update(void) {
     if(fs_owner!=NOBODY)return;  // at someone's feet: only a tackle takes it
     // Rotate pickup priority to avoid a permanent advantage to blue.
     // A shot still flying: blocked within 9 px, 5 for a full one; slowed, collected.
-    reach=fs_is_shot&&ab(fs_ball_vx)+ab(fs_ball_vy)>48?(fs_shot_speed>=112?5*16:9*16):14*16;
+    reach=fs_is_shot&&ab(fs_ball_vx)+ab(fs_ball_vy)>48?(fs_shot_speed>=112?6*16:11*16):14*16;
     for(k=0;k<4;k++) {
         i=(k+(fs_sim_ticks&3))&3;
         if(fs_pickup_lock && fs_last_kicker==i) continue;
@@ -621,7 +635,7 @@ static void ball_update(void) {
         if((uint16_t)(gap+dx)<reach) {
             if(fs_receiver==i){fs_completed_passes++;if(fs_chain<FS_CHAIN_MAX)fs_chain++;}
             if(fs_is_shot&&team(i)!=team(fs_last_kicker))fs_blocks++;
-            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_touch_timer=0;fs_lob=0;fs_kp_save[0]=fs_kp_save[1]=0;
+            fs_owner=i;fs_held_ticks=0;fs_receiver=NOBODY;fs_touch_timer=0;fs_lob=0;
             // A trap kills the delivery's speed without moving its position.
             fs_ball_vx=fs_ball_vy=0;fs_ball_vz=0;fs_ball_z=0;break;
         }
@@ -633,7 +647,6 @@ void futsal_enter(void) BANKED {
     gfx_ball_init(116);
     futsal_fx_load();
     futsal_goals_load();
-    futsal_keeper_load();
     banked_sprite_data(124,FUTSAL_ZONE_TILE_COUNT,futsal_zone_tiles,BANK(futsal_zone));
     set_sprite_tile(0,124);set_sprite_tile(1,126);
     for(uint8_t k=0;k<3;k++){set_sprite_tile(20+k,8+(k<<1));set_sprite_prop(20+k,4);move_sprite(20+k,0,0);}
@@ -710,8 +723,6 @@ void futsal_update(void) BANKED {
     }
     fs_sim_ticks++;
     fs_kicked=fs_thought=0;
-    // A shot struck last tick: the keeper's dive, decided now (not on the shot's tick).
-    if(fs_kp_pending){if(fs_is_shot)futsal_keeper_shot(fs_kp_pending-1,fs_target_x,fs_flight_left,fs_shot_speed);fs_kp_pending=0;}
     if(fs_stumble_timer)fs_stumble_timer--;
     if(fs_cut_cooldown)fs_cut_cooldown--;
     if(fs_cut_window)fs_cut_window--;else fs_cut_count=0;
@@ -787,6 +798,5 @@ void futsal_update(void) BANKED {
             if(!fs_kicked&&!fs_aerial[i])step_player(i,fs_pl_x[i]+dx*64,fs_pl_y[i]+dy*64);
         }
     }
-    futsal_keeper_step();
     ball_update();gfx_ball_step(fs_ball_vx,fs_ball_vy);if(!fs_hud_pending)futsal_draw();
 }

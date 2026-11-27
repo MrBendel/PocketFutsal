@@ -8,7 +8,6 @@
 #include "futsal.h"
 #include "futsal_fx.h"
 #include "futsal_goals.h"
-#include "futsal_keeper.h"
 #include "futsal_draw.h"
 #define team(i) ((uint8_t)((i) >> 1))
 #define HUMAN(i) (!fs_spectator&&(i)==fs_ctrl)
@@ -112,7 +111,6 @@ void futsal_draw(void) BANKED {
         move_sprite(0,zx,fs_projection_y[zy]-fs_cam_y+12);
         move_sprite(1,zx+8,fs_projection_y[zy]-fs_cam_y+12);
     }else{move_sprite(0,0,0);move_sprite(1,0,0);}
-    futsal_keeper_draw(fs_cam_y);
     if(fs_fx_timer||fs_fx_frame!=255)futsal_fx_draw(fs_cam_y);
     if(fs_goal_refresh){
         fs_goal_refresh=0;futsal_goals_draw(fs_cam_y);
