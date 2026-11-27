@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {decodePng} from './assets.mjs';
 import {silhouettes,reducePose,writePng,writeGif} from './study-raster.mjs';
-const dir=new URL('../artwork/players/campus/v1/',import.meta.url);
-const im=decodePng(fs.readFileSync(new URL('generated-source.png',dir)));
+const version=Number(process.argv[2]??2);
+assert.ok(version===1||version===2,'Supported campus study versions: 1, 2');
+const dir=new URL('../artwork/players/campus/v'+version+'/',import.meta.url);
+fs.mkdirSync(dir,{recursive:true});
+const im=decodePng(fs.readFileSync(new URL('../artwork/players/campus/v1/generated-source.png',import.meta.url)));
 const {labels,frames}=silhouettes(im,9,4,200),ids=['spiky','cap','crop','bandana'];
 const directions=['down','up','right','left'],phases=['idle','step-a','step-b'];
 const scale=Math.min(14/Math.max(...frames.map(f=>f.right-f.left+1)),14/Math.max(...frames.map(f=>f.bottom-f.top+1)));
@@ -47,8 +50,15 @@ const characters=ids.map((id,col)=>{
    return {x,y,height,source:e};
   });
   idle.rows=p.map(r=>r.join(''));
-  const headRows=view===2?11:10;
-  cycle.slice(1).forEach(f=>{f.rows=[...idle.rows.slice(0,headRows),...f.rows.slice(headRows)];f.headFrom='idle';f.eyes=idle.eyes;});
+  const headRows=version===2?12:(view===2?11:10);
+  cycle.slice(1).forEach(f=>{
+   if(version===1){f.rows=[...idle.rows.slice(0,headRows),...f.rows.slice(headRows)];f.headFrom='idle';f.eyes=idle.eyes;return;}
+   // One-pixel settling of the entire upper body on foot contact. Keep the
+   // neck/shoulders with the head; never translate a floating face patch.
+   f.rows=['................',...idle.rows.slice(0,headRows),...f.rows.slice(headRows+1)];
+   f.upperBodyOffset={x:0,y:1};
+   f.eyes=idle.eyes.map(e=>({...e,y:e.y+1}));
+  });
  }
  // Pack after preserving features; two 8x16 columns per frame.
  for(const view of directions.slice(0,3))for(const f of animations[view]){
@@ -65,7 +75,7 @@ const characters=ids.map((id,col)=>{
  writePng(new URL(`${id}-16.png`,dir),48,64,(x,y)=>c.palette[Number(animations[directions[Math.floor(y/16)]][Math.floor(x/16)].rows[y%16][x%16])||0]);
  return c;
 });
-fs.writeFileSync(new URL('campus.json',dir),JSON.stringify({version:1,frameWidth:16,frameHeight:16,directions,phases,sourceScale:scale,characters},null,2)+'\n');
+fs.writeFileSync(new URL('campus.json',dir),JSON.stringify({version,frameWidth:16,frameHeight:16,directions,phases,sourceScale:scale,characters},null,2)+'\n');
 writePng(new URL('roster-16.png',dir),192,64,(x,y)=>{
  const c=characters[Math.floor(y/16)],cell=Math.floor(x/16),f=c.animations[directions[Math.floor(cell/3)]][cell%3];return c.palette[Number(f.rows[y%16][x%16])||0];
 });

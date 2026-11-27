@@ -4,7 +4,7 @@ Built-in ImageGen produced a coordinated master study from the four original ros
 
 The high-fidelity master has four character columns (spiky, cap, crop, bandana) and nine action rows: down idle/step A/step B, up idle/step A/step B, right idle/step A/step B. Left is a horizontal mirror of right.
 
-Run `node tools/reduce-campus-sprites.mjs` to reproduce all native exports. Reduction uses whole connected silhouettes at alpha >=200 and a common aspect-preserving scale. The entire body fits inside 16×16, with transparent margins. These are not stretched 16×24 gameplay sprites. Material-aware voting flattens shading into three opaque colors plus transparency. Source eye landmarks are preserved where voting loses narrow strokes. Each direction uses a stable idle head across its walking cycle, with the generated shirt/arm/leg motion below it, keeping the small faces from wobbling.
+Run `node tools/reduce-campus-sprites.mjs 1` to reproduce all native exports. Reduction uses whole connected silhouettes at alpha >=200 and a common aspect-preserving scale. The entire body fits inside 16×16, with transparent margins. These are not stretched 16×24 gameplay sprites. Material-aware voting flattens shading into three opaque colors plus transparency. Source eye landmarks are preserved where voting loses narrow strokes. Each direction uses a stable idle head across its walking cycle, with the generated shirt/arm/leg motion below it, keeping the small faces from wobbling.
 
 ## Files
 
