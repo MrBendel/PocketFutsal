@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {decodePng} from './assets.mjs';
 import {silhouettes,writePng} from './study-raster.mjs';
-const version=Number(process.argv[2]??2);
-assert.ok(version===1||version===2,'Supported mugshot versions: 1, 2');
+const version=Number(process.argv[2]??3);
+assert.ok([1,2,3].includes(version),'Supported mugshot versions: 1, 2, 3');
 const dir=new URL('../artwork/players/mugshots/v'+version+'/',import.meta.url);
 fs.mkdirSync(dir,{recursive:true});
 const im=decodePng(fs.readFileSync(new URL('../artwork/players/mugshots/v1/generated-source.png',import.meta.url)));
@@ -27,10 +27,10 @@ function mouthBounds(box){
  assert.equal(found.length,1,'Expected one isolated source mouth');return found[0];
 }
 const characters=frames.map((source,i)=>{
- const extent=version===2?16:14;
+ const extent=version>=2?16:14;
  const scale=Math.min(extent/(source.right-source.left+1),extent/(source.bottom-source.top+1));
  const palette=[i===2?[112,64,40,255]:[192,136,88,255],i===2?[184,120,72,255]:[248,200,136,255],i===1?[248,232,192,255]:i===3?[232,64,72,255]:[48,56,80,255],[24,32,48,255]];
- if(version===2)palette[0]=[0,0,0,0];
+ if(version>=2)palette[0]=[0,0,0,0];
  const cx=(source.left+source.right)/2,cy=(source.top+source.bottom)/2;
  const rows=Array.from({length:16},()=>Array(16).fill('0'));
  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
@@ -40,7 +40,7 @@ const characters=frames.map((source,i)=>{
    inside++;const p=(sy*im.width+sx)*4,[r,g,b]=im.rgba.subarray(p,p+3);let v=3;
    if(i===3&&r>g*2&&r>b*1.6&&r>80)v=2;
    else if(i===1&&r+g+b>600)v=2;
-   else if(r>g*1.06&&g>b*1.12&&r>65)v=version===2?1:(g<(i===2?95:140)&&r<(i===2?165:220)?0:1);
+   else if(r>g*1.06&&g>b*1.12&&r>65)v=version>=2?1:(g<(i===2?95:140)&&r<(i===2?165:220)?0:1);
    else if((i===0||i===2)&&r+g+b>110)v=2;
    votes[v]++;
   }
@@ -54,6 +54,17 @@ const characters=frames.map((source,i)=>{
  const c={id:ids[i],width:16,height:16,palette,rows:rows.map(r=>r.join('')),source,sourceScale:scale,mouth:{x,y,width,source:landmark}};
  return c;
 });
+if(version===3){
+ // Editable native-pixel cleanup: face features and jaw contours are authored
+ // together so source outlines cannot turn into a third eye or dangling neck.
+ const cleanup=JSON.parse(fs.readFileSync(new URL('face-cleanup.json',dir)));
+ for(const c of characters){
+  const edit=cleanup[c.id];
+  for(const [y,row]of Object.entries(edit.rows))c.rows[+y]=row;
+  c.sourceMouth=c.mouth;
+  c.mouth=edit.mouth;c.eyes=edit.eyes;c.nativeCleanup='face-cleanup.json';
+ }
+}
 for(const c of characters){
  for(const r of c.rows)assert.match(r,/^[0123]{16}$/);
  const bytes=[];for(let y=0;y<16;y+=8)for(let x=0;x<16;x+=8)for(let yy=0;yy<8;yy++){
@@ -68,7 +79,7 @@ writePng(new URL('mugshots-16.png',dir),32,32,(x,y)=>{const c=characters[Math.fl
 writePng(new URL('mugshots-preview.png',dir),360,360,(x,y)=>{
  const xx=Math.floor(x/10),yy=Math.floor(y/10),c=characters[Math.floor(yy/18)*2+Math.floor(xx/18)],lx=xx%18-1,ly=yy%18-1;
  const v=lx>=0&&ly>=0&&lx<16&&ly<16?+c.rows[ly][lx]:0;
- if(version===2)return v?c.palette[v]:((Math.floor(xx/3)+Math.floor(yy/3))%2?[56,72,88,255]:[64,80,96,255]);
+ if(version>=2)return v?c.palette[v]:((Math.floor(xx/3)+Math.floor(yy/3))%2?[56,72,88,255]:[64,80,96,255]);
  return lx>=0&&ly>=0&&lx<16&&ly<16?c.palette[v]:[24,32,48,255];
 });
 const font=decodePng(fs.readFileSync(new URL('../artwork/Fonts for GB Studio/light/default/ascii.png',import.meta.url)));
