@@ -268,9 +268,10 @@ slammed (the Captain Tsubasa feel).
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B, A: lob**, over the other player and deep: 24 px behind them, at least 60
-  past the net (a lob at a player up at the net sends them back for it). **A, B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.) A quick roll:
+- **A, B: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **B, A: drop shot**,
+  dying just past halfway, as Mario Tennis has them (2026-11-27; until then they were
+  the other way round, for no reason anyone wrote down). A quick roll:
   the second button within 12 frames (0.2 s) of the first (2026-11-24, when the other
   button became the cancel); it stays a lob or a drop shot till it's struck, and the
   first button again taps the charge up. The other button any later calls the strike

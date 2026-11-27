@@ -7,8 +7,8 @@
 //
 // The ball is always loose: you strike it rather than carry it. With the ball
 // coming your way (or loose in your half), A readies a power shot, straight where
-// the d-pad points, and B a curve, bending in to the side the d-pad holds; B then
-// A in a quick roll is a lob, A then B a drop shot. Readying plants you: each press fills the meter (only presses,
+// the d-pad points, and B a curve, bending in to the side the d-pad holds; A then
+// B in a quick roll is a lob, B then A a drop shot. Readying plants you: each press fills the meter (only presses,
 // and it stays; the other button or SELECT calls it off), and the strike goes by itself as
 // the ball arrives. Which strike depends on the ball's height: a kick on the
 // ground, a volley at the waist, a header, or a bicycle kick for one that's just
@@ -447,7 +447,7 @@ static int16_t other_y(uint8_t i, int16_t from_halfway) {
 
 // --- readying ---
 // A press of A (b 0) or B (b 1): the first readies a power shot or a curve; the
-// other button next makes it a drop shot (A, B) or a lob (B, A); after that, or
+// other button next makes it a lob (A, B) or a drop shot (B, A); after that, or
 // the same button again, it's a tap: more charge.
 // Rushing the net (playtest: "when you rush the net you should be able to bicycle
 // kick to knock the ball out of the air for a smash"): up within NET_RUSH px of it,
@@ -1344,7 +1344,7 @@ void play_update(void) BANKED {
         } else if (pl_shot[SIDE_YOU] && phase == PHASE_RALLY) {
             // Readied: the same button again fills the meter (a lob or a drop shot stays
             // one). The other, in a quick roll off the first (ROLL_FRAMES), makes it a lob
-            // (B, A) or a drop shot (A, B); any later it calls the strike off (playtest:
+            // (A, B) or a drop shot (B, A); any later it calls the strike off (playtest:
             // "if you're locked into an A power up, B cancels and vice versa").
             uint8_t s = pl_shot[SIDE_YOU];
             you_swing = 0;  // a second press: not the kick, a power-up

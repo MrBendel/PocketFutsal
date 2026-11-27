@@ -66,13 +66,13 @@ void fc_unready(uint8_t i);
 // Clear ball flight flags (power, gold, curve, pop, drop, lob, trail).
 void fc_ball_plain(void);
 // Queue or tap-charge a strike: b=0 (A: power), b=1 (B: curve).
-// Handles B->A lob, A->B drop, gold slam (when allow_gold), tap charge & SFX.
+// Handles A->B lob, B->A drop, gold slam (when allow_gold), tap charge & SFX.
 void fc_ready(uint8_t i, uint8_t b, uint8_t allow_gold);
-// Step combo-arm countdown for player i (reverts expired lob->curve, drop->power).
+// Step combo-arm countdown for player i (reverts expired lob->power, drop->curve).
 #define fc_combo_tick(i) do { \
     if (pl_combo[(i)] && (i) == SIDE_YOU && !--pl_combo[(i)]) { \
-        if (pl_shot[(i)] == SHOT_LOB) pl_shot[(i)] = SHOT_CURVE; \
-        else if (pl_shot[(i)] == SHOT_DROP) pl_shot[(i)] = SHOT_POWER; \
+        if (pl_shot[(i)] == SHOT_LOB) pl_shot[(i)] = SHOT_POWER; \
+        else if (pl_shot[(i)] == SHOT_DROP) pl_shot[(i)] = SHOT_CURVE; \
     } \
 } while (0)
 // Step player i's velocity (approach with accel/grip/skid/brake) toward (tx, ty),

@@ -54,18 +54,19 @@ void fc_ready(uint8_t i, uint8_t b, uint8_t allow_gold) {
         pl_shot[i] = SHOT_GOLD;
         return;
     }
-    if ((s == SHOT_CURVE || s == SHOT_LOB) && !b) {
+    // Mario Tennis's way round (playtest 2026-11-27): A, B a lob; B, A a drop shot.
+    if ((s == SHOT_POWER || s == SHOT_LOB) && b) {
         pl_shot[i] = SHOT_LOB;
         pl_combo[i] = FC_COMBO_FRAMES;
         return;
     }
-    if ((s == SHOT_POWER || s == SHOT_DROP) && b) {
+    if ((s == SHOT_CURVE || s == SHOT_DROP) && !b) {
         pl_shot[i] = SHOT_DROP;
         pl_combo[i] = FC_COMBO_FRAMES;
         return;
     }
-    if (s == SHOT_LOB) pl_shot[i] = SHOT_CURVE;
-    else if (s == SHOT_DROP) pl_shot[i] = SHOT_POWER;
+    if (s == SHOT_LOB) pl_shot[i] = SHOT_POWER;
+    else if (s == SHOT_DROP) pl_shot[i] = SHOT_CURVE;
     pl_combo[i] = 0;
     if (pl_charge[i] == CHARGE_MAX || (i != SIDE_YOU && pl_taps[i] >= TAP_MAX)) return;
     pl_taps[i]++;
