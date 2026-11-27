@@ -73,3 +73,11 @@ slide-heads-8x.png is the enlarged pixel review. Both regenerate with the move e
 Ball occlusion: both match modes interleave the ball with player OAM blocks by
 court depth. A nearer player can cover a ball behind them; a nearer ball covers
 a farther player. Ground position determines depth, independently of ball height.
+
+## Combined match, campus and avatar sheets
+
+Run `node tools/export-player-library.mjs` to reproduce `complete-blue.png`, `complete-red.png`, `complete-preview.png`, `complete.json` and `complete.2bpp` for each character, plus `complete-roster.png` with all four characters side by side (spiky, cap, crop, bandana; blue/blue/red/red).
+
+The front/back rows now end at header; their redundant eighth bicycle-strike cells are empty. The dedicated bicycle-front/back tuck, strike and recovery sequences remain. Four campus rows append the latest native 16×16 idle/step A/step B views from `../campus/v2/`, followed by the latest transparent 16×16 avatar from `../mugshots/v4/`, including Crop's eyebrows. Existing match frame pixels and the positions of the original ten rows are preserved. Native atlas cells remain 32×32; smaller assets keep their native dimensions within each cell.
+
+Avatar animations carry their own four-entry palette (transparent plus three visible colors), used by both native PNGs and the interactive review. Team recoloring applies to match/campus shirts, while portrait cream/red accessories and hair highlights keep their original colors. Consumers must honor an animation's palette override when present. `complete.json` format version is now 2; its frame rectangles and tile offsets describe the regenerated archive. The archive is an authoring library, not a single resident VRAM allocation. The review page includes the new assets; gameplay integration of the campus and avatars remains separate.
