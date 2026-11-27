@@ -333,6 +333,7 @@ static void ball_plain(void) { fc_ball_plain(); }
 // or not, till the other side has struck it (playtest 2026-11-26: "if the CPU slides
 // to save and misses, they shouldn't be able to get back up and save it again").
 uint8_t pl_beaten[2];
+extern uint8_t rally_n, rally_heat, rally_meet, ball_finisher;  // (below: what ends rallies)
 
 static void serve_setup(uint8_t side) {
     server = side;
@@ -345,6 +346,7 @@ static void serve_setup(uint8_t side) {
         pl_move[i] = pl_move_timer[i] = 0;
         pl_beaten[i] = 0;
     }
+    rally_n = rally_heat = rally_meet = ball_finisher = 0;
     pl_x[SIDE_YOU] = TO_SUB(CENTER_X);
     pl_x[SIDE_CPU] = TO_SUB(CENTER_X);
     if (side == SIDE_YOU) {
@@ -487,6 +489,19 @@ static void dust(uint8_t i) {
 }
 
 uint8_t ball_slammed;  // struck as a slam, not landed yet: sparks fly where it lands
+// What ends rallies (playtest 2026-11-26: "it's missing that thing that ends rallies").
+// A finisher: a slam, till someone touches it. Only a player set for it (standing,
+// a full meter) meets it clean; anyone else, a slide included, pops it up (another
+// slam for the slammer), or on the floor.
+uint8_t ball_finisher;
+// Rally heat: each touch in a point adds to it (rally_n), and from it a drive goes
+// faster (strike()), a ball on fire takes more meter to meet clean (rally_meet), and
+// the CPU mishits sooner.
+// Long rallies get harder till someone breaks. Back to nothing each point.
+#define RALLY_HEAT_MAX 12   // at most (a touch adds half a point): a drive a fifth faster
+uint8_t rally_n;     // touches this point
+uint8_t rally_heat;  // min(rally_n / 2, RALLY_HEAT_MAX)
+uint8_t rally_meet;  // rally_heat / 2: added to the charge that meets a ball on fire clean
 static void new_flight(void) {
     ball_flight++;
     ball_trail = 0;
@@ -511,6 +526,11 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
     }
     pl_last_move[i] = move;
     unready(i);
+    ball_finisher = 0;  // touched: (strike() sets it again for a slam)
+    if (rally_n < 255) rally_n++;
+    rally_heat = rally_n >> 1;
+    if (rally_heat > RALLY_HEAT_MAX) rally_heat = RALLY_HEAT_MAX;
+    rally_meet = rally_heat >> 1;
     pl_beaten[0] = pl_beaten[1] = 0;  // a new ball
     pl_shots[i]++;
     ball_special = 0;
@@ -604,6 +624,14 @@ static void strike(uint8_t i, uint8_t move) {
     } else if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
     move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
+    // Rally heat: a drive (on fire or not) goes faster, a 64th a point (a fifth at most),
+    // arced again to land where it was aimed. (A curve, a lob, a drop shot: their
+    // arcs and bends are timed; left be.)
+    if (rally_heat && !special && !slam && !scuff && phase == PHASE_RALLY && !ball_curve && !ball_lob && !ball_drop) {
+        ball_vx += (ball_vx * (int16_t)rally_heat) >> 6;
+        ball_vy += (ball_vy * (int16_t)rally_heat) >> 6;
+        arc(land, 1);
+    }
     if (slam && smash && !special && !was_pop && !was_lob) {
         // Out of the air at the net: driven down onto where it's aimed, steep, but over
         // the net still. Gravity's 3/4 a frame.
@@ -644,6 +672,7 @@ static void strike(uint8_t i, uint8_t move) {
         }
     }
     ball_slammed = slam;
+    ball_finisher = slam;
     if (slam) burst(VFX_SLAM);  // an impact star: big for a slam, small on fire
     else if (ball_power) burst(VFX_FIRE);
     if (i == SIDE_YOU)
@@ -692,6 +721,7 @@ static void knock_down(uint8_t i) {
     pl_move[i] = MOVE_DOWN;
     pl_move_timer[i] = DOWN_FRAMES;
     unready(i);
+    ball_finisher = 0;
     ball_power = 0;
     ball_special = 0;
     ball_vx >>= 1;
@@ -720,13 +750,14 @@ static void meet(uint8_t i, uint8_t move) {
         else knock_down(i);
         return;
     }
-    if (ball_power && pl_charge[i] < (ball_gold || ball_smash ? CHARGE_MAX : pl_fire_meet[i])) {
-        pop_up(i, move, KICK_FRAMES);
+    if (ball_power && (pl_charge[i] < (ball_gold || ball_smash || ball_finisher ? CHARGE_MAX : pl_fire_meet[i] + rally_meet) ||
+                       (ball_finisher && (pl_vx[i] | pl_vy[i])))) {
+        pop_up(i, move, KICK_FRAMES);  // (a finisher met on the move: not set for it)
         return;
     }
     if (i == SIDE_CPU && last_touch == SIDE_YOU) {
         int16_t p = ((abs16(PX(pl_x[i]) - cpu_from_x) + abs16(PX(pl_y[i]) - cpu_from_y)) >> 2) +
-                    (ball_speed() >> 1) - cpu_calm;
+                    (ball_speed() >> 1) + rally_heat - cpu_calm;
         uint8_t r = rand() & 63;
         if (p > (int16_t)r) {
             cpu_rattled++;
@@ -812,11 +843,11 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
             // Got there: slide and return it, the strike by its height; at full
             // stretch (the lunge's last third), only a pop-up (on fire, without
             // the meter to meet it: down you go).
-            if (ball_special ? !special_timed(i) : ball_power && pl_charge[i] < pl_fire_meet[i]) {
+            if (ball_special ? !special_timed(i) : ball_power && pl_charge[i] < pl_fire_meet[i] + rally_meet) {
                 knock_down(i);
                 return;
             }
-            if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_STRETCH) pop_up(i, MOVE_SLIDE, 0);
+            if (ball_finisher || pl_move_timer[i] < SLIDE_FRAMES - SLIDE_STRETCH) pop_up(i, MOVE_SLIDE, 0);
             else meet(i, rel_z < 5 ? MOVE_KICK : rel_z < 16 ? MOVE_VOLLEY : MOVE_HEADER);
             pl_move[i] = MOVE_SLIDE;
             pl_move_timer[i] = SLIDE_REST;  // got there: up sooner

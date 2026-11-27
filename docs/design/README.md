@@ -5,6 +5,26 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## What ends rallies (2026-11-26)
+
+Playtest: "the difficulty at this level is about what you'd expect for expert level but
+it's missing that thing that ends rallies (either way, for CPU or player)". Two rules,
+both sides alike (play.c, "what ends rallies"):
+
+- **A slam is a finisher** (`ball_finisher`, till someone touches it): only a player set
+  for it, standing with a full meter, meets it clean. Anyone else pops it up (another
+  slam for the slammer), a slide that gets there included; short of the meter to meet
+  fire, down they go. Gold and the smash at the net already worked this way.
+- **Rally heat** builds with every touch in a point (`rally_n`; `rally_heat` is half
+  that, 12 at most) and resets each point: a drive goes up to a fifth faster, arced again
+  to land where it was aimed (curves, lobs and drop shots left be: their arcs and bends
+  are timed); meeting a ball on fire clean takes up to 6 more charge (`rally_meet`);
+  the CPU mishits sooner (heat adds to its pressure).
+
+Bot matches (the AI on your side, 6 seeds), before and after: touches a point, median
+10 then 10, 90th percentile 24 then 18, longest 42 then 25; slams won outright 9 of 15
+(5 returned clean) then 18 of 20 (none clean).
+
 ## The match's stats (2026-11-26): the levers for each character
 
 From the user: **Speed** (moving, and getting up off a slide), **Power** (the A shot:
