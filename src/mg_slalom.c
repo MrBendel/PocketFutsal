@@ -39,8 +39,8 @@
 #define VS_CPU_R 120
 
 #define PLAYER_Y 118       // player feet y (24 px tall -> head top at y = 95)
-#define BALL_REST 22       // px the dribbled ball settles ahead of your feet (just past your head)
-#define BALL_FRONT 6       // closer than this, the ball is at your boots: drawn over your feet
+#define BALL_REST 6        // px ahead of your feet the ball sits between touches: at your toes
+#define BALL_LEAD 14       // px ahead a kick sends it as you step, before you gather it back
 #define ROW0_CY 104        // row 0 cone top y (104..118: base level with your boots)
                            // row 1 cone top y = 88 (one step ahead = the next hazard)
                            // passed rows -1 / -2 slide down past you and off under the HUD (y 136)
@@ -258,11 +258,11 @@ static uint8_t glide(uint8_t *slide) {
     return step;
 }
 
-// Kick ball i forward off the foot: far enough to cover the step still to glide and
-// settle BALL_REST ahead. It slows by a quarter a frame (about 4x its speed in all),
-// matching the turf's glide, so it rolls out ahead as the runner follows it.
+// Kick ball i forward off the foot: far enough to cover the step still to glide and run
+// BALL_LEAD out in front. It slows by a quarter a frame (about 4x its speed in all),
+// matching the turf's glide; stopped, it eases back to your toes (you gather it).
 static void kick_ball(uint8_t i, uint8_t slide) {
-    int16_t travel = ((int16_t)(BALL_REST + slide) << 4) - mg_slalom_ahead[i];
+    int16_t travel = ((int16_t)(BALL_LEAD + slide) << 4) - mg_slalom_ahead[i];
     if (travel < 64) travel = 64;
     mg_slalom_bv[i] = travel >> 2;
     mg_slalom_hop[i] = HOP_FRAMES;
@@ -444,17 +444,14 @@ static void draw_ball(uint8_t i, int16_t x, int16_t feet, uint8_t foot, uint8_t 
     uint8_t h = mg_slalom_hop[i];
     int16_t z = 0;
     if (h) z = hop_z[HOP_FRAMES - h];
-    // Off to the kicking foot's side at the boots, tucking in front of the runner as it rolls.
-    int16_t side = 1;
-    if (ahead < BALL_FRONT) side = 5;
-    else if (ahead < 16) side = 3;
+    // Beside the kicking foot so it shows past your boots; always drawn under (behind) you.
+    int16_t side = 7;
     int16_t bx = foot ? x + side : x - side;
     int16_t ground = feet - ahead;  // where it touches the grass
     int16_t top = ground - 8 - z;
     uint8_t tile = MG_T_BALL;
     if ((mg_slalom_bv[i] > 6 || h) && ((uint8_t)frame_count & 2)) tile += 2;
     uint8_t slot = back, other = front;
-    if (ahead < BALL_FRONT) slot = front, other = back;
     set_sprite_tile(slot, tile);
     set_sprite_prop(slot, pal);
     if (bx <= -4 || bx >= 164 || top <= -16 || top >= 144) move_sprite(slot, 0, 0);

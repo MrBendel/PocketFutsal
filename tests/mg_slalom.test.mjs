@@ -29,16 +29,16 @@ function readDetail(e) {
 const oamY = (e, slot) => e.read8(e.symbols.addr('shadow_OAM') + slot * 4);
 const shown = (e, slot) => oamY(e, slot) > 0 && oamY(e, slot) < 160;
 
-test('the ball starts at your boots with no shadow, rolls out ahead on a kick, and hops', () => {
+test('the ball sits at your feet under you, each kick pushes it out in front, and you gather it back', () => {
   const e = liveSlalom(4242, false);
   e.idle(2);
   matchGolden(e, 'slalom-live');
   assert.equal(e.v('mg_slalom_px', 'i16'), 66, 'starts in tight Solo left lane (x=66)');
 
-  // At the feet: drawn over the boots (slot 0), not behind (slot 14), and no shadow anywhere.
+  // At the feet, drawn under (behind) the runner (slot 14, after player slots 2..9), no shadow.
   assert.equal(e.v('mg_slalom_ahead', 'i16'), 0, 'ball starts at the feet');
-  assert.ok(shown(e, 0), 'ball at the boots draws over the feet (slot 0)');
-  assert.ok(!shown(e, 14), 'not also behind the runner');
+  assert.ok(shown(e, 14), 'ball drawn under the runner (slot 14)');
+  assert.ok(!shown(e, 0), 'never drawn over the runner (slot 0)');
   assert.ok(!shown(e, 1), 'no shadow sprite under the ball');
   assert.ok(e.v('mg_slalom_by', 'i16') >= 110, `ball sits at the boots (y=${e.v('mg_slalom_by', 'i16')})`);
 
@@ -56,19 +56,20 @@ test('the ball starts at your boots with no shadow, rolls out ahead on a kick, a
   assert.ok(e.v('mg_slalom_bv', 'i16') > 0, 'the kick rolls the ball forward');
   const foot1 = e.v('mg_slalom_foot');
 
-  // It rolls out ahead steadily (never jumping) and settles in front of the runner.
-  let last = e.v('mg_slalom_ahead', 'i16');
-  for (let f = 0; f < 24; f++) {
+  // It rolls out in front (never jumping, never up by the head), then you gather it back.
+  let last = e.v('mg_slalom_ahead', 'i16'), peak = last;
+  for (let f = 0; f < 50; f++) {
     e.idle(1);
     const a = e.v('mg_slalom_ahead', 'i16');
-    assert.ok(a >= last - 16, `ball never jumps back toward the feet (${last} -> ${a})`);
-    assert.ok(a - last <= 6 * 16, `ball rolls, it doesn't teleport (${last} -> ${a})`);
+    assert.ok(Math.abs(a - last) <= 6 * 16, `ball rolls, it doesn't teleport (${last} -> ${a})`);
+    assert.ok(e.v('mg_slalom_by', 'i16') >= 100, `ball stays low by the legs, never at the head (y=${e.v('mg_slalom_by', 'i16')})`);
+    assert.ok(!shown(e, 0), 'always under the runner');
+    if (f === 6) matchGolden(e, 'slalom-clear');
+    peak = Math.max(peak, a);
     last = a;
   }
-  assert.ok(last >= 18 * 16, `ball rolled out in front of the runner (${last >> 4} px ahead)`);
-  assert.ok(shown(e, 14) && !shown(e, 0), 'rolled out ahead, it draws behind the runner');
-  assert.ok(!shown(e, 1) && !shown(e, 15), 'still no shadow');
-  matchGolden(e, 'slalom-clear');
+  assert.ok(peak >= 10 * 16, `the kick pushed it out in front (${peak >> 4} px ahead)`);
+  assert.ok(last <= 8 * 16, `then it's gathered back to the toes (${last >> 4} px ahead)`);
   assert.equal(e.v('mg_slalom_px', 'i16'), 94, 'glided to tight Solo right lane (x=94, 28px gap)');
 
   e.tap('LEFT');
