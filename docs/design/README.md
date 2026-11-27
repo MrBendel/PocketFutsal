@@ -213,7 +213,10 @@ slammed (the Captain Tsubasa feel).
   once (the kick pose, planted, 12 frames, `you_swing`), and a ball in reach meanwhile
   is struck; too early, a whiff, the strike gone. A second press within those 12 frames
   (the same button, or the other for a lob or a drop shot) calls the kick off for a
-  power-up, queued till the ball comes. The CPU plays by the same lock, from the ball
+  power-up, queued till the ball comes. **A missed slide is beaten** (2026-11-26,
+  playtest: "if the CPU slides to save and misses, they shouldn't be able to get back
+  up and save it again"): either side, up again, doesn't play that ball till the other
+  side has struck it (`pl_beaten`). The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;

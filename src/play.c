@@ -327,6 +327,11 @@ static void unready(uint8_t i) {
 }
 static void ball_plain(void) { fc_ball_plain(); }
 
+// Beaten: player i slid for this ball and missed it. They don't play it again, up
+// or not, till the other side has struck it (playtest 2026-11-26: "if the CPU slides
+// to save and misses, they shouldn't be able to get back up and save it again").
+uint8_t pl_beaten[2];
+
 static void serve_setup(uint8_t side) {
     server = side;
     ball_special = 0;
@@ -336,6 +341,7 @@ static void serve_setup(uint8_t side) {
         pl_skid[i] = 0;
         unready(i);
         pl_move[i] = pl_move_timer[i] = 0;
+        pl_beaten[i] = 0;
     }
     pl_x[SIDE_YOU] = TO_SUB(CENTER_X);
     pl_x[SIDE_CPU] = TO_SUB(CENTER_X);
@@ -503,6 +509,7 @@ static void struck(uint8_t i, uint8_t move, uint8_t frames) {
     }
     pl_last_move[i] = move;
     unready(i);
+    pl_beaten[0] = pl_beaten[1] = 0;  // a new ball
     pl_shots[i]++;
     ball_special = 0;
 }
@@ -767,7 +774,10 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         pl_move_timer[i]--;
         if (pl_move[i] != MOVE_SLIDE) return;
         if (pl_move_timer[i] < SLIDE_FRAMES - SLIDE_LUNGE) {
-            if (pl_shot[i]) unready(i);  // the lunge over, not there: missed
+            if (pl_shot[i]) {  // the lunge over, not there: missed, and beaten
+                unready(i);
+                pl_beaten[i] = 1;
+            }
             // On the floor: Speed's sixteenths a frame off (or onto) the time left.
             // (Never back up into the lunge: it's 48 at most after this frame's tick.)
             int8_t r = pl_rise[i];
@@ -837,6 +847,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
         }
     }
     if (goal_timer || phase == PHASE_SERVE) return;
+    if (pl_beaten[i]) return;  // slid and missed it: it's gone past them
     if (phase == PHASE_TOSS) {
         // The serve: struck as the toss falls back.
         if (server == i && ball_vz < 0 && ball_z < TO_SUB(TOSS_STRIKE)) strike(i, MOVE_KICK);
