@@ -58,6 +58,10 @@ The RPG side: your player has four stats, raised by playing training mini games,
      meets the existing shot target; inputs and save deadlines retain their rules.
      Shooter and keeper use the generated win/loss reactions after each kick,
      with ground shadows separate from the airborne bodies.
+     The indoor arena uses the approved broad, freestanding goal with roof and
+     side nets, rounded joints and visible court through its mouth. A 103-tile
+     background reuses seating, roof, wall and floor textures. Its exported art
+     supplies the game's palette and goal/target coordinates together.
 
 ### More mini game ideas
 

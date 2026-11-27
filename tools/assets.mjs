@@ -33,7 +33,7 @@ import {BALL_EXTRA} from './ball-art.mjs';
 import {GOAL_BG_ENDS} from './goal-background.mjs';
 import {STADIUM_PITCH,STADIUM_MAP,SCORE_TILES} from './stadium-art.mjs';
 import {REACTION_TILES} from './reaction-art.mjs';
-import {KEEPER_TILES,SHOOTOUT_REACTIONS} from './shootout-player-art.mjs';
+import {KEEPER_TILES,SHOOTOUT_REACTIONS,KEEPER} from './shootout-player-art.mjs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +51,16 @@ const MINIGAME_ART = [
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const GEN_DIR = path.join(ROOT, 'build', 'gen');
+const shootoutSource='artwork/shootout/background/native-v2/arena.json';
+const shootoutArena=JSON.parse(fs.readFileSync(path.join(ROOT,shootoutSource)));
+const shootoutGeometry=shootoutArena.geometry;
+const shootoutDefines={
+  GOAL_LINE:shootoutGeometry.goal.line,KEEPER_FEET:shootoutGeometry.keeperFeet,
+  TARGET_LOW_Z:shootoutGeometry.goal.line-shootoutGeometry.targets.y[0],
+  TARGET_HIGH_Z:shootoutGeometry.goal.line-shootoutGeometry.targets.y[1],
+  KEEPER_LOW_TOP:shootoutGeometry.targets.y[0]-KEEPER.low[4].reach.y,
+  KEEPER_HIGH_TOP:shootoutGeometry.targets.y[1]-KEEPER.high[4].reach.y,
+};
 
 export const ASSETS = [
   // ASCII 32..95: space, punctuation, digits, A-Z. GB Studio sheets start at
@@ -85,10 +95,15 @@ export const ASSETS = [
   { name: 'side_roster', bank: true, ascii: sideAtlas(), src: 'tools/player-art.mjs', deps: CHARACTERS.map(id=>`artwork/players/roster/${id}/player.json`) },
   // The mini games (src/mg_*.c): each a background (map from SCENE_TILES on) and
   // its own sprite tiles, drawn in tools/art/mg_*.mjs.
-  ...MINIGAME_ART.flatMap(([id, art]) => [
-    { name: `mg_${id}_bg`, bank: true, ascii: art.BG.tiles, map: art.BG, mapBase: 80, src: `tools/art/mg_${id}.mjs` },
+  ...MINIGAME_ART.flatMap(([id, art]) => {
+    const arena=id==='shootout'?shootoutArena:art.BG;
+    return [
+    { name: `mg_${id}_bg`, bank: true, ascii: arena.tiles, map: arena, mapBase: 80,
+      src:id==='shootout'?shootoutSource:`tools/art/mg_${id}.mjs`,
+      ...(id==='shootout'?{palettes:shootoutArena.palettes,defines:shootoutDefines,deps:['artwork/players/keeper-dive/study-v1/native-32x24.json']}:{}),
+    },
     { name: `mg_${id}_spr`, bank: true, ascii: art.SPR, src: `tools/art/mg_${id}.mjs` },
-  ]),
+  ];}),
 ];
 
 /** "player walk down", 4 -> ["player walk down (1).png", ..., "player walk down (4).png"] */
@@ -376,6 +391,8 @@ export function buildAssets({ quiet = false } = {}) {
       `#ifndef GEN_${NAME}_H`, `#define GEN_${NAME}_H`, '#include <stdint.h>',
       `#define ${NAME}_TILE_COUNT ${tiles.length}`,
       `extern const uint8_t ${a.name}_tiles[];`,
+      ...Object.entries(a.defines??{}).map(([key,value])=>`#define ${NAME}_${key} ${value}`),
+      ...(a.palettes?[`#define ${NAME}_PALETTE_COUNT ${a.palettes.length}`,`extern const uint16_t ${a.name}_palette[];`]:[]),
       // `map`: a tile map (indices from mapBase on) and its attributes (palettes).
       ...(a.map ? [`#define ${NAME}_MAP_W ${a.map.w}`, `#define ${NAME}_MAP_H ${a.map.h}`,
         `extern const uint8_t ${a.name}_map[];`, `extern const uint8_t ${a.name}_attr[];`] : []),
@@ -388,6 +405,7 @@ export function buildAssets({ quiet = false } = {}) {
       ...tiles.map((t) => '    ' + t.map(hex).join(', ') + ','),
       '};',
       ...(a.map ? mapSource(a) : []), '',
+      ...(a.palettes?[`const uint16_t ${a.name}_palette[] = {`,...a.palettes.map(p=>'    '+p.map(([r,g,b])=>'0x'+((r>>3)|((g>>3)<<5)|((b>>3)<<10)).toString(16).padStart(4,'0')).join(', ')+','),'};','']:[]),
     ].join('\n')));
   }
   return out;

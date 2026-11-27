@@ -14,4 +14,6 @@ Changes:
 
 The JSON, native PNG, 2bpp tiles and GBC attributes have the same format as v1. All six shot targets fit inside the opening. The central high-jump crown remains at y=40, with two empty rows below the crossbar ending at y=37.
 
-**Review prototype, not live artwork.** Integration must update the shot plane and display anchors together: goal line 80, low target 74, high target 50 (30px above the goal line). The keeper overlays use those proposed target-aligned positions while retaining the actual sprite pixels and standing/central-jump placement. The current gameplay remains at its existing positions until this design is approved and integrated.
+**Approved runtime background.** `tools/assets.mjs` registers `arena.json` as the Shootout background and generates its six RGB555 palettes and geometry constants alongside the tile data. The game loads those palettes and uses the generated goal line (80), low target (74) and high target (50, 30px above the goal line). Keeper full-extension anchors are derived from the same target heights and approved reach pixels. Landing returns each body smoothly to the standing baseline; save input and timing rules retain their existing behavior.
+
+Regenerate this asset with the command above before building when editing the art. The live module's sprite/HUD art remains in `tools/art/mg_shootout.mjs`; its old background is retained as the study's scoreboard/venue source and is no longer registered for gameplay. Runtime screenshots are checked separately from the static keeper overlays.

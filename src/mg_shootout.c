@@ -35,11 +35,11 @@
 #include "shootout_keeper.h"
 #include "shootout_reactions.h"
 
-// --- the pitch (tools/art/mg_shootout.mjs draws it to match) ---
-#define GOAL_LINE 88
+// Geometry is generated from the same approved arena as the background tiles.
+#define GOAL_LINE MG_SHOOTOUT_BG_GOAL_LINE
 #define SPOT_X 80
 #define SPOT_Y 118
-#define KEEPER_FEET 86
+#define KEEPER_FEET MG_SHOOTOUT_BG_KEEPER_FEET
 #define MAX_ROUNDS 10
 #define REGULATION 5
 
@@ -164,23 +164,9 @@ static const uint8_t keeper_masks[16] = {60,60,254,254,254,254,254,126,60,60,126
 static const uint8_t win_lift[6] = {0,0,1,3,0,0};
 
 static const uint8_t col_x[3] = {52, 80, 108};
-static const uint8_t row_z[2] = {6, 36};
+static const uint8_t row_z[2] = {MG_SHOOTOUT_BG_TARGET_LOW_Z, MG_SHOOTOUT_BG_TARGET_HIGH_Z};
 static const uint8_t slot_x[5] = {24, 34, 44, 54, 64};
 
-static const uint16_t bg_pals[6][4] = {
-    // 0 the court: teal, its dark band, navy, white lines
-    {RGB8(64, 160, 176), RGB8(48, 136, 152), RGB8(40, 56, 88), RGB8(240, 248, 240)},
-    // 1 the boards: navy, blue face, dark, white
-    {RGB8(40, 56, 88), RGB8(64, 112, 200), RGB8(24, 40, 96), RGB8(240, 248, 240)},
-    // 2 the crowd: dark stands, red shirts, faces, gold shirts
-    {RGB8(36, 30, 60), RGB8(208, 72, 80), RGB8(240, 192, 144), RGB8(240, 200, 72)},
-    // 3 the goal: the net's dark inside, mesh, white frame, grey
-    {RGB8(30, 44, 72), RGB8(120, 144, 176), RGB8(248, 248, 248), RGB8(168, 176, 200)},
-    // 4 the scoreboard: panel, text, slot rings, gold
-    {RGB8(20, 22, 40), RGB8(232, 236, 255), RGB8(80, 92, 136), RGB8(254, 196, 52)},
-    // 5 unused
-    {RGB8(0, 0, 0), RGB8(0, 0, 0), RGB8(0, 0, 0), RGB8(0, 0, 0)},
-};
 static const uint16_t marks_pal[4] = {0, RGB8(72, 216, 96), RGB8(240, 56, 56), RGB8(20, 20, 32)};
 static const uint16_t meter_pal[4] = {0, RGB8(120, 224, 120), RGB8(240, 64, 48), RGB8(20, 24, 48)};
 
@@ -529,7 +515,9 @@ static void draw_keeper(void) {
     // behind it; mirroring the source's rightward dive also mirrors this anchor.
     int16_t end_x = col_x[col] + (col == 0 ? (up ? 10 : 11) : -(up ? 9 : 10));
     int16_t x = 80 + (int16_t)(((end_x - 80) * (int16_t)frac) >> 8);
-    int16_t y = 63 + (int16_t)(((up ? -19 : 3) * (int16_t)frac) >> 8);
+    int16_t end_y = up ? MG_SHOOTOUT_BG_KEEPER_HIGH_TOP : MG_SHOOTOUT_BG_KEEPER_LOW_TOP;
+    int16_t start_y = KEEPER_FEET - 23;
+    int16_t y = start_y + (int16_t)(((end_y - start_y) * (int16_t)frac) >> 8);
     uint8_t pose = frac >> 6;
     if (mg_shootout_phase == P_RESULT) {
         uint8_t t = mg_shootout_t;
@@ -540,8 +528,11 @@ static void draw_keeper(void) {
         if (t >= 34) pose = 7;
         else if (t >= 22) pose = 6;
         else if (t >= 10) pose = 5;
-        if (up && t > 10) y += t - 10 > 19 ? 19 : t - 10;
-        if (pose >= 6 && (!up || t >= 29)) y = 63;
+        if (t > 10) {
+            uint8_t drop = t - 10, fall = start_y - end_y;
+            if (drop > fall) drop = fall;
+            y += drop;
+        }
     }
     uint8_t anim = pose + (up ? 8 : 0);
     keeper_pose(anim, x, y, pal, col == 0);
@@ -839,7 +830,8 @@ static void update_result(void) {
 void mg_shootout_enter(void) BANKED {
     keeper_loaded = shooter_react_loaded = keeper_react_loaded = 255;
     mg_shootout_keeper_anim = mg_shootout_keeper_reaction = mg_shootout_shooter_reaction = 255;
-    memcpy(pal_base_bg, bg_pals, sizeof(bg_pals));
+    banked_memcpy(pal_base_bg, mg_shootout_bg_palette,
+                  MG_SHOOTOUT_BG_PALETTE_COUNT * 4 * sizeof(uint16_t), BANK(mg_shootout_bg));
     memcpy(&pal_base_obj[PAL_MARKS << 2], marks_pal, sizeof(marks_pal));
     memcpy(&pal_base_obj[PAL_METER << 2], meter_pal, sizeof(meter_pal));
     mg_load_bg(mg_shootout_bg_tiles, MG_SHOOTOUT_BG_TILE_COUNT, mg_shootout_bg_map, mg_shootout_bg_attr,
