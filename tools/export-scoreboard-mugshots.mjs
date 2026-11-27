@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {decodePng} from './assets.mjs';
 import {silhouettes,writePng} from './study-raster.mjs';
-const version=Number(process.argv[2]??3);
-assert.ok([1,2,3].includes(version),'Supported mugshot versions: 1, 2, 3');
+const version=Number(process.argv[2]??4);
+assert.ok([1,2,3,4].includes(version),'Supported mugshot versions: 1, 2, 3, 4');
 const dir=new URL('../artwork/players/mugshots/v'+version+'/',import.meta.url);
 fs.mkdirSync(dir,{recursive:true});
 const im=decodePng(fs.readFileSync(new URL('../artwork/players/mugshots/v1/generated-source.png',import.meta.url)));
@@ -54,7 +54,7 @@ const characters=frames.map((source,i)=>{
  const c={id:ids[i],width:16,height:16,palette,rows:rows.map(r=>r.join('')),source,sourceScale:scale,mouth:{x,y,width,source:landmark}};
  return c;
 });
-if(version===3){
+if(version>=3){
  // Editable native-pixel cleanup: face features and jaw contours are authored
  // together so source outlines cannot turn into a third eye or dangling neck.
  const cleanup=JSON.parse(fs.readFileSync(new URL('face-cleanup.json',dir)));
