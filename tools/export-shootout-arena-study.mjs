@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import {BG,PIXELS,PALETTES,GEOMETRY,TEXTURES} from './art/shootout-arena-study.mjs';
+const refined=process.argv.includes('--v2');
+const {BG,PIXELS,PALETTES,GEOMETRY,TEXTURES}=await import(refined?'./art/shootout-arena-study-v2.mjs':'./art/shootout-arena-study.mjs');
 import {writePng} from './study-raster.mjs';
 import {decodePng} from './assets.mjs';
 import {character} from './player-art.mjs';
 import {BALL_FRAMES} from './ball-art.mjs';
-const dir=new URL('../artwork/shootout/background/native-v1/',import.meta.url);
+const dir=new URL(`../artwork/shootout/background/native-v${refined?2:1}/`,import.meta.url);
 fs.mkdirSync(dir,{recursive:true});
 const rgba=rgb=>[...rgb,255];
 function pixel(x,y){
@@ -35,8 +36,8 @@ const blue=character('spiky'),red=blue.palette.map((v,i)=>i===2?[232,64,72,255]:
 const ballPalette=[[0,0,0,0],[248,248,232,255],[24,32,48,255],[120,144,152,255]];
 const scenarios=[
  {name:'READY',pose:keeper.low[0].rows,x:80,y:63},
- {name:'LOW DIVE',pose:keeper.low[4].rows,x:63,y:66,flip:true},
- {name:'HIGH DIVE',pose:keeper.high[4].rows,x:99,y:44},
+ {name:'LOW DIVE',pose:keeper.low[4].rows,x:63,y:GEOMETRY.targets.y[0]-keeper.low[4].reach.y,flip:true},
+ {name:'HIGH DIVE',pose:keeper.high[4].rows,x:99,y:GEOMETRY.targets.y[1]-keeper.high[4].reach.y},
  {name:'HIGH JUMP',pose:keeper.low[0].rows,x:80,y:40},
 ];
 const font=decodePng(fs.readFileSync(new URL('../artwork/Fonts for GB Studio/light/default/ascii.png',import.meta.url)));
@@ -59,7 +60,7 @@ const proofs=scenarios.map(s=>{
 // Ensure the real highest central jump stays below the crossbar's bottom edge.
 const jump=keeper.low[0].rows;const crown=jump.findIndex(r=>/[123]/.test(r))+40;
 assert.ok(crown>=GEOMETRY.goal.top+6,'High-jump crown needs two clear pixels below the crossbar');
-for(const x of GEOMETRY.targets.x)for(const y of GEOMETRY.targets.y)assert.ok(x>43&&x<116&&y>GEOMETRY.goal.top+3&&y<88,'Target outside opening');
+for(const x of GEOMETRY.targets.x)for(const y of GEOMETRY.targets.y)assert.ok(x>GEOMETRY.goal.left+3&&x<GEOMETRY.goal.right-3&&y>GEOMETRY.goal.top+3&&y<GEOMETRY.goal.line,'Target outside opening');
 const proofH=156;
 const labels=scenarios.map(s=>{const p=Array.from({length:12},()=>Array.from({length:160},()=>[24,32,48,255]));text(p,s.name,4,2,[248,240,208,255]);return p;});
 writePng(new URL('keeper-clearance-3x.png',dir),960,proofH*2*3,(xx,yy)=>{

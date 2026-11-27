@@ -76,6 +76,9 @@ for(let x=0;x<160;x++){
  prev=y;
 }
 rect(78,117,5,3,3);
+// Retain the venue before the goal for alternate silhouette studies.
+export const VENUE_PIXELS=cv.px.map(r=>[...r]);
+export const VENUE_ATTRS=[...attrs];
 
 // Goal palette occupies whole tiles, with the same navy as the back wall.
 // Sparse square mesh is a repeated tile; side/roof edges provide depth.
