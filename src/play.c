@@ -304,9 +304,14 @@ static void seen(uint8_t what) {
 #define ROLL_FRAMES 12  // the other button this soon after the first: a lob or a drop shot, not a cancel
 uint8_t you_first;      // the button you readied with (0 A, 1 B)
 uint8_t you_roll;       // frames left for the other button to make a lob or a drop shot
+// Planted: your strike readied by a press while the ball's coming to you (the CPU
+// struck it last). Queued earlier, while your own shot was still going over, you
+// keep running (playtest 2026-11-26: queued straight after a kick you were stuck
+// where you stood while the CPU lobbed it to the far side); the next press plants you.
+uint8_t you_planted;
 static void unready(uint8_t i) {
     fc_unready(i);
-    if (i == SIDE_YOU) you_leap = you_roll = 0;
+    if (i == SIDE_YOU) you_leap = you_roll = you_planted = 0;
 }
 static void ball_plain(void) { fc_ball_plain(); }
 
@@ -788,7 +793,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     // (playtest: "powering up doesn't feel like it's locking correctly"; the other
     // button calls it off, so pressing early no longer leaves you stuck); the CPU
     // once the ball's over the net into its half. Serving: along the line only.
-    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU || in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU ? you_planted : in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];
@@ -1283,6 +1288,8 @@ void play_update(void) BANKED {
             }
         }
     }
+    if (pl_shot[SIDE_YOU] && phase == PHASE_RALLY && (joy_pressed & (J_A | J_B)) && last_touch != SIDE_YOU)
+        you_planted = 1;
     // Queued (or serving), LEFT or RIGHT sets your aim, UP or DOWN how deep, and
     // they stick.
     if (pl_shot[SIDE_YOU]) {

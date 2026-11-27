@@ -199,7 +199,12 @@ slammed (the Captain Tsubasa feel).
   stuck from the power up before I think I should"): queued while it was still over
   their side, you still ran. Now **the other button calls the strike off** instead
   ("if you're locked into an A power up, B cancels and vice versa"), so pressing too
-  early costs a press, not the point. The CPU plays by the same lock, from the ball
+  early costs a press, not the point. **Only a press with the ball coming plants you**
+  (2026-11-26, playtest: "I keep getting stuck"; the recording: A pressed straight
+  after your own kick, then the CPU lobbed it to the far side and you couldn't move for
+  two seconds): queued while your shot's still going over (you struck it last), you
+  keep running, the strike still queued, and any press after the CPU's touch locks
+  you (`you_planted`). The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
