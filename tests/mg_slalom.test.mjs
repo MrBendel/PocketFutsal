@@ -25,38 +25,49 @@ function readDetail(e) {
   return s;
 }
 
-test('ball renders ahead of & behind player in OAM, lanes are tight (66/94), and dribble animates', () => {
+// This frame's sprites (shadow OAM: real OAM gets them at the next vblank).
+const oamY = (e, slot) => e.read8(e.symbols.addr('shadow_OAM') + slot * 4);
+const shown = (e, slot) => oamY(e, slot) > 0 && oamY(e, slot) < 160;
+
+test('the ball starts at your boots with no shadow, rolls out ahead on a kick, and hops', () => {
   const e = liveSlalom(4242, false);
   e.idle(2);
   matchGolden(e, 'slalom-live');
-
-  // Verify ball is NOT in OAM slot 0 (which would draw over the player's head),
-  // and IS in OAM slot 14 (> player slots 2..5) ahead of the player's head (y <= 89 < 95)!
-  assert.equal(e.read8(0xFE00 + 0 * 4), 0, 'OAM slot 0 hidden so ball never draws over player');
-  const ballOamY = e.read8(0xFE00 + 14 * 4);
-  assert.ok(ballOamY > 0 && ballOamY < 160, `ball drawn in occluded OAM slot 14 (y=${ballOamY})`);
-  assert.ok(e.v('mg_slalom_by', 'i16') <= 89, 'ball rests cleanly ahead of player head (y <= 89)');
   assert.equal(e.v('mg_slalom_px', 'i16'), 66, 'starts in tight Solo left lane (x=66)');
 
-  // Verify Solo cones (OAM slots 18..24) are actually visible on screen!
+  // At the feet: drawn over the boots (slot 0), not behind (slot 14), and no shadow anywhere.
+  assert.equal(e.v('mg_slalom_ahead', 'i16'), 0, 'ball starts at the feet');
+  assert.ok(shown(e, 0), 'ball at the boots draws over the feet (slot 0)');
+  assert.ok(!shown(e, 14), 'not also behind the runner');
+  assert.ok(!shown(e, 1), 'no shadow sprite under the ball');
+  assert.ok(e.v('mg_slalom_by', 'i16') >= 110, `ball sits at the boots (y=${e.v('mg_slalom_by', 'i16')})`);
+
   let visibleCones = 0;
-  for (let slot = 18; slot <= 24; slot++) {
-    const cy = e.read8(0xFE00 + slot * 4);
-    if (cy > 0 && cy < 160) visibleCones++;
-  }
+  for (let slot = 16; slot <= 24; slot++) if (shown(e, slot)) visibleCones++;
   assert.ok(visibleCones >= 2, `Solo mode displays visible cones on pitch (found ${visibleCones})`);
 
   e.write8(e.symbols.addr('mg_slalom_row') + 1, CONE_LEFT);   // safe on RIGHT
   e.write8(e.symbols.addr('mg_slalom_row') + 2, CONE_RIGHT);  // safe on LEFT
 
-  const byRest = e.v('mg_slalom_by', 'i16');
   e.tap('RIGHT');
   assert.equal(e.v('mg_slalom_lane'), 1);
   assert.equal(e.v('mg_slalom_dist'), 1);
-  assert.ok(e.v('mg_slalom_by', 'i16') < byRest, 'ball pushes further ahead of boots on dribble kick');
+  assert.ok(e.v('mg_slalom_hop') > 0, 'the kick bounces the ball');
+  assert.ok(e.v('mg_slalom_bv', 'i16') > 0, 'the kick rolls the ball forward');
   const foot1 = e.v('mg_slalom_foot');
 
-  e.idle(4);
+  // It rolls out ahead steadily (never jumping) and settles in front of the runner.
+  let last = e.v('mg_slalom_ahead', 'i16');
+  for (let f = 0; f < 24; f++) {
+    e.idle(1);
+    const a = e.v('mg_slalom_ahead', 'i16');
+    assert.ok(a >= last - 16, `ball never jumps back toward the feet (${last} -> ${a})`);
+    assert.ok(a - last <= 6 * 16, `ball rolls, it doesn't teleport (${last} -> ${a})`);
+    last = a;
+  }
+  assert.ok(last >= 18 * 16, `ball rolled out in front of the runner (${last >> 4} px ahead)`);
+  assert.ok(shown(e, 14) && !shown(e, 0), 'rolled out ahead, it draws behind the runner');
+  assert.ok(!shown(e, 1) && !shown(e, 15), 'still no shadow');
   matchGolden(e, 'slalom-clear');
   assert.equal(e.v('mg_slalom_px', 'i16'), 94, 'glided to tight Solo right lane (x=94, 28px gap)');
 
@@ -64,6 +75,39 @@ test('ball renders ahead of & behind player in OAM, lanes are tight (66/94), and
   assert.equal(e.v('mg_slalom_lane'), 0);
   assert.equal(e.v('mg_slalom_dist'), 2);
   assert.notEqual(e.v('mg_slalom_foot'), foot1, 'alternates dribbling foot each tap');
+});
+
+test('the field glides down after a step and passed cones slide off the bottom instead of vanishing', () => {
+  const e = liveSlalom(4242, false);
+  e.idle(2);
+  const rows = e.symbols.addr('mg_slalom_row');
+  // A cone level with your boots (row 0) in the other lane, nothing ahead.
+  for (let r = 0; r < 7; r++) e.write8(rows + r, 0);
+  e.write8(rows + 0, CONE_RIGHT);
+  e.idle(1);
+  const row0Slot = 16 + 2, rowBackSlot = 16 + 1;  // rows -2..6 live in slots 16..24
+  const y0 = oamY(e, row0Slot);
+  assert.ok(y0 > 0, 'the cone beside you is drawn');
+
+  e.tap('LEFT');
+  // The same cone is now row -1: it starts where it was and glides down, a few px a frame.
+  let y = oamY(e, rowBackSlot);
+  assert.ok(Math.abs(y - y0) <= 6, `passed cone continues from where it was (${y0} -> ${y})`);
+  const ys = [y];
+  for (let f = 0; f < 12; f++) {
+    e.idle(1);
+    ys.push(oamY(e, rowBackSlot));
+  }
+  for (let i = 1; i < ys.length; i++) {
+    assert.ok(ys[i] >= ys[i - 1] && ys[i] - ys[i - 1] <= 6, `glides smoothly: ${ys.join(',')}`);
+  }
+  assert.equal(ys[ys.length - 1], y0 + 16, 'eased to a stop one step further down');
+  assert.equal(e.v('mg_slalom_slide'), 0, 'the turf glide finished');
+
+  // Next step: it slides on under the HUD (row -2) rather than popping out.
+  e.tap('RIGHT');
+  const back2 = 16 + 0;
+  assert.ok(shown(e, back2), 'two rows back, the cone is still drawn as it slides away');
 });
 
 test('cone generator never places opposite-side cones on consecutive rows without an open gap', () => {
