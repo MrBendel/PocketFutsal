@@ -216,7 +216,11 @@ slammed (the Captain Tsubasa feel).
   power-up, queued till the ball comes. **A missed slide is beaten** (2026-11-26,
   playtest: "if the CPU slides to save and misses, they shouldn't be able to get back
   up and save it again"): either side, up again, doesn't play that ball till the other
-  side has struck it (`pl_beaten`). The CPU plays by the same lock, from the ball
+  side has struck it (`pl_beaten`). **Powering up near the slam zone runs you to its
+  middle** (2026-11-26, playtest: "it's really hard to line up and stay in it now ...
+  if you are near by and start powering up, we auto move you to the center of the
+  zone"): within 40 px across and 32 in depth, a power-up (not a kick) runs you there,
+  at your running speed, the lock or not (`ZONE_PULL_X`, `ZONE_PULL_Y`). The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;

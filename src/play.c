@@ -88,6 +88,8 @@
 #define SLAM_CHARGE FC_SLAM_CHARGE  // your charge for a slam off a pop-up or a lob: four presses (the CPU's: half a meter)
 #define SLAM_LEAP_X 28    // px across: your slam's reach, charged, at a lob or a pop-up coming down (a strike's 16)
 #define SLAM_LEAP_FWD 20  // px either way in depth (a strike's 4 behind, 8 in front); 12 px of it a leap
+#define ZONE_PULL_X 40    // px across: powering up this near the slam zone, you're run to its middle
+#define ZONE_PULL_Y 32    // px in depth
 #define AIM_IN 16         // px: aimed this far inside the lines (a long shot lands up to 10 px past its aim)
 // The power meter (pl_power): a clean strike in a rally adds POWER_GAIN; full, A+B
 // together arms the power slam, struck at the next clean strike: SPECIAL_SPEED, gold,
@@ -883,6 +885,20 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
             keep_in(i);
             you_leap = 1;
             return;
+        }
+        // Powering up near the slam zone (a lob or a pop-up coming down to you, its
+        // rings showing): run to its middle, the lock or not (playtest 2026-11-26:
+        // "it's really hard to line up and stay in it now ... if you are near by and
+        // start powering up, we auto move you to the center of the zone").
+        if (i == SIDE_YOU && !you_swing && meet_slam[i] && meet_flight[i] == ball_flight &&
+            (ball_lob || ball_pop) && coming(i)) {
+            int16_t dx = meet_x[i] - PX(pl_x[i]), dy = meet_y[i] - PX(pl_y[i]);
+            if (abs16(dx) <= ZONE_PULL_X && abs16(dy) <= ZONE_PULL_Y && (dx || dy)) {
+                int8_t sp = pl_top[i];
+                pl_wx[i] = (int8_t)clamp16(dx << 2, -sp, sp);  // easing in: a quarter of the way (SUB) a frame, near
+                pl_wy[i] = (int8_t)clamp16(dy << 2, -sp, sp);
+                pl_auto[i] = 1;
+            }
         }
         // Right over you, too high yet: wait for it.
         if (ax <= REACH_X && rel_fwd >= -14 && rel_fwd <= REACH_FWD && rel_z >= 16) return;
