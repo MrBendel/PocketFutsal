@@ -623,6 +623,15 @@ static void strike(uint8_t i, uint8_t move) {
     uint8_t trail = ball_trail;  // struck() calls new_flight() which clears ball_trail
     struck(i, move, frames);
     ball_trail = trail;
+    // A drive charged past half (flashing as you struck it) leaves a trail too, as a
+    // curve does: shorter than one on fire (playtest 2026-11-26: "my character is
+    // flashing but the ball doesn't get trails"). (Here, not in futnet_core: the mini
+    // games keep theirs.)
+    if (!ball_trail && !scuff && kind == SHOT_POWER && c >= CHARGE_MAX / 2) {
+        ball_trail = TRAIL_POWER;
+        trail_len = 3;
+        trail_n = 0;
+    }
     if (special) {
         fc_gold_speed = FC_GOLD_SPEED;
         pl_special[i] = 0;
