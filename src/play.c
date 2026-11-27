@@ -308,6 +308,10 @@ uint8_t you_roll;       // frames left for the other button to make a lob or a d
 // struck it last). Queued earlier, while your own shot was still going over, you
 // keep running (playtest 2026-11-26: queued straight after a kick you were stuck
 // where you stood while the CPU lobbed it to the far side); the next press plants you.
+// And only powering up locks you: a press or two is a kick, and you run on to meet
+// it; from half a meter (CHARGE_MAX / 2, where you start flashing: fc_charge_pal)
+// the d-pad only aims (playtest 2026-11-26: "it should only lock if you're flashing /
+// powering up. Just pressing a or b should kick").
 uint8_t you_planted;
 static void unready(uint8_t i) {
     fc_unready(i);
@@ -793,7 +797,7 @@ static void player_update(uint8_t i, int8_t dx, int8_t dy) {
     // (playtest: "powering up doesn't feel like it's locking correctly"; the other
     // button calls it off, so pressing early no longer leaves you stuck); the CPU
     // once the ball's over the net into its half. Serving: along the line only.
-    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU ? you_planted : in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
+    if ((pl_shot[i] && phase == PHASE_RALLY && (i == SIDE_YOU ? you_planted && pl_charge[i] >= CHARGE_MAX / 2 : in_half(i))) || (phase == PHASE_TOSS && server == i)) dx = dy = 0;
     if (phase != PHASE_RALLY && server == i) dx = dy = 0;  // serving: the d-pad aims, it doesn't walk you
     // Momentum: toward the speed held (or the auto-run's), through approach().
     int8_t speed = pl_top[i];

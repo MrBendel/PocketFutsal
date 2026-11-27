@@ -204,7 +204,10 @@ slammed (the Captain Tsubasa feel).
   after your own kick, then the CPU lobbed it to the far side and you couldn't move for
   two seconds): queued while your shot's still going over (you struck it last), you
   keep running, the strike still queued, and any press after the CPU's touch locks
-  you (`you_planted`). The CPU plays by the same lock, from the ball
+  you (`you_planted`). **And only powering up locks you** (2026-11-26, playtest:
+  "it should only lock if you're flashing / powering up. Just pressing a or b should
+  kick"): a press or two queues a kick and you run on to meet it; from half a meter,
+  where you start flashing, the d-pad only aims. The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;

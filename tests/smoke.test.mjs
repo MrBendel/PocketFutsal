@@ -149,7 +149,7 @@ test('the match opens 0-0 on your serve: the d-pad aims it, A tosses it up and s
   assert.equal(emu.v('ball_serve'), 0);
 });
 
-test('A queues a strike any time: it waits until the ball comes (the d-pad only aims), you are run to it, and it goes', () => {
+test('A queues a strike any time: it waits until the ball comes, a tap leaves you running, powered up the d-pad only aims, and it goes', () => {
   const emu = quietRally();
   ballAt(emu, 80, 150, 0, 0, -40);
   emu.tap('A');
@@ -157,12 +157,14 @@ test('A queues a strike any time: it waits until the ball comes (the d-pad only 
   const x0 = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('RIGHT', 6);
   assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'the press’s charge, no more');
-  assert.equal(at(emu, 'pl_x', YOU, 'i16'), x0, 'the d-pad aims, it doesn’t walk you');
+  assert.ok(at(emu, 'pl_x', YOU, 'i16') > x0, 'a tap is a kick: you still run');
   assert.equal(at(emu, 'pl_aim', YOU), 2, 'aimed right');
   placePlayer(emu, YOU, 80, 190);
+  emu.write8(emu.symbols.addr('pl_vx') + YOU, 0);
   ballAt(emu, 80, 120, 0, 0, 40);
   emu.idle(4);
   assert.equal(at(emu, 'pl_charge', YOU), YOU_TAP, 'it doesn’t fill by itself, coming either');
+  emu.tap('A').tap('A').tap('A');  // powering up: half a meter, flashing
   const x = at(emu, 'pl_x', YOU, 'i16');
   emu.hold('LEFT', 6);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'planted: LEFT does nothing (the ball is straight at you)');
@@ -354,10 +356,10 @@ test('a quick roll (B, A or A, B) is a lob or a drop shot, and it stays one; the
   assert.equal(emu.v('ball_lob'), 1, 'rolled long before it came: still a lob');
 });
 
-test('readied, you are locked from the press: the ball still in the CPU\'s half, the d-pad only aims', () => {
+test('powering up, you are locked: the ball still in the CPU\'s half, the d-pad only aims', () => {
   const emu = quietRally();
   ballAt(emu, 80, 60, 0, 0, -10);
-  emu.tap('A');
+  emu.tap('A').tap('A').tap('A').tap('A');
   const x = at(emu, 'pl_x', YOU, 'i16'), y = at(emu, 'pl_y', YOU, 'i16');
   emu.hold('LEFT+UP', 20);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'not run left');
@@ -579,10 +581,10 @@ test('A then B is a drop shot, just over the net and barely bouncing: unreached,
   assert.equal(emu.v('point_reason'), POINT_BOUNCE);
 });
 
-test('queued, you are locked where you stand: a ball in reach, you return it', () => {
+test('powering up, you are locked where you stand: a ball in reach, you return it', () => {
   const emu = quietRally();
   ballAt(emu, 92, 120, 0, 0, 30);  // 12 px across: in reach
-  emu.tap('A');
+  emu.tap('A').tap('A').tap('A').tap('A');
   const x = at(emu, 'pl_x', YOU, 'i16'), y = at(emu, 'pl_y', YOU, 'i16');
   emu.hold('RIGHT', 8);
   assert.equal(at(emu, 'pl_x', YOU, 'i16'), x, 'the d-pad aims, it does not move you');
