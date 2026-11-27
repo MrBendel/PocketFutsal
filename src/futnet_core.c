@@ -135,9 +135,11 @@ uint8_t fc_charge_pal(uint8_t i, uint8_t base_pal) {
     return base_pal;
 }
 
+uint8_t fc_wide = 4;
+
 void fc_launch_vel(int16_t dx, int16_t dy, uint8_t speed) {
     uint16_t ady = dy < 0 ? (uint16_t)(-dy) : (uint16_t)dy;
-    int16_t wide = (int16_t)(ady >> 1);
+    int16_t wide = (int16_t)((ady * fc_wide) >> 3);
     if (dx > wide) dx = wide;
     else if (dx < -wide) dx = -wide;
     uint16_t adx = dx < 0 ? (uint16_t)(-dx) : (uint16_t)dx;

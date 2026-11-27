@@ -84,3 +84,25 @@ test('Control, the defensive stat: the charge that meets a ball on fire cleanly'
   assert.equal(at(withStats({ control: [4, 8] }), 'pl_fire_meet', CPU), 8, "the CPU's too");
   assert.equal(withStats({ control: [4, 1] }).v('cpu_calm', 'i8'), 18, 'and it mishits under less pressure');
 });
+
+/** Your drive (a power shot, two presses' charge) from (x, 190), aimed LEFT: where it first lands, across. */
+function driveLeft(control, x) {
+  const emu = withStats({ control: [control, 4] });
+  quiet(emu, x);
+  emu.write8(emu.symbols.addr('pl_beaten') + CPU, 1);
+  placePlayer(emu, CPU, 80, 2);
+  placeBall(emu, x, 160);
+  set16(emu, 'ball_vy', 32);
+  set16(emu, 'ball_vx', 0);
+  emu.write8(emu.symbols.addr('pl_shot') + YOU, SHOT_POWER);
+  emu.write8(emu.symbols.addr('pl_charge') + YOU, 8);
+  emu.until((e) => { e.hold('LEFT', 1); return at(e, 'pl_shots', YOU) > 0; }, 60, 'the strike');
+  emu.until((e) => { e.write8(e.symbols.addr('pl_beaten') + CPU, 1); return e.v('ball_landings') > 0; }, 200, 'it landing');
+  return emu.v('ball_x', 'i16') >> 4;
+}
+
+test('Control takes your aim to the line: at 8, from mid-court, a drive lands on it', () => {
+  const mid = driveLeft(4, 80), top = driveLeft(8, 80);
+  assert.ok(mid - 8 >= 16, `Control 4: well inside the sideline (${mid - 8} px)`);
+  assert.ok(top - 8 >= 0 && top - 8 <= 6, `Control 8: on the line, or nearly (${top - 8} px)`);
+});

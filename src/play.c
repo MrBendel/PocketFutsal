@@ -90,7 +90,7 @@
 #define SLAM_LEAP_FWD 20  // px either way in depth (a strike's 4 behind, 8 in front); 12 px of it a leap
 #define ZONE_PULL_X 40    // px across: powering up this near the slam zone, you're run to its middle
 #define ZONE_PULL_Y 32    // px in depth
-#define AIM_IN 16         // px: aimed this far inside the lines (a long shot lands up to 10 px past its aim)
+#define AIM_IN 16         // px: aimed this far inside the baselines (a long shot lands up to 10 px past its aim); the sidelines, by Control (control_aim_in)
 // The power meter (pl_power): a clean strike in a rally adds POWER_GAIN; full, A+B
 // together arms the power slam, struck at the next clean strike: SPECIAL_SPEED, gold,
 // deep. Only a press timed to within SPECIAL_WINDOW frames of it reaching you (your
@@ -116,7 +116,18 @@ uint8_t pl_control_lv[2] = { STAT_MID, STAT_MID };
 static const int8_t speed_top[8] = { 16, 18, 20, 22, 24, 26, 28, 30 };  // yours (SPEED_YOU at the middle)
 static const int8_t speed_rise[8] = { -6, -4, -2, 0, 2, 4, 6, 8 };   // sixteenths a frame
 static const int8_t control_meet[8] = { 6, 4, 2, 0, -1, -2, -3, -4 }; // + FIRE_MEET(_YOU)
+// Control's reach to the sidelines (2026-11-27, playtest: "if you're a player that has
+// maxed out control, you should be able to hit shots right to the line"): how far
+// inside them a strike can be aimed, the sharpest angle it takes, and how true across
+// it flies (quarters: none at the middle, where a strike lands short of its aim, ~10%,
+// a curve more; all of it at the top, landing within a few px of the line).
+static const uint8_t control_aim_in[8] = { 28, 24, 20, 16, 13, 9, 6, 3 };  // AIM_IN at the middle
+static const uint8_t control_wide[8] = { 4, 4, 4, 4, 5, 6, 7, 8 };          // fc_wide: 4 at the middle
+static const uint8_t control_true[8] = { 0, 0, 0, 0, 1, 2, 3, 4 };
 uint8_t pl_fire_meet[2];  // the charge that meets a ball on fire cleanly
+uint8_t pl_aim_in[2];     // px: how far inside the sidelines a strike can be aimed (control_aim_in)
+uint8_t pl_wide[2];       // the widest it angles, eighths of its length (control_wide)
+uint8_t pl_true[2];       // how true across it flies, quarters (control_true)
 int8_t pl_rise[2];        // Speed's floor time after a slide (speed_rise)
 uint8_t pl_rise_acc[2];
 int8_t cpu_calm;          // PRESSURE_FREE by the CPU's Control
@@ -554,7 +565,7 @@ static void net_clear(void) { fc_net_clear(); }
 // player; in depth, deeper the more charged, UP deeper and DOWN shorter. A lob lands just behind the
 // other player, a drop shot just over the net. The CPU picks its own as it readies.
 static void aim_point(uint8_t i) {
-    uint8_t aim = pl_aim[i], depth = pl_depth[i], c = pl_charge[i];
+    uint8_t aim = pl_aim[i], depth = pl_depth[i], c = pl_charge[i], in = pl_aim_in[i];
     if (i == SIDE_YOU) {
         if (joy & J_LEFT) aim = 0;
         else if (joy & J_RIGHT) aim = 2;
@@ -589,12 +600,12 @@ static void aim_point(uint8_t i) {
     // A direction from where you are: as far across as a strike goes (half as far as
     // down the court) to the left or right; neither held, half that, away from the
     // other player (straight ahead is where they stand); kept in the court.
-    int16_t x0 = PX(pl_x[i]), wide = abs16(aim_land - PX(pl_y[i])) >> 1;
+    int16_t x0 = PX(pl_x[i]), wide = (int16_t)(((uint16_t)abs16(aim_land - PX(pl_y[i])) * pl_wide[i]) >> 3);
     if (aim == 1 && i == SIDE_YOU) {
         wide >>= 1;
         aim = PX(pl_x[SIDE_CPU]) < x0 ? 2 : 0;
     }
-    aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + AIM_IN, COURT_X1 - AIM_IN);
+    aim_tx = clamp16(aim == 0 ? x0 - wide : aim == 2 ? x0 + wide : x0, COURT_X0 + in, COURT_X1 - in);
 }
 
 // A clean strike: the readied shot, shaped by the ball's height (move).
@@ -623,7 +634,9 @@ static void strike(uint8_t i, uint8_t move) {
         frames = BICYCLE_FRAMES;
     } else if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
+    fc_wide = pl_wide[i];  // Control: how sharp an angle it takes
     move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
+    fc_wide = 4;
     // Rally heat: a drive (on fire or not) goes faster, a 64th a point (a fifth at most),
     // arced again to land where it was aimed. (A curve, a lob, a drop shot: their
     // arcs and bends are timed; left be.)
@@ -647,6 +660,24 @@ static void strike(uint8_t i, uint8_t move) {
             int16_t need = TO_SUB(NET_H + 2) + ((3 * n * (n + 1)) >> 3) - ball_z;
             if (ball_vz * n < need) ball_vz = need / n;
         }
+    }
+    // True to its aim across, by Control (pl_true): the launch's split of its speed
+    // rounds short, ~10% across, and a curve's bend falls short of its offset. The pace
+    // across that lands it at aim_tx (the bend's sum, p n(n+1)/32 SUB over n frames of
+    // it, counted in), a quarter of the way there a level past the middle. At the middle
+    // the shortfall stays: the old tuning (all of it there shortened the bots' rallies,
+    // median 12 touches a point to 8). Once a strike: a division.
+    if (pl_true[i] && !scuff && !ball_smash && arc_t > 0) {
+        int16_t t = arc_t, d = TO_SUB(aim_tx) - ball_x;
+        if (ball_curve_t) {
+            uint8_t ct = ball_curve_t, p = (uint8_t)(ball_curve < 0 ? -ball_curve : ball_curve);
+            uint8_t n = t < ct ? (uint8_t)t : ct;
+            int16_t bend = (int16_t)(((uint16_t)p * n * (uint16_t)(n + 1)) >> 5);
+            if (t > ct) bend += (int16_t)((((uint16_t)p * ct) >> 4) * (uint16_t)(t - ct));
+            d -= ball_curve < 0 ? -bend : bend;
+        }
+        d = d / t - ball_vx;  // the pace across it's short
+        ball_vx += (d * (int16_t)pl_true[i]) >> 2;
     }
     uint8_t trail = ball_trail;  // struck() calls new_flight() which clears ball_trail
     struck(i, move, frames);
@@ -1246,6 +1277,9 @@ void play_enter(void) BANKED {
         pl_top[i] = speed_top[s - 1] - (i ? SPEED_YOU - SPEED_CPU : 0);
         pl_rise[i] = speed_rise[s - 1];
         pl_fire_meet[i] = (i ? FIRE_MEET : FIRE_MEET_YOU) + control_meet[c - 1];
+        pl_aim_in[i] = control_aim_in[c - 1];
+        pl_wide[i] = control_wide[c - 1];
+        pl_true[i] = control_true[c - 1];
         pl_accel[i] = ACCEL;
         pl_grip[i] = GRIP;
     }

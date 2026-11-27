@@ -46,8 +46,28 @@ loads. So far:
 | Speed: on the floor after a missed slide | ~93 frames | 64 | ~48 |
 | Control: charge that meets a ball on fire clean (yours; the CPU's +4) | 14 | 8 | 4 |
 | Control: the CPU's pressure before it mishits | 18 | 30 | 46 |
+| Control: aimed this far inside the sidelines (px) | 28 | 16 | 3 |
+| Control: the sharpest angle (across, eighths of the way down) | 4 | 4 | 8 |
+| Control: how true across it flies (quarters) | 0 | 0 | 4 |
 
-Next: Power and Technique, Control's accuracy, the budget, and reading the levels
+**Control to the lines** (2026-11-27, from the playtest: "the aim doesn't quite go
+edge to edge, and I think if you're a player that has maxed out control, you should
+be able to hit shots right to the line"). Three things kept shots off the sidelines:
+the aim stopped 16 px inside them; the launch angled at most half as far across as
+down the court (fc_launch_vel), so from mid-court the line was out of reach; and a
+strike flew short of its aim across, ~10% for a drive (the launch's split of its
+speed rounds down) and more for a curve (its bend falls short of its offset). Up to
+the middle, all three stay as they were: making every strike true at level 4
+shortened the bots' points (median 12 touches to 8), the shortfall having been a
+margin. Past it, each level aims nearer the line, angles wider (fc_wide, set for the
+strike), and corrects a quarter more of the shortfall (the pace across that lands it
+at its aim, the curve's bend counted in). At 8, from anywhere, a drive lands 0-5 px
+from the line it's aimed at, a curve within a few px (one in 84 test shots
+went a pixel out). Depth is left alone: a straight shot on fire aimed at the
+baseline sails long. In the bot match, the bot at Control 8 beats the CPU 66-40
+(at 4 it lost 7-46), points 3 touches long: the CPU can't reach the lines.
+
+Next: Power and Technique, the budget, and reading the levels
 from the saved progression (training's POWER, CONTROL, AIM, REFLEX: to reconcile
 with these four).
 

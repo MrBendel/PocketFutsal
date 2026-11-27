@@ -52,6 +52,7 @@ extern uint8_t pl_flash[2];
 extern uint8_t meet_slam[2];
 extern uint8_t ball_gold;
 extern uint8_t fc_gold_speed;
+extern uint8_t fc_wide;  // the widest a launch angles: eighths of its length (4; play.c's Control sets it for a strike)
 extern uint8_t ball_dropped;
 extern int16_t ball_cacc;
 extern int16_t arc_t;
