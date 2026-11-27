@@ -5,6 +5,54 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## 2v2 futsal, the Mario Strikers pass (2026-11-27)
+
+From the playtest: "It's kind of impossible to play right now. Looking for inspiration
+from Mario Strikers", and "the net field we're using for foot net is probably too small
+for two on two ... a taller field and keep the perspective fixed". A scripted player
+(run at the goal, shoot close, slide at carriers) won its matches; the trouble was a
+person's: always blue #1 (a runner when your partner had it, out of position on
+defence, hidden behind whoever stood on you), a dribble that ran away between touches
+(defenders faster than you, and poking it off you without a tackle), buttons that each
+did three things by context, hidden timings, and shots whose spread was luck.
+
+- **The court**: a fixed three-quarter view (no vanishing point, depth at 6/7), 160 x
+  256 px, the camera following the ball the length of it. The old one: 160 x 200 with
+  64 px of scroll, its far half squashed (running away read slower than toward you).
+- **Control**: you play the blue with the ball, or the one a pass is going to; as the
+  reds win it (or it comes loose from you), the nearer blue; B (without it) switches.
+  A pass of yours leads its receiver a quarter as far (you take them over as it goes:
+  stopped, a full lead sailed 40 px past).
+- **The ball at the carrier's feet**: only a tackle, a pass or a shot moves it. A slide
+  that reaches the ball or the carrier puts them down (36 ticks) and pops it loose. The
+  AI presser goes in the tick the carrier's within 18 px (between its decisions too:
+  before, 11 slides in three matches; after, 20 of 25 land).
+- **Strikers' buttons**: with the ball, A held charges a shot (slowed meanwhile), B a
+  pass or (held) a lob, A+B a dodge; without, A slides, B switches.
+- **Charged shots and runs of passes**: the charge sets the pace (64 SUB a tick to 128,
+  on fire at full) and, under half, doubles the spread. Each completed pass in a row
+  adds 8 to the next shot's charge (two at most).
+- **Keepers** (`src/futsal_keeper.c`): with the ball held and no keeper, 48 of 52 AI
+  shots went in. One on each line, AI: it shadows the ball across the mouth and, as a
+  shot is struck, dives; it saves if the distance is within the dive (24 SUB a tick
+  over the shot's flight) plus a reach of 3 px (a full shot) to 10 (a snatched one).
+  A save parries it out, loose. And the last defender guards the mouth when a carrier
+  is within 80 px of goal; a shot short of full is blocked within 9 px.
+- **Numbers** (`node tools/futsal-balance.mjs 16`, all four AI): 112 goals from 211
+  shots (53%), the wins 8-8; a match about a minute (3,500 frames).
+- **Frame budget**: the busiest frame stays under the half-frame line (64,752 of
+  65,664). Making room: the AI's shot or pass and the keeper's dive each on a tick of
+  their own, as are a volley's strike, the restart after a goal or a frame hit, and the
+  goal's reset; the score row and the goal's reset queued for vblank; a shot's launch
+  with one division (no 16-bit multiply, a table for its flight); the keeper drawn in
+  bytes at fixed OAM addresses (it cost 1.5k a frame, 5k as it changed pose); the end
+  wall's crossing sweep only near the posts. `node harness/profile.mjs futsal --seed=N`
+  profiles a match (its names for code in futsal's banks aren't reliable).
+
+Not done: keepers have only the front-facing art (the bottom one shows it too); the
+stadium and scoreboard behind the far goal went with the old view. Not yet played by
+hand.
+
 ## What ends rallies (2026-11-26)
 
 Playtest: "the difficulty at this level is about what you'd expect for expert level but

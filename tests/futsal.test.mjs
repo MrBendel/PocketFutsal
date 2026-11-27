@@ -83,7 +83,7 @@ test('human possession passes and shoots; end walls only score inside goal',()=>
  set16(e,'fs_ball_x',80*16); set16(e,'fs_ball_y',2); set16(e,'fs_ball_vy',-76);
  e.idle(); assert.equal(at(e,'score',0),1); assert.ok(e.v('fs_goal_timer')>0);
 });
-test('slide steals possession and burst has a cooldown; several seeds finish',()=>{
+test('a slide that gets there puts the carrier down and pops the ball loose; several seeds finish',()=>{
  const e=startGame(); put(e,'fs_spectator',0); put(e,'fs_owner',2);
  const x=at(e,'fs_pl_x',0,'i16'), y=at(e,'fs_pl_y',0,'i16');
  e.writeBytes(e.symbols.addr('fs_pl_x')+4,[x&255,x>>8]);
@@ -94,7 +94,9 @@ test('slide steals possession and burst has a cooldown; several seeds finish',()
  e.writeBytes(e.symbols.addr('fs_ai_ty')+4,[(y-16*16)&255,(y-16*16)>>8]);
  e.tap('A'); assert.equal(e.v('fs_tackle_count','u16'),0,'crouch is not instant possession');
  e.until(e=>e.v('fs_tackle_count','u16')>0,20,'sliding foot contacting the ball');
- put(e,'fs_owner',255); put(e,'fs_cooldown',0); e.tap('B'); assert.ok(e.v('fs_burst')>0); assert.ok(e.v('fs_cooldown')>0);
+ assert.equal(e.v('fs_owner'),255,'the ball pops loose');
+ assert.ok(at(e,'fs_down',2)>0,'the carrier is down');
+ e.until(e=>e.v('fs_owner')===0,60,'the tackler collecting it');
  for(const seed of [7,123]) {
   const sim=startGame(undefined,seed);
   let worst=0;
@@ -105,6 +107,27 @@ test('slide steals possession and burst has a cooldown; several seeds finish',()
   settle(sim,GAME_OVER,'AI match completion');
   assert.ok(worst<65664,`seed ${seed} full-match budget: ${worst} cycles`);
  }
+});
+
+test('you play the blue with the ball: a pass hands you the receiver, and B without the ball switches',()=>{
+ const e=humanSpace();
+ assert.equal(e.v('fs_ctrl'),0);
+ e.tap('B');
+ assert.equal(e.v('fs_receiver'),1);assert.equal(e.v('fs_ctrl'),1,'the receiver, as the pass goes');
+ e.until(e=>e.v('fs_owner')===1,90,'the pass arriving');
+ const x=at(e,'fs_pl_x',1,'i16');e.hold('LEFT',10);
+ assert.ok(at(e,'fs_pl_x',1,'i16')<x-4*16,'the d-pad runs the receiver now');
+ put(e,'fs_owner',2);setPlayer(e,2,100,96);set16(e,'fs_ball_x',100*16);set16(e,'fs_ball_y',100*16);e.idle(2);
+ const near=e.v('fs_ctrl');
+ e.tap('B');assert.equal(e.v('fs_ctrl'),near^1,'B, defending: the other blue');
+ e.tap('B');assert.equal(e.v('fs_ctrl'),near,'and back');
+});
+
+test('losing the ball hands you the nearer blue',()=>{
+ const e=humanSpace();setPlayer(e,0,80,200);setPlayer(e,1,100,100);
+ setPlayer(e,2,104,96);put(e,'fs_owner',2);set16(e,'fs_ball_x',104*16);set16(e,'fs_ball_y',100*16);
+ e.idle(2);
+ assert.equal(e.v('fs_ctrl'),1,'blue 2, by the red carrier');
 });
 test('menu exposes both modes and futsal returns to the menu',()=>{
  const e=bootToTitle();
@@ -143,8 +166,8 @@ test('new roster loads all four pixel sets into VRAM and uses each character pal
  e.shot('futsal-new-roster');
 });
 test('power shots leave a visible fading trail; player shadows stay on court',()=>{
- const e=startGame(); put(e,'fs_spectator',0); put(e,'fs_owner',0);
- e.tap('A').idle(6);
+ const e=humanSpace();
+ e.hold('A',FULL).idle(6);  // a full charge: on fire
  e.tap('START').idle(3);
  assert.ok(e.v('fs_power_trail')>0);
  assert.equal(e.read8(0xfe03+e.v('fs_ball_oam')*4)&7,6,'bright ball palette');
@@ -153,7 +176,7 @@ test('power shots leave a visible fading trail; player shadows stay on court',()
  for(let i=0;i<4;i++) {
   const py=at(e,'fs_pl_y',i,'i16')>>4;
   const ground=e.read8(e.symbols.addr('fs_projection_y')+py)-e.v('fs_cam_y');
-  assert.equal(e.read8(0xfe00+(23+i)*4),ground+12,'grounded player shadow');
+  assert.equal(e.read8(0xfe00+(23+i)*4),(ground+12)&255,'grounded player shadow');
  }
  e.tap('START');
  put(e,'fs_owner',0); e.idle(2);
@@ -178,6 +201,7 @@ function setPlayer(e,i,x,y){
  for(const [name,value]of[['fs_pl_x',x*16],['fs_pl_y',y*16]])e.writeBytes(e.symbols.addr(name)+i*2,[value&255,value>>8]);
  e.write8(e.symbols.addr('fs_vx')+i,0);e.write8(e.symbols.addr('fs_vy')+i,0);
 }
+const FULL=40;  // frames of A held: a full charge
 function humanSpace(pace=2){
  const e=startGame(pace);put(e,'fs_spectator',0);put(e,'fs_owner',0);
  setPlayer(e,0,80,180);setPlayer(e,1,112,96);setPlayer(e,2,20,20);setPlayer(e,3,30,30);
@@ -233,64 +257,18 @@ test('2v2 momentum, aerial ball and AI remain within the frame budget',()=>{
  assert.ok(worst<65664,`worst 2v2 frame ${worst} cycles`);
 });
 
-test('a forward run can receive a called return pass in stride',()=>{
- const e=humanSpace();setPlayer(e,0,48,160);setPlayer(e,1,112,176);
- set16(e,'fs_ball_x',48*16);set16(e,'fs_ball_y',153*16);e.idle(2);
- e.hold('UP',12).hold('UP+B').hold('UP',24);
- e.until(e=>e.v('fs_owner')===1,80,'teammate receiving first pass');
- e.hold('UP+B').hold('UP',1);
- for(let f=0;f<20&&e.v('fs_receiver')!==0;f++)e.hold('UP');
- assert.equal(e.v('fs_receiver'),0,"B calls the teammate's return at kicking reach");
- for(let f=0;f<60&&e.v('fs_owner')!==0;f++)e.hold('UP');
- assert.equal(e.v('fs_owner'),0,'moving human receives the led return');
- assert.ok(e.v('fs_completed_passes','u16')>=2);
-});
-
-test('directional B sends the receiver into space instead of at their old position',()=>{
+test('directional B sends the pass into space ahead of the receiver, and you run them onto it',()=>{
  const e=humanSpace();setPlayer(e,1,96,112);
  const x=at(e,'fs_pl_x',1,'i16'),y=at(e,'fs_pl_y',1,'i16');
  e.hold('LEFT+B');
  const rx=at(e,'fs_pl_x',1,'i16'),ry=at(e,'fs_pl_y',1,'i16');e.idle();
  assert.equal(e.v('fs_target_x','i16'),rx-24*16);
  assert.equal(e.v('fs_target_y','i16'),ry);
- for(let f=0;f<6&&at(e,'fs_vx',1,'i8')>=0;f++)e.idle();
- assert.ok(at(e,'fs_vx',1,'i8')<0,'receiver brakes and turns toward the through pass');
- e.idle();e.until(e=>e.v('fs_owner')===1,90,'teammate meeting the directional pass');
+ for(let f=0;f<90&&e.v('fs_owner')!==1;f++)e.hold('LEFT');
+ assert.equal(e.v('fs_owner'),1,'the receiver meeting the directional pass');
  assert.ok(at(e,'fs_pl_x',1,'i16')<x-10*16,'receiver ran into the requested space');
  assert.equal(e.v('fs_completed_passes','u16'),1);
 });
-
-test('a return called in flight is played on receipt and leads the human runner',()=>{
- const e=humanSpace();setPlayer(e,0,48,160);setPlayer(e,1,112,176);
- set16(e,'fs_ball_x',48*16);set16(e,'fs_ball_y',153*16);e.idle(2);
- e.tap('B').hold('UP',8).hold('UP+B').hold('UP');
- assert.ok(e.v('fs_return_call')>0,'return request is buffered during flight');
- assert.equal(e.v('fs_burst'),0,'calling a return does not spend the defensive burst');
- for(let f=0;f<90&&e.v('fs_pass_count','u16')<2;f++)e.hold('UP');
- assert.equal(e.v('fs_pass_count','u16'),2,'teammate immediately plays the requested return');
- assert.equal(e.v('fs_receiver'),0);
- assert.equal(e.v('fs_return_call'),0,'request is consumed once');
- for(let f=0;f<80&&e.v('fs_owner')!==0;f++)e.hold('UP');
- assert.equal(e.v('fs_owner'),0,'runner collects the return');
- assert.equal(e.v('fs_completed_passes','u16'),2);
-});
-
-test('a buffered return is cancelled when an opponent takes possession',()=>{
- const e=humanSpace();e.tap('B').idle(3).tap('B');
- assert.ok(e.v('fs_return_call')>0);
- put(e,'fs_owner',2);e.idle();
- assert.equal(e.v('fs_return_call'),0);
-});
-
-test('an unfulfilled return request expires rather than triggering a later pass',()=>{
- const e=humanSpace();e.tap('B').idle(3).tap('B');
- set16(e,'fs_ball_z',200*16);set16(e,'fs_ball_vz',0);
- set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);
- e.idle(49);
- assert.equal(e.v('fs_return_call'),0);
- assert.equal(e.v('fs_pass_count','u16'),1);
-});
-
 function launchPassTo(x,y){
  const e=humanSpace();setPlayer(e,1,x,y);
  e.write8(e.symbols.addr('fs_think')+1,40);
@@ -335,35 +313,6 @@ test('futsal bounces shed horizontal and vertical energy like futnet',()=>{
  assert.ok(e.v('fs_ball_vz','i16')>0&&e.v('fs_ball_vz','i16')<20);
 });
 
-test('running takes discrete touches with a changing gap between player and ball',()=>{
- const e=humanSpace(),gaps=[];
- setPlayer(e,0,30,180);set16(e,'fs_ball_x',30*16);set16(e,'fs_ball_y',180*16);
- for(let f=0;f<55;f++){
-  e.hold('RIGHT');gaps.push(e.v('fs_ball_x','i16')-at(e,'fs_pl_x',0,'i16'));
-  assert.equal(e.v('fs_owner'),0,'straight dribble stays under control');
- }
- assert.ok(e.v('fs_dribble_touches','u16')>=2,'player repeatedly touches the rolling ball');
- assert.ok(Math.max(...gaps)-Math.min(...gaps)>4*16,'ball is not held at a fixed offset');
-});
-
-test('a dribbled ball keeps rolling when the player stops',()=>{
- const e=humanSpace();put(e,'fs_touch_timer',10);
- set16(e,'fs_ball_x',88*16);set16(e,'fs_ball_y',180*16);set16(e,'fs_ball_vx',24);
- const x=at(e,'fs_pl_x',0,'i16');e.idle();
- assert.equal(at(e,'fs_pl_x',0,'i16'),x);
- assert.ok(e.v('fs_ball_x','i16')>88*16,'ball keeps its own velocity');
-});
-
-test('a hard cut can lose control without turning or teleporting the ball',()=>{
- const e=humanSpace();put(e,'fs_touch_timer',10);
- set16(e,'fs_ball_x',100*16);set16(e,'fs_ball_y',180*16);set16(e,'fs_ball_vx',40);
- e.write8(e.symbols.addr('fs_vx'),(-22)&255);
- e.hold('LEFT',3);
- assert.equal(e.v('fs_owner'),255,'ball outside control reach becomes loose');
- assert.ok(e.v('fs_ball_x','i16')>100*16,'old ball momentum survives the cut');
- assert.ok(at(e,'fs_pl_x',0,'i16')<80*16);
-});
-
 function humanActor(e){
  for(let n=2;n<19;n++)if((e.read8(0xfe03+n*4)&7)===0)return n;
  assert.fail('blue player sprite missing');
@@ -406,27 +355,76 @@ test('horizontal running uses mirrored side strides, keeps side idle and yields 
  assert.equal(e.read8(0xfe03+humanActor(e)*4)&8,8);
 });
 
-test('a shot waits for kicking reach while the player closes on the rolling ball',()=>{
- const e=humanSpace();put(e,'fs_touch_timer',10);
- set16(e,'fs_ball_x',98*16);set16(e,'fs_ball_y',180*16);
- e.hold('RIGHT+A');
- assert.equal(e.v('fs_shot_count','u16'),0,'no remote kick from beyond foot reach');
- assert.equal(e.v('fs_pending_kick'),2,'shot input is buffered');
- for(let f=0;f<20&&!e.v('fs_shot_count','u16');f++)e.hold('RIGHT');
- assert.equal(e.v('fs_shot_count','u16'),1,'shot releases when the player reaches the ball');
+test('a tapped A is a snatched shot; held, it charges: slowed meanwhile, faster, on fire full',()=>{
+ const tap=humanSpace();tap.tap('A');
+ assert.equal(tap.v('fs_shot_count','u16'),1,'a tap shoots on release');
+ assert.ok(tap.v('fs_shot_speed')<=70,'snatched: slow');assert.equal(tap.v('fs_power_trail'),0,'no fire');
+ const held=humanSpace();held.hold('A',12);
+ assert.equal(held.v('fs_shot_count','u16'),0,'held: charging, not shot');
+ assert.ok(held.v('fs_shot_charge')>=10,'the charge builds');
+ const x=at(held,'fs_pl_x',0,'i16');held.hold('A+RIGHT',8);
+ assert.ok(at(held,'fs_pl_x',0,'i16')-x<8*16,'charging slows you');
+ held.hold('A',FULL).idle(1);
+ assert.equal(held.v('fs_shot_count','u16'),1);
+ assert.equal(held.v('fs_shot_speed'),128,'full: the fastest');assert.ok(held.v('fs_power_trail')>0,'on fire');
 });
 
-test('an opponent can intercept the exposed ball without overlapping its dribbler',()=>{
- const e=humanSpace();setPlayer(e,2,94,180);
- e.writeBytes(e.symbols.addr('fs_ai_tx')+4,[(94*16)&255,(94*16)>>8]);
- e.writeBytes(e.symbols.addr('fs_ai_ty')+4,[(180*16)&255,(180*16)>>8]);
- set16(e,'fs_ball_x',92*16);set16(e,'fs_ball_y',180*16);
- e.idle(2);
- assert.equal(e.v('fs_owner'),2,'defender plays the ball rather than the carrier body');
- assert.equal(at(e,'fs_pl_x',0,'i16'),80*16);
- assert.ok(e.v('fs_ball_x','i16')>=92*16,'interception preserves ball position');
+test('a run of passes powers up the next shot; the other side winning it ends the run',()=>{
+ const e=humanSpace();
+ e.tap('B');e.until(e=>e.v('fs_owner')===1,90,'pass one');
+ assert.equal(e.v('fs_chain'),1);
+ e.tap('B');e.until(e=>e.v('fs_owner')===0,90,'pass two');
+ assert.equal(e.v('fs_chain'),2);
+ e.tap('A');
+ const sp=e.v('fs_shot_speed');assert.ok(sp>=64+2*(1+2*8)&&sp<=64+2*(3+2*8),'a tap, and two passes of power on it: '+sp);
+ assert.equal(e.v('fs_chain'),0,'spent');
+ const lost=humanSpace();lost.tap('B');lost.until(e=>e.v('fs_owner')===1,90,'pass');
+ put(lost,'fs_owner',2);lost.idle(2);
+ assert.equal(lost.v('fs_chain'),0,'the reds have it: the run is over');
 });
 
+test('A and B together dodge: a burst no slide can stop',()=>{
+ const e=humanSpace();
+ e.hold('A+B',2).idle(1);
+ assert.ok(at(e,'fs_dodge',0)>0,'dodging');assert.equal(e.v('fs_shot_count','u16')+e.v('fs_pass_count','u16'),0,'not a shot or a pass');
+ const x=at(e,'fs_pl_x',0,'i16'),y=at(e,'fs_pl_y',0,'i16');
+ setPlayer(e,2,x>>4,(y>>4)-10);
+ put(e,'fs_owner',0);e.write8(e.symbols.addr('fs_tackling')+2,14);
+ e.write8(e.symbols.addr('fs_slide_vy')+2,36);e.idle(2);
+ assert.equal(e.v('fs_owner'),0,'the slide passes through');
+ assert.equal(e.v('fs_dodges','u16'),1);
+});
+
+test('the keeper shadows the ball, saves what it can reach, and is beaten in the corner up close',()=>{
+ const shoot=(range,dir,full)=>{
+  const e=humanSpace();setPlayer(e,0,80,range);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',(range-5)*16);
+  e.idle(20);  // the keeper settles opposite the ball
+  e.hold('A',full?FULL:1);if(dir)e.hold(dir+'+A',1);e.idle(1);  // aimed on the last frame held
+  for(let f=0;f<120&&!e.v('fs_goal_timer')&&!e.v('fs_saves','u16')&&!e.v('fs_frame_timer')&&e.v('fs_is_shot');f++)e.idle();
+  return e.v('fs_goal_timer')?'goal':e.v('fs_saves','u16')?'saved':e.v('fs_frame_timer')?'frame':'wide';
+ };
+ assert.equal(shoot(90,'',true),'saved','from far, even full: saved');
+ assert.equal(shoot(40,'',false),'saved','snatched, near the middle: saved');
+ assert.equal(shoot(36,'LEFT',true),'goal','full, close, into a corner: in');
+ const e=humanSpace();setPlayer(e,0,30,60);set16(e,'fs_ball_x',30*16);set16(e,'fs_ball_y',55*16);e.idle(30);
+ assert.ok(at(e,'fs_kp_x',0,'i16')<80*16,'the top keeper leans toward the ball');
+});
+
+test('the ball stays at the carrier’s feet, the way they face; standing on it doesn’t take it',()=>{
+ const e=humanSpace();
+ for(const [dir,dx,dy] of [['RIGHT',6,0],['LEFT',-6,0],['UP',0,-5]]){
+  e.hold(dir,12);
+  assert.equal(e.v('fs_owner'),0,'still yours');
+  assert.equal(e.v('fs_ball_x','i16')-at(e,'fs_pl_x',0,'i16'),dx*16,dir+': across');
+  assert.equal(e.v('fs_ball_y','i16')-at(e,'fs_pl_y',0,'i16'),dy*16,dir+': in depth');
+ }
+ const bx=e.v('fs_ball_x','i16')>>4,by=e.v('fs_ball_y','i16')>>4;
+ setPlayer(e,2,bx,by);e.writeBytes(e.symbols.addr('fs_ai_tx')+4,[(bx*16)&255,(bx*16)>>8]);
+ e.writeBytes(e.symbols.addr('fs_ai_ty')+4,[(by*16)&255,(by*16)>>8]);put(e,'fs_cooldown',0);
+ e.write8(e.symbols.addr('fs_cooldown')+2,200);
+ e.idle(4);
+ assert.equal(e.v('fs_owner'),0,'only a tackle takes it');
+});
 test('tap B delivers quickly; holding B charges a much higher lob on release',()=>{
  const quick=humanSpace();quick.hold('B');assert.equal(quick.v('fs_pass_count','u16'),0);
  quick.idle();assert.equal(quick.v('fs_pass_count','u16'),1);assert.equal(quick.v('fs_lob'),0);
@@ -482,7 +480,7 @@ test('holding B off the ball calls a lob return into the human finishing lane',(
 
 function incomingLob(pace=2){
  const e=humanSpace(pace);put(e,'fs_owner',255);put(e,'fs_receiver',0);put(e,'fs_lob',1);
- put(e,'fs_flight_left',24);set16(e,'fs_target_x',80*16);set16(e,'fs_target_y',180*16);
+ put(e,'fs_flight_left',22);set16(e,'fs_target_x',80*16);set16(e,'fs_target_y',180*16);
  set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',196*16);set16(e,'fs_ball_z',36*16);
  set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',-12);set16(e,'fs_ball_vz',-16);
  return e;
@@ -517,23 +515,24 @@ test('one-two, charged lob return, run into zone and bicycle finish form a playa
  set16(e,'fs_ball_x',48*16);set16(e,'fs_ball_y',153*16);
  let worst=0;
  const step=buttons=>{e.hold(buttons);worst=Math.max(worst,e.lastFrameCycles);};
- step('B');step(''); // Quick first pass.
+ step('B');step(''); // Quick first pass: you play blue 2 now.
+ for(let f=0;f<90&&e.v('fs_owner')!==1;f++)step('');
+ assert.equal(e.v('fs_owner'),1,'blue 2 receives');
  for(let f=0;f<12;f++)step('UP+B');
  step('UP');
- for(let f=0;f<80&&!e.v('fs_lob');f++)step('UP');
- assert.equal(e.v('fs_lob'),1,'teammate sends the requested high return');
- assert.equal(e.v('fs_receiver'),0);
+ for(let f=0;f<20&&!e.v('fs_lob');f++)step('UP');
+ assert.equal(e.v('fs_lob'),1,'a held B: the lob back');
+ assert.equal(e.v('fs_receiver'),0);assert.equal(e.v('fs_ctrl'),0,'you play blue 1 again');
  for(let f=0;f<65&&at(e,'fs_pl_y',0,'i16')>e.v('fs_target_y','i16')+6*16;f++)step('UP');
- for(let f=0;f<12&&!e.v('fs_zone_ready');f++)step('');
+ for(let f=0;f<40&&!e.v('fs_zone_ready');f++)step('');
  step('A');assert.ok(e.v('fs_aerial')>0,'runner jumps from the finishing zone');
  for(let f=0;f<25&&!e.v('fs_aerial_count','u16');f++)step('');
  assert.equal(e.v('fs_aerial_count','u16'),1,'real returned lob is struck in the air');
  assert.ok(e.v('fs_completed_passes','u16')>=2,'both passes count, including the first-time finish');
- for(let f=0;f<80&&!at(e,'score',0);f++)step('');
- assert.equal(at(e,'score',0),1,'aerial strike can finish in the goal');
+ for(let f=0;f<80&&!at(e,'score',0)&&!e.v('fs_saves','u16');f++)step('');
+ assert.ok(at(e,'score',0)===1||e.v('fs_saves','u16')===1,'the aerial strike goes in, or the keeper saves it');
  assert.ok(worst<65664,`lob-to-bicycle sequence budget: ${worst}`);
 });
-
 test('releasing a charged pass during pause delivers it on resume without sticking in charge',()=>{
  const e=humanSpace();e.hold('B',12).tap('START').idle(10);
  assert.equal(e.v('fs_pass_count','u16'),0);
@@ -545,7 +544,7 @@ test('BURST FX contact flash animates at the strike point, pauses and cleans up'
  const e=humanSpace();e.tap('B');assert.equal(e.v('fs_fx_timer'),0,'quick passing does not spam impact bursts');
  put(e,'fs_owner',0);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',173*16);
  set16(e,'fs_ball_vx',0);set16(e,'fs_ball_vy',0);set16(e,'fs_ball_z',0);
- e.tap('A');assert.ok(e.v('fs_fx_timer')>0);
+ e.tap('A').idle(2);assert.ok(e.v('fs_fx_timer')>0);
  const x=e.v('fs_fx_x','i16'),y=e.v('fs_fx_y','i16'),poses=new Set();
  for(let f=0;f<4;f++){e.idle();poses.add(e.read8(0xfe02+28*4));}
  assert.ok(poses.size>=2,'original pack animation advances');
@@ -769,7 +768,7 @@ test('quick shoot and pass taps on a paced-out frame retain their original aim',
  const shot=humanSpace(0);setPlayer(shot,0,80,40);set16(shot,'fs_ball_y',33*16);put(shot,'fs_pace_phase',3);
  shot.hold('LEFT+A');assert.equal(shot.v('fs_shot_count','u16'),0,'tap lands on a held simulation frame');
  shot.idle();assert.equal(shot.v('fs_shot_count','u16'),1);
- assert.equal(shot.v('fs_target_x','i16'),(68+shot.v('fs_shot_error','i8'))*16,'released directional aim is buffered with A');
+ assert.equal(shot.v('fs_target_x','i16'),(66+shot.v('fs_shot_error','i8'))*16,'released directional aim is buffered with A');
  const pass=humanSpace(0);put(pass,'fs_pace_phase',3);
  const x=at(pass,'fs_pl_x',1,'i16');pass.hold('LEFT+B');
  assert.equal(pass.v('fs_pass_count','u16'),0);
@@ -837,9 +836,10 @@ test('shooting accuracy tightens near goal and full-court attempts target well w
   let total=0;
   for(let n=0;n<24;n++){
    put(e,'fs_owner',0);put(e,'fs_frame_timer',0);put(e,'fs_goal_timer',0);
-   setPlayer(e,0,80,range);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',range*16);
+   setPlayer(e,0,80,range+5);set16(e,'fs_ball_x',80*16);set16(e,'fs_ball_y',range*16);  // (the ball at the feet, 5 ahead)
+   for(const i of [2,3]){setPlayer(e,i,20+i*40,210);e.write8(e.symbols.addr('fs_cooldown')+i,255);}  // the reds out of it (a save can leave them the ball)
    for(const field of ['fs_ball_vx','fs_ball_vy','fs_ball_z','fs_ball_vz'])set16(e,field,0);
-   e.tap('A');assert.equal(e.v('fs_shot_range'),range);
+   e.hold('A',FULL).idle(1);assert.equal(e.v('fs_shot_range'),range);  // full: no spray
    const error=e.v('fs_shot_error','i8');total+=Math.abs(error);
    const tx=e.v('fs_target_x','i16')/16;
    if(range===24)assert.ok(Math.abs(error)<=1,'close finish stays precise');
@@ -875,6 +875,7 @@ test('posts and crossbars rebound the ball, dislodge either goal, and reset with
   const timer=e.v('fs_frame_timer');e.tap('START').idle(8);
   assert.equal(e.v('fs_frame_timer'),timer,'pause freezes the stoppage');e.tap('START');
   e.until(e=>e.v('fs_frame_timer')===0,90,'reset after frame contact');
+  e.idle(4);  // the restart, the row, then the goal's reset drawn: a frame each
   assert.equal(at(e,'fs_goal_dx',end,'i8'),0);assert.equal(at(e,'fs_goal_dy',end,'i8'),0);
   assert.equal(e.v('fs_owner'),(end^1)*2,'defending side restarts play');
   checkGoalPatch(e,end,0);
@@ -924,7 +925,7 @@ test('both movable goals are centred on the court in BG tiles and use no OBJ slo
   assert.equal(backgroundPixel(e,80,baseline-14),3,'crossbar stays centred at collision height');
   assert.equal(backgroundPixel(e,60,baseline-1),1,'bottom rail stays inside the baseline');
  }
- for(let i=30;i<40;i++)assert.equal(e.read8(0xfe00+i*4),0,'goal OBJ slot is free');
+ for(let i=38;i<40;i++)assert.equal(e.read8(0xfe00+i*4),0,'goal OBJ slot is free');  // (30..37: the keeper in front of it)
  const uploads=e.v('fs_goal_uploads','u16');
  for(const y of [0,112,224]){set16(e,'fs_ball_y',y*16);e.idle(3);}
  assert.equal(e.v('fs_goal_uploads','u16'),uploads,'scrolling moves the BG without per-frame tile uploads');
@@ -942,7 +943,7 @@ test('the complete goal remains visible when a crowded goalmouth exceeds ten spr
  for(let y=top;y<top+GOAL_H;y++){
   let count=0;for(let i=0;i<40;i++)if(y>=o[i*4]-16&&y<o[i*4])count++;
   peak=Math.max(peak,count);
-  for(let x=60;x<100;x++)if(x<76||x>=84){
+  for(let x=60;x<100;x++)if(x<72||x>=88){  // (the ball, and the keeper standing in the mouth: sprites)
    const at=(y*160+x)*3;
    assert.deepEqual([...after.subarray(at,at+3)],[...before.subarray(at,at+3)],`goal remains intact at ${x},${y}`);
   }

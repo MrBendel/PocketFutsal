@@ -30,7 +30,7 @@ void futsal_fx_draw(uint8_t cam) BANKED{
     if(wait==2){wait=1;return;} // Keep setup off the busy strike frame.
     if(wait){
         uint8_t px=(uint16_t)hit_x>>4,py=(uint16_t)hit_y>>4;
-        fs_fx_x=80+(((px-80)*(int16_t)fs_projection_s[py])>>7);
+        fs_fx_x=px;  // the court's a fixed view: across, as it is
         fs_fx_y=(int16_t)fs_projection_y[py]+8-(hit_z>>4);wait=0;
     }
     int16_t y=fs_fx_y-cam;

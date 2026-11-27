@@ -88,6 +88,7 @@ void gfx_clear(void) BANKED;  // gfx_setup.c
 // Lowercase is drawn as uppercase; anything outside the font is a space.
 void bkg_text(uint8_t x, uint8_t y, const char *s);
 void win_text(uint8_t x, uint8_t y, const char *s);
+void win_text_queued(uint8_t x, uint8_t y, const char *s);  // the same, written in vblank
 // Draw an unsigned number, right-aligned in width tiles (zero-padded if zero_pad).
 // Banked (menus only).
 void bkg_number(uint8_t x, uint8_t y, uint16_t n, uint8_t width, uint8_t zero_pad) BANKED;
