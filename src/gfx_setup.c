@@ -9,7 +9,7 @@
 #include "frame.h"
 
 extern volatile uint8_t vram_ready;  // gfx.c
-extern uint8_t strip_count, copy_count;
+extern uint8_t strip_count, copy_count, dma_count;
 void gfx_vbl(void);  // gfx.c: the vblank handler, in bank 0
 void gfx_lcd(void);  // gfx.c: the sprite split's LCD interrupt, in bank 0
 void gfx_lcd_box(void);  // ... and the dialogue box's (gfx_box_split)
@@ -125,6 +125,7 @@ void gfx_clear(void) BANKED {
     scroll_x = scroll_y = 0;
     strip_count = 0;
     copy_count = 0;
+    dma_count = 0;
     vram_ready = 0;
     move_bkg(0, 0);
 }

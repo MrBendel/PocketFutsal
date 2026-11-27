@@ -3,8 +3,8 @@
   "serve": "4bdb4c25",
   "charged": "67f0695b",
   "header": "2918cdc3",
-  "slide": "8b177be7",
-  "point": "f17e4e2c",
+  "slide": "63ab6264",
+  "point": "54ed8044",
   "paused": "3a4796ca",
   "full-time": "c14fc3c9",
   "trail-power": "3e859a36",
@@ -25,13 +25,13 @@
   "shootout-dive": "04d56214",
   "shootout-goal": "a8fe9117",
   "training-hub-scrolled": "0af74be9",
-  "slalom-live": "4f3bf7f2",
-  "slalom-clear": "6f678c7c",
-  "slalom-hit": "b5f577af",
+  "slalom-live": "71fdd10d",
+  "slalom-clear": "75a97ce7",
+  "slalom-hit": "b7e8dd0a",
   "slam-zone": "e138e6dc",
   "power-meter": "76405eb5",
   "rally-vs-live": "39ea55b1",
   "rally-solo-live": "f29a423a",
   "juggle-vs-live": "0732a9da",
-  "slalom-vs-live": "952753d8"
+  "slalom-vs-live": "6735daa6"
 }

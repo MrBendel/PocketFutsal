@@ -5,6 +5,32 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## The match's stats (2026-11-26): the levers for each character
+
+From the user: **Speed** (moving, and getting up off a slide), **Power** (the A shot:
+its pace, how easily it charges, how far it goes), **Technique** (the B shot: how much
+it curves, how easily it charges), **Control** (accuracy near the lines, and the
+**defensive stat**: returning hard and spinning balls without popping them up). Hard
+or spinning shots are tough to return: met short of the charge, they pop up, a lob to
+the other side. Raising one stat costs another, through the physics where it can
+(a faster player coasts further and turns wider; a harder hit strays further; a
+bigger curve travels slower) and a shared budget of points.
+
+Each player's levels are `pl_speed_lv`, `pl_control_lv` (1-8, 4 the old fixed
+tuning; play.c, "the players' stats"), turned into numbers by tables as the match
+loads. So far:
+
+| stat | level 1 | 4 | 8 |
+| --- | --- | --- | --- |
+| Speed: top speed (SUB a frame; the CPU 2 less) | 16 | 22 | 30 |
+| Speed: on the floor after a missed slide | ~93 frames | 64 | ~48 |
+| Control: charge that meets a ball on fire clean (yours; the CPU's +4) | 14 | 8 | 4 |
+| Control: the CPU's pressure before it mishits | 18 | 30 | 46 |
+
+Next: Power and Technique, Control's accuracy, the budget, and reading the levels
+from the saved progression (training's POWER, CONTROL, AIM, REFLEX: to reconcile
+with these four).
+
 ## Training mode (2026-11-22): mini games and stats
 
 The RPG side: your player has four stats, raised by playing training mini games, and
@@ -143,9 +169,10 @@ getting up), win, lose. PocketFutsal's, per view:
 | kick | a ground strike (the ball under 5 px up) |
 | volley | the ball 5-15 px up: faster and flatter |
 | header | the ball 16-27 px up, in front: driven down at the other half |
-| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way |
-| lying | (one set, both views) a slide, feet first, for a ball out of reach; knocked down |
-| win / lose | the end of the match |
+| bicycle | the ball 10-31 px up and just *behind* you (a lob over your head): on fire if charged half way. Tuck, strike, recover (24x24, below) |
+| slide | (one set, both views) feet first, for a ball out of reach: seven 32x24 frames, brake, plant, extend, contact, decelerate, kneel, ready (below) |
+| lying | (one set, both views) knocked down |
+| win / lose | a point: six-frame cycles, both players facing you (below) |
 
 ### Rules
 
@@ -258,6 +285,42 @@ slammed (the Captain Tsubasa feel).
   that has distinct lines"; Sparks Medium A was tried first). A frame's sprites go only
   to its drawn columns, and tiles past 127 go on from 160, after the HUD's, so a wider
   effect can come later.
+- **The slide's frames** (2026-11-26, Codex's feet-first study, artwork/players/slide/study-v1,
+  the playtest: "Sprites are all pushed ... make sure they're all working"): the
+  spiky player's seven 32x24 frames (tools/export-slide.mjs makes src/slide_art.c) in
+  place of the one lying pose. Brake, plant, extend as the lunge starts (the timer
+  past 61, 58, 54), contact through the lunge and lying there, then decelerate (20),
+  kneel (12), ready (4); the move's timers and reach are as they were. Facing the way
+  you slide, mirrored for left. Up to six 8x16 sprites: the player's four and two
+  more (OAM 31-32 you, 33-34 the CPU), so four on a line where lying was three.
+  Their tiles are streamed: all seven frames (1152 bytes) copied to RAM as the match
+  loads, and a frame's tiles sent by the GBC's general DMA in vblank (gfx_dma: whole
+  tiles, 16 bytes in a few cycles where the byte queue takes ~25 a byte) into sprite
+  tiles 192-203 (you) and 208-219 (the CPU), VRAM bank 0, free in Futnet. Drawn by
+  metasprites generated both ways round (a C loop over the six sprites took ~4k
+  cycles a frame). Worst Futnet frame 61,220 (the frame a slide starts; 58,060 with
+  the lying pose). The other three players' slides are in the library
+  (artwork/players/roster/COMPLETE-LIBRARY.md), not in Futnet (it plays spiky v
+  spiky); Shootout has the keeper dives (Codex, a32a24e).
+- **A point's reactions** (2026-11-26, the library's generated win and loss cycles,
+  tools/export-reactions.mjs makes src/reaction_art.c): six 16x24 front-view frames
+  each, in place of the one win or lose pose, both players turned to face you. The
+  winner's (anticipate, a fist, take off, the top, come down, land) loops, its lift
+  doubled (to 6 px at the top); the loser's stands, crouches, then shakes their head
+  (turn, centre, turn back) to the end. A step every 8 frames of the point's 110.
+  Streamed into the slide's tiles the same way (all twelve frames, 1536 bytes, in
+  RAM; a frame's 8 tiles by DMA as it changes).
+- **The bicycle kick's frames** (2026-11-26, the library's generated bicycle cycles,
+  which replaced the malformed ones): tuck, strike, recover, 24x24, your back view
+  and the CPU's front, with the slide's (tools/export-slide.mjs), drawn and streamed
+  the same way: tucked past 20 of its 24 frames, striking past 10, recovering past 4,
+  then ready. Its lift as before. **The streamed art lives in WRAM bank 2** (0xD000,
+  the slide's and the bicycle's 2272 bytes, then the reactions' 1536 at 0xD900): the
+  GBC's banks 2-7, which nothing else uses. src/art_ram.s copies it in as the match
+  loads and starts the DMAs in vblank, switching bank 2 in only where it neither
+  touches the stack nor a variable (GBDK's stack is at 0xD000-0xDFFF in bank 1). A
+  DMA asked for with the queue full, or after a frame ran long, waits for the next
+  frame (gfx_dma returns 0).
 - **Pop-ups**: a slide at full stretch, a block, or a ball on fire met with too little meter pops the
   ball up high, to drop just behind the other player. Met in the air, it's a **slam**,
   on fire. A slam met with three eighths of a meter (a press and a moment) is returned clean; less, and it

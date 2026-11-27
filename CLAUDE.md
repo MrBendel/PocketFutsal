@@ -5,7 +5,8 @@
   (../DangerNoodle when checked out beside this one): look there for systems not
   carried over yet (sprite slots, camera/scrolling, actors, save files in SRAM, far
   RAM, dialogue, music hooks) before writing new ones.
-- The design: `docs/design/README.md`. The match is `src/play.c`; its state and the
+- The design: `docs/design/README.md`. The match is `src/play.c` (its drawing in `src/play_draw.c`, the AI on
+  your side in `src/play_ai.c`: one file can't pass its 16 KB bank); its state and the
   court's measurements and perspective are in `src/game.h` (tools/tile-art.mjs draws the
   court to match: change both together). `inspiration/` (gitignored) holds Mario Tennis
   sheets for proportions only: never copy from them.
