@@ -60,8 +60,8 @@
 #define POINT_FAULT 5    // a serve that didn't go over
 
 // Strikes, readied before the ball arrives: A a power shot, straight where the
-// d-pad points; B a curve, bending in to the side the d-pad holds. B then A is a
-// lob over the other player; A then B a drop shot, dying just past halfway.
+// d-pad points; B a curve, bending in to the side the d-pad holds. A then B is a
+// lob over the other player; B then A a drop shot, dying just past halfway.
 #define SHOT_NONE 0
 #define SHOT_POWER 1
 #define SHOT_CURVE 2

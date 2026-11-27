@@ -5,6 +5,26 @@ Tennis: singles, top down, a net between the halves. The ball is always loose, e
 touch is a strike, and the skill is in reading where the ball goes and charging the
 right strike early. Proposals, not decisions: change freely.
 
+## What ends rallies (2026-11-26)
+
+Playtest: "the difficulty at this level is about what you'd expect for expert level but
+it's missing that thing that ends rallies (either way, for CPU or player)". Two rules,
+both sides alike (play.c, "what ends rallies"):
+
+- **A slam is a finisher** (`ball_finisher`, till someone touches it): only a player set
+  for it, standing with a full meter, meets it clean. Anyone else pops it up (another
+  slam for the slammer), a slide that gets there included; short of the meter to meet
+  fire, down they go. Gold and the smash at the net already worked this way.
+- **Rally heat** builds with every touch in a point (`rally_n`; `rally_heat` is half
+  that, 12 at most) and resets each point: a drive goes up to a fifth faster, arced again
+  to land where it was aimed (curves, lobs and drop shots left be: their arcs and bends
+  are timed); meeting a ball on fire clean takes up to 6 more charge (`rally_meet`);
+  the CPU mishits sooner (heat adds to its pressure).
+
+Bot matches (the AI on your side, 6 seeds), before and after: touches a point, median
+10 then 10, 90th percentile 24 then 18, longest 42 then 25; slams won outright 9 of 15
+(5 returned clean) then 18 of 20 (none clean).
+
 ## The match's stats (2026-11-26): the levers for each character
 
 From the user: **Speed** (moving, and getting up off a slide), **Power** (the A shot:
@@ -26,8 +46,28 @@ loads. So far:
 | Speed: on the floor after a missed slide | ~93 frames | 64 | ~48 |
 | Control: charge that meets a ball on fire clean (yours; the CPU's +4) | 14 | 8 | 4 |
 | Control: the CPU's pressure before it mishits | 18 | 30 | 46 |
+| Control: aimed this far inside the sidelines (px) | 28 | 16 | 3 |
+| Control: the sharpest angle (across, eighths of the way down) | 4 | 4 | 8 |
+| Control: how true across it flies (quarters) | 0 | 0 | 4 |
 
-Next: Power and Technique, Control's accuracy, the budget, and reading the levels
+**Control to the lines** (2026-11-27, from the playtest: "the aim doesn't quite go
+edge to edge, and I think if you're a player that has maxed out control, you should
+be able to hit shots right to the line"). Three things kept shots off the sidelines:
+the aim stopped 16 px inside them; the launch angled at most half as far across as
+down the court (fc_launch_vel), so from mid-court the line was out of reach; and a
+strike flew short of its aim across, ~10% for a drive (the launch's split of its
+speed rounds down) and more for a curve (its bend falls short of its offset). Up to
+the middle, all three stay as they were: making every strike true at level 4
+shortened the bots' points (median 12 touches to 8), the shortfall having been a
+margin. Past it, each level aims nearer the line, angles wider (fc_wide, set for the
+strike), and corrects a quarter more of the shortfall (the pace across that lands it
+at its aim, the curve's bend counted in). At 8, from anywhere, a drive lands 0-5 px
+from the line it's aimed at, a curve within a few px (one in 84 test shots
+went a pixel out). Depth is left alone: a straight shot on fire aimed at the
+baseline sails long. In the bot match, the bot at Control 8 beats the CPU 66-40
+(at 4 it lost 7-46), points 3 touches long: the CPU can't reach the lines.
+
+Next: Power and Technique, the budget, and reading the levels
 from the saved progression (training's POWER, CONTROL, AIM, REFLEX: to reconcile
 with these four).
 
@@ -199,7 +239,28 @@ slammed (the Captain Tsubasa feel).
   stuck from the power up before I think I should"): queued while it was still over
   their side, you still ran. Now **the other button calls the strike off** instead
   ("if you're locked into an A power up, B cancels and vice versa"), so pressing too
-  early costs a press, not the point. The CPU plays by the same lock, from the ball
+  early costs a press, not the point. **Only a press with the ball coming plants you**
+  (2026-11-26, playtest: "I keep getting stuck"; the recording: A pressed straight
+  after your own kick, then the CPU lobbed it to the far side and you couldn't move for
+  two seconds): queued while your shot's still going over (you struck it last), you
+  keep running, the strike still queued, and any press after the CPU's touch locks
+  you (`you_planted`). **And only powering up locks you** (2026-11-26, playtest:
+  "it should only lock if you're flashing / powering up. Just pressing a or b should
+  kick"): a press or two queues a kick and you run on to meet it; from half a meter,
+  where you start flashing, the d-pad only aims. **A press is a kick, now; repeated
+  presses power up** (2026-11-26, playtest: "make it kick on press and only do power
+  ups on repeated presses ... closer to the Mario tennis model"): one press swings at
+  once (the kick pose, planted, 12 frames, `you_swing`), and a ball in reach meanwhile
+  is struck; too early, a whiff, the strike gone. A second press within those 12 frames
+  (the same button, or the other for a lob or a drop shot) calls the kick off for a
+  power-up, queued till the ball comes. **A missed slide is beaten** (2026-11-26,
+  playtest: "if the CPU slides to save and misses, they shouldn't be able to get back
+  up and save it again"): either side, up again, doesn't play that ball till the other
+  side has struck it (`pl_beaten`). **Powering up near the slam zone runs you to its
+  middle** (2026-11-26, playtest: "it's really hard to line up and stay in it now ...
+  if you are near by and start powering up, we auto move you to the center of the
+  zone"): within 40 px across and 32 in depth, a power-up (not a kick) runs you there,
+  at your running speed, the lock or not (`ZONE_PULL_X`, `ZONE_PULL_Y`). The CPU plays by the same lock, from the ball
   crossing into its half: it gets there, then readies
   (or readies anyway with the ball 40 px off), its meter starting at 8 (two of your
   presses) and filling a point every 4 frames. The strike goes by itself as the ball arrives;
@@ -227,9 +288,10 @@ slammed (the Captain Tsubasa feel).
   (lobs and drop shots too).
 - **A: power**, straight where the d-pad points.
 - **B: curve**: set off wide and bent back in to the side the d-pad holds.
-- **B, A: lob**, over the other player and deep: 24 px behind them, at least 60
-  past the net (a lob at a player up at the net sends them back for it). **A, B: drop shot**,
-  dying just past halfway. (Mario Tennis has these the other way round.) A quick roll:
+- **A, B: lob**, over the other player and deep: 24 px behind them, at least 60
+  past the net (a lob at a player up at the net sends them back for it). **B, A: drop shot**,
+  dying just past halfway, as Mario Tennis has them (2026-11-27; until then they were
+  the other way round, for no reason anyone wrote down). A quick roll:
   the second button within 12 frames (0.2 s) of the first (2026-11-24, when the other
   button became the cancel); it stays a lob or a drop shot till it's struck, and the
   first button again taps the charge up. The other button any later calls the strike

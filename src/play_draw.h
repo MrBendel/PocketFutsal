@@ -6,6 +6,7 @@ void play_draw(void) BANKED;       // a frame (play.c then draws the aim marker)
 void play_draw_load(void) BANKED;  // sprite tiles and the streamed art, as the match loads
 extern uint8_t ball_oam, slide_shown[2], zone_on, zone_lit, draw_lie;
 extern int8_t draw_lift;
+extern uint8_t you_swing;  // play.c: your kick, swinging at it
 // play.c's, drawn from here
 extern uint8_t ball_flight, flight_frame, meet_flight[2];
 extern int16_t ball_hx, ball_hwy;
