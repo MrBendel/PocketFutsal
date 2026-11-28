@@ -76,7 +76,16 @@ uint16_t fs_switches;
 #define FS_FOOT_Y (5*16)  // ... and in depth
 #define FS_DOWN 36        // ticks on the floor, tackled
 #define FS_TACKLE_RANGE (18*16)  // an AI presser slides in from this near the ball
-#define FS_CARRY_SPEED 19  // SUB a tick with the ball (24 without): a defender gets back, as in Strikers (22 before)
+#define FS_CARRY_SPEED 19  // SUB a tick with the ball for the AI (24 without): a defender gets back
+#define FS_YOU_CARRY 22    // yours: a red closes on you, but not in a moment
+// Against you the reds aren't instant: the kickoff's defenders stand off FS_KICKOFF_HOLD
+// ticks, and a red in range slides on 1 tick in FS_REACT (a beat to see it, pass or dodge).
+// A slide that misses leaves the slider on the floor FS_MISS_DOWN ticks.
+#define FS_KICKOFF_HOLD 60
+#define FS_REACT 7
+#define FS_MISS_DOWN 20
+uint8_t fs_hold_off;       // kickoff: ticks before the defending side may slide
+uint8_t fs_slide_hit;      // a bit per player: its slide won the ball
 #define FS_TACKLE_COOL 40  // ticks before a slide again (65 before: a miss left the attack a second)
 // Strikers' shooting: hold A to charge (slowed, open to a tackle), release to shoot.
 // The charge sets its pace (64 SUB a tick at none to 128 full, on fire) and, under
@@ -208,7 +217,7 @@ static void kickoff(uint8_t side) {
     // every restart. Stagger perception evenly, with a seeded phase per kickoff.
     fs_kickoff_phase=rand()&7;
     fs_presser[0]=0;fs_presser[1]=2;
-    fs_ctrl=0;fs_defending=side;
+    fs_ctrl=0;fs_defending=side;fs_hold_off=FS_KICKOFF_HOLD;fs_slide_hit=0;
     fs_shot_charge=fs_shot_power=fs_chain=0;fs_chain_team=side;
     fs_cut_dir=0;fs_cut_window=fs_cut_count=fs_cut_cooldown=fs_stumble_timer=0;
     fs_stumble_player=NOBODY;
@@ -389,7 +398,7 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
     x=fs_pl_x[i];y=fs_pl_y[i];dx=tx-x;dy=ty-y;
     vx=fs_vx[i];vy=fs_vy[i];want_x=want_y=0;
     slide=fs_tackling[i];burst=fs_burst[i];
-    speed=fs_owner==i?FS_CARRY_SPEED:24;if(burst)speed=44;
+    speed=fs_owner==i?(HUMAN(i)?FS_YOU_CARRY:FS_CARRY_SPEED):24;if(burst)speed=44;
     if(HUMAN(i)&&(fs_pass_charge||fs_shot_charge))speed=12;
     if(slide>14||(slide&&slide<=4))speed=8;
     if((dx>12||dx<-12)&&(dy>12||dy<-12))speed-=speed>>2;
@@ -417,7 +426,7 @@ static void step_player(uint8_t i,int16_t tx,int16_t ty){
             v=fs_owner;fs_down[v]=fs_action[v]=FS_DOWN;fs_vx[v]=fs_vy[v]=0;fs_tackling[v]=fs_aerial[v]=0;
             fs_owner=NOBODY;fs_held_ticks=0;fs_receiver=NOBODY;fs_last_kicker=v;fs_pickup_lock=FS_DOWN;
             fs_ball_vx=fs_slide_vx[i]>>1;fs_ball_vy=fs_slide_vy[i]>>1;fs_ball_z=0;fs_ball_vz=10;fs_ball_fall=0;
-            fs_tackle_count++;sfx_play(SFX_TOUCH);
+            fs_tackle_count++;fs_slide_hit|=1<<i;sfx_play(SFX_TOUCH);
         }
     }
     fs_moving[i]=vx||vy;
@@ -481,8 +490,8 @@ think:
     }
     // The presser goes in as soon as the carrier's in range, between its decisions
     // too (they come every 8 ticks or so: a carrier runs 11 px between them).
-    if(fs_owner!=NOBODY&&team(fs_owner)!=team(i)&&fs_presser[team(i)]==i&&!fs_cooldown[i]&&!fs_tackling[i]
-       &&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<FS_TACKLE_RANGE){tackle(i);step_player(i,fs_ball_x,fs_ball_y);return;}
+    if(fs_owner!=NOBODY&&team(fs_owner)!=team(i)&&fs_presser[team(i)]==i&&!fs_cooldown[i]&&!fs_tackling[i]&&!fs_hold_off
+       &&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<FS_TACKLE_RANGE&&(!HUMAN(fs_owner)||!(rand()&FS_REACT))){tackle(i);step_player(i,fs_ball_x,fs_ball_y);return;}
     if(fs_think[i]||fs_kicked||fs_thought){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_thought=1;
     fs_think[i]=7;
@@ -560,7 +569,7 @@ think:
             tx=fs_ball_x+fs_ball_vx*6;ty=fs_ball_y+fs_ball_vy*6;
             if(tx<16*16)tx=16*16;else if(tx>144*16)tx=144*16;
             if(ty<12*16)ty=12*16;else if(ty>212*16)ty=212*16;
-            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<16*16)tackle(i);
+            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&!fs_hold_off&&!HUMAN(fs_owner)&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<16*16)tackle(i);
         }
     }
     fs_ai_tx[i]=tx;fs_ai_ty[i]=ty;
@@ -747,6 +756,7 @@ void futsal_update(void) BANKED {
     // Who you play this tick, fixed for it: a switch mid-tick (a pass, B) plays
     // from the next, or the new one would take the same press again.
     human=fs_spectator?NOBODY:fs_ctrl;
+    if(fs_hold_off&&(fs_owner==NOBODY||!--fs_hold_off))fs_hold_off=0;  // (a loose ball: over)
     // A run of passes is the side's that has it: the other side winning it ends it.
     if(fs_owner!=NOBODY&&team(fs_owner)!=fs_chain_team){fs_chain=0;fs_chain_team=team(fs_owner);}
     // Alternate team order: the last team to update must not always win a
@@ -754,7 +764,11 @@ void futsal_update(void) BANKED {
     for(k=0;k<4;k++) {
         i=k^(fs_sim_ticks&2);
         fs_moving[i]=0;
-        if(fs_tackling[i]) fs_tackling[i]--;
+        if(fs_tackling[i]&&!--fs_tackling[i]){
+            // Missed: down on the floor a moment (a won slide gets straight up).
+            if(!(fs_slide_hit&(1<<i)))fs_down[i]=fs_action[i]=FS_MISS_DOWN;
+            fs_slide_hit&=~(1<<i);
+        }
         if(fs_cooldown[i]) fs_cooldown[i]--; if(fs_action[i]) fs_action[i]--; if(fs_burst[i]) fs_burst[i]--; if(fs_dodge[i]) fs_dodge[i]--;
         if(fs_aerial[i]){aerial_update(i);continue;}
         if(fs_down[i]){fs_down[i]--;step_player(i,fs_pl_x[i],fs_pl_y[i]);continue;}
