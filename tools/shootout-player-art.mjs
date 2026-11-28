@@ -14,3 +14,4 @@ export const KEEPER_TILES=[...KEEPER.low,...KEEPER.high].flatMap(f=>{
 });
 export const KEEPER_MASKS=[...KEEPER.low,...KEEPER.high].map(f=>f.spriteColumns8x16.reduce((m,c)=>m|(1<<((c.x/8)*2+c.y/16)),0));
 export const SHOOTOUT_REACTIONS=[...REACTIONS.win,...REACTIONS.loss].flatMap(f=>[0,8].flatMap(x=>[cut(f.rows,x,0),cut(f.rows,x,8),empty,cut(f.rows,x,16)]));
+

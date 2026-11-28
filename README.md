@@ -27,8 +27,8 @@ read passes and react without changing the physical relationships or AI tactics.
 These are pace settings, independent of future AI skill tiers. Quick A/B taps
 and their aim are buffered across held simulation frames; pause stays immediate.
 
-Futsal is an arcade prototype: two outfield players per team, no dedicated
-goalkeepers, first to five goals. The court has goals at both baselines and
+Futsal is an arcade prototype: two outfield players per team, no goalkeepers
+(futsal has none here), first to five goals. The court has goals at both baselines and
 rebounding walls outside the goal mouths. Both ends now use the same 40x24
 dimensional portable-goal artwork and matching collision dimensions. Posts and the crossbar
 rebound the ball and knock the goal out of position. A short FRAME! stoppage
@@ -38,12 +38,14 @@ the ball, players, shadows and effects cannot push their net/frame out of the
 Game Boy's ten-sprites-per-scanline list. Their collision and displacement
 remain separate from the renderer.
 
-A stadium stand and centered scoreboard sit behind the far goal. The board is
-part of the scrolling background and uses the original Pocket Sports numerals
-in muted gold. Each score changes through a queued six-tile update; the main
-score/control strip stays separate. The extra 32 pixels of stadium headroom
-leave court physics unchanged. Sources are `tools/stadium-art.mjs` and
-`artwork/scoreboard/v3`.
+The court is seen from a fixed three-quarter view (2026-11-27): no vanishing
+point, every row the same width, depth at a constant 6/7. It fills a 20x32-tile
+map (160x256 px, both goals on it) and the camera follows the ball the length of
+it, a little ahead of whoever has it. Play keeps its court units (x 8..152, depth
+0..224), so only the drawing changed. The art is drawn in code in
+`tools/futsal-court-art.mjs`; `tools/goal-background.mjs` composites the goals
+onto it. The stadium stand and scoreboard behind the far goal (`tools/stadium-art.mjs`,
+`artwork/scoreboard/v3`) went with the old view: the score is in the bottom row.
 
 The lob landing ring reserves the first two sprite slots so its complete
 outline survives crowded scanlines. Players and the ball retain their depth
@@ -62,48 +64,43 @@ landing so an unreceived pass does not keep rolling into a distant goal.
 The active goal artwork is in `artwork/goals/v3`: the approved generated study
 reduced to native pixels, with a sparse recessed net and roof/side depth.
 
-WATCH runs four AI players; PLAY gives
-you fixed control of blue #1 (the overhead marker). SELECT toggles Watch/Play
+WATCH runs four AI players; PLAY gives you the blues. SELECT toggles Watch/Play
 in a futsal match; START pauses.
 
-With possession, A shoots; tap B for a quick pass, or hold B for at least
-12 simulation ticks (about 0.27 seconds on Casual, 0.2 on Expert) and release
-for a high lob. Holding a lob slows the carrier
-and flashes their crouch when ready. Without possession, A slide tackles and
-B bursts; both defensive actions have a cooldown. When your teammate carries,
-tap B for a quick return, or hold/release B to call a lob into your forward run.
-D-pad moves and left/right aims shots. AI positioning and
-match balance still need playtesting.
+**Controls, Mario Strikers' way (2026-11-27).** You play whichever blue has the
+ball, or the one a pass is going to (the overhead marker); as the reds win it or it
+runs loose from you, the nearer blue. The ball stays at the carrier's feet: only a
+tackle, a pass or a shot moves it.
+- With the ball: **hold A** to charge a shot (you slow down while you do: a tackle
+  can still get you), release to shoot. A tap is a snatched shot, slow and wide; a
+  full charge (two thirds of a second) is the fastest, on fire. Left/right aims at a
+  corner. **Tap B** to pass, **hold B** for a lob; with the d-pad, into space that
+  way. **A and B together**: a dodge, a burst no slide can stop.
+- Without it: **A** slides in (it puts the carrier down and pops the ball loose; a
+  miss leaves you on the floor a moment); **B** switches to the other blue.
+- A kickoff waits for its kick: you stand on the spot, and A or B plays it back to
+  your mate. The reds hold their places until then, and don't slide for a moment
+  after. The reds' kickoff, they play back the same way.
+- Each completed pass in a row adds charge to the next shot (two at most); the
+  reds winning the ball ends the run.
+- No keepers: what stops a shot is its aim and the defence. A snatched shot sprays
+  twice as wide, a part charge half as much again; a full one is true. A volley is
+  full only within 64 px of goal. With the ball you're slower than a defender (22
+  to 24; the AI's carriers 19), so they get back, and a red in range slides after a
+  beat, not at once. A carrier near goal finds the last defender out a
+  quarter of the way toward them, narrowing the angle; a shot short of full is
+  blocked within 11 px of a player (6 for a full one).
 
-The 2v2 gameplay pass adds acceleration, braking and momentum when reversing.
-A slide has a short crouch, then commits feet-first to its launch direction;
-it steals only when the foot reaches a low ball. Passes and shots travel on
-ballistic arcs, with a shadow marking their ground position. High deliveries
-clear ground tackles, and a receiver controls the ball as it descends.
-Ball flight uses the same vector launch and gravity model as Futnet: precise
-angles toward the target, quick low exchanges over short distances, and higher
-arcs on longer deliveries. Shots travel faster than passes. Bounces lose pace
-and height.
-Dribbling uses separate foot touches: the ball rolls ahead and slows under its
-own momentum between contacts. Stopping does not pull it back to the player.
-A hard cut can leave it exposed or loose, and opponents can intercept the ball
-without touching the carrier. Pass/shot inputs wait briefly for kicking reach;
-steer back onto the ball to play it. AI carriers also recover their next touch.
+D-pad moves. Passes and shots travel on ballistic arcs, with a shadow marking
+their ground position; high deliveries clear ground tackles, and a receiver
+controls the ball as it descends. Shots and passes use the same vector launch and
+gravity model as Futnet. Bounces lose pace and height.
 
 Teammates offer a wide diagonal outlet about 24 court pixels ahead, hold their
 lane through central dribbles, and continue their run after passing.
-Neutral B leads moving receivers; **D-pad + B** sends your teammate 24 court
-pixels into that direction to receive in space. Try a one-two: **B to pass, run
-into space, B to call for the return, then A to finish**. You can call while your
-first pass is still airborne: your teammate returns it on receiving. The call
-expires after 48 frames (80 for a lob) or when an opponent takes possession.
-**Crossover:** while dribbling, cut left-right-left (or right-left-right).
-Let your body actually change direction between cuts; two reversals within
-28 frames can wrong-foot a presser within 28 court pixels who is still moving
-into your feint. They skid, crouch, and recover over 22 frames, opening a pass
-or shot. Stationary button spam, a single cut, and distant or balanced defenders
-do not trigger it. A 90-frame cooldown prevents repeated stuns; the ball keeps
-its normal independent movement, so an uncontrolled cut can still lose it.
+**Crossover:** while dribbling, cut left-right-left (or right-left-right); two
+reversals within 28 frames can wrong-foot a presser within 28 court pixels who
+is still moving into your feint. A 90-frame cooldown prevents repeated stuns.
 
 Only one defender presses at a time. Their partner covers the other attacker
 from the goal side and keeps a separate lane when attackers bunch up. The press
@@ -121,10 +118,10 @@ A high lob marks its landing zone with a gold ellipse. Get into the zone; as
 the ball descends the ellipse pulses orange. Press A to jump for an aerial
 finish, with a bicycle kick when the delivery is behind you. The jump winds
 up before contact, keeps the ground shadow fixed and recovers afterward.
-It only shoots if the descending ball actually reaches you in the air.
-A recent defensive burst does not block this jump, so you can sprint into
-position. Try **tap B, run forward, hold/release B for the lob return, then A
-in the pulsing zone**. AI receivers can attempt aerial finishes too.
+It only shoots if the descending ball actually reaches you in the air (the
+ring pulses when a jump now would). Try a one-two: **tap B (you play the
+receiver), hold B to lob it back (you play the first blue again), run into the
+zone and A**. AI receivers can attempt aerial finishes too.
 
 Shot contact now uses the small hit burst from `artwork/BURST_VFX`: a brief
 flash for a normal shot, longer for an aerial finish. It stays at the contact
@@ -195,7 +192,7 @@ the title switch between one set and the best of three.
 | D-pad | Run (eight ways) in your half. Ready (from the press), or serving: it only aims |
 | A | Ready a **power shot**, straight. Serving: toss the ball up |
 | B | Ready a **curve**, bending in to the side you hold |
-| B, A / A, B in a quick roll | A **lob** over them / a **drop shot** just past halfway: the second button within a moment (12 frames) of the first; it stays one till it's struck |
+| A, B / B, A in a quick roll | A **lob** over them / a **drop shot** just past halfway: the second button within a moment (12 frames) of the first; it stays one till it's struck |
 | A flashing marker | A lob or pop-up coming to you: three tight rings round the spot, the light chasing in to it, quicker as it comes down (a drop shot: one small ring). Be there (queued, you're run there) and mash: with four presses you jump and bicycle-kick it, a **slam**, the fastest ball in the game (a lob floats down slowly to give you time). A for a red one (straight), B for blue (bending), both buttons for **gold** (faster; only a full meter meets it clean) |
 | Up at the net, mash | A ball of the CPU's coming over high (14 px up or more) while you're within 30 px of the net: four presses and you leap and bicycle-kick it down, a **smash**: at a slam's speed, steep and short, kicking up high off its bounce. Like gold, only a full meter meets it clean: the CPU fends it up for you to slam |
 | A or B again while ready | Tap for more power: the meter fills only as you press, and stays. The ball's speed follows it: a drive, then on fire (eight presses, a red trail), then a slam; you flash from half a meter |

@@ -4,6 +4,7 @@
 //   node harness/profile.mjs play     start a match and run about, shooting
 //   node harness/profile.mjs title    sit on the title screen
 //   node harness/profile.mjs busy     the frame budget test's match (tests/smoke.test.mjs)
+//   node harness/profile.mjs futsal   the 2v2 match, all four AI
 //   --top=N   functions listed per frame (7 by default)
 // Functions without an exported symbol (static C functions, asm local labels) are
 // counted under the nearest symbol before them.
@@ -28,6 +29,14 @@ const topN = Number((process.argv.find((a) => a.startsWith('--top=')) || '--top=
 step('', 30);
 let plan;
 if (scenario === 'title') plan = Array(300).fill('');
+else if (scenario === 'futsal') {
+  // The 2v2 match, Watch mode (all four AI), seed 19: tools/futsal-balance.mjs's third.
+  step('DOWN'); step('', 40);
+  const seed = Number((process.argv.find((a) => a.startsWith('--seed=')) || '--seed=19').slice(7));
+  emu.writeBytes(emu.symbols.addr('test_seed'), [seed & 255, seed >> 8]);
+  step('START'); step('', 60);
+  plan = Array(2400).fill('');
+}
 else if (scenario === 'busy') {
   step('START'); step('', 100);  // into play, and READY gone
   const pads = ['A', 'RIGHT', 'RIGHT+A', 'UP', 'LEFT+B', 'DOWN', ''];

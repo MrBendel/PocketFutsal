@@ -27,6 +27,8 @@ static uint16_t target_offset;
 static uint8_t target_bank;
 static const uint8_t *target_tiles;
 uint16_t fs_goal_uploads;
+// v/16 toward zero, by shifts (a signed division by a constant calls the routine).
+#define SIXTEENTH(v) ((v)<0?-((-(v))>>4):(v)>>4)
 void futsal_goals_reset(void) BANKED{
     fs_frame_timer=move_tick=move_amount=0;fs_goal_dx[0]=fs_goal_dx[1]=fs_goal_dy[0]=fs_goal_dy[1]=0;dirty=1;
 }
@@ -57,9 +59,13 @@ static void prepare_patch(uint8_t end,uint8_t pose,uint8_t base){
     banked_memcpy(patch_attrs,(end?futsal_goal_near_bg_attr:futsal_goal_far_bg_attr)+target_offset,GOAL_CELLS,target_bank);
     for(uint8_t i=0;i<GOAL_CELLS;i++)if((patch_attrs[i]&8)&&(patch_attrs[i]&7)>=4&&(patch_attrs[i]&7)<=6)patch_map[i]=base+patch_map[i]-end*GOAL_TILES;
 }
+// Queued for vblank (four strips, tiles and attributes): not waited on a tile at a time.
 static void commit_patch(uint8_t end){
-    VBK_REG=1;set_bkg_tiles(6,end?19:4,8,4,patch_attrs);
-    VBK_REG=0;set_bkg_tiles(6,end?19:4,8,4,patch_map);
+    uint8_t *t;
+    for(uint8_t r=0;r<4;r++){
+        t=gfx_strip_attr(6,(end?25:0)+r,0,8);  // tools/goal-background.mjs PATCH_Y
+        memcpy(t,patch_map+(r<<3),8);memcpy(t+STRIP_MAX_LEN,patch_attrs+(r<<3),8);
+    }
     fs_goal_uploads++;
 }
 void futsal_goals_draw(uint8_t cam) BANKED{
@@ -93,10 +99,16 @@ uint8_t futsal_goals_contact(int16_t old_x,int16_t old_y,int16_t old_z) BANKED{
     static int16_t plane,t,x,z;
     static uint8_t post,bar;
     fs_frame_goal=fs_ball_y<0?0:1;plane=fs_frame_goal?224*16:0;
-    t=fs_ball_y==old_y?16:((plane-old_y)*16)/(fs_ball_y-old_y);
-    if(t<0)t=0;else if(t>16)t=16;
-    x=old_x+((fs_ball_x-old_x)*t)/16;
-    z=old_z+((fs_ball_z-old_z)*t)/16;
+    // The sixteenths of this tick's step taken by the plane: at most 16 subtractions,
+    // not a division (this frame ran past the budget). Then x and z there.
+    {
+        uint16_t num=(uint16_t)(plane>old_y?plane-old_y:old_y-plane)<<4;
+        uint16_t den=(uint16_t)(fs_ball_y>old_y?fs_ball_y-old_y:old_y-fs_ball_y);
+        if(!den)t=16;
+        else for(t=0;t<16&&num>=den;t++)num-=den;
+    }
+    x=old_x+SIXTEENTH((fs_ball_x-old_x)*t);
+    z=old_z+SIXTEENTH((fs_ball_z-old_z)*t);
     post=z<=17*16&&((x>=(FS_GOAL_LEFT-3)*16&&x<=(FS_GOAL_LEFT+3)*16)||(x>=(FS_GOAL_RIGHT-3)*16&&x<=(FS_GOAL_RIGHT+3)*16));
     bar=x>=FS_GOAL_LEFT*16&&x<=FS_GOAL_RIGHT*16&&z>=11*16&&z<=17*16;
     if(post||bar){

@@ -1,4 +1,7 @@
-// SHOOTOUT (src/mg_shootout.c): its background and its own sprite tiles.
+// SHOOTOUT (src/mg_shootout.c): legacy background source and live sprite tiles.
+// The active arena is artwork/shootout/background/native-v2/arena.json,
+// registered by tools/assets.mjs with matching palettes and geometry. This BG
+// remains the scoreboard source for regenerating the native arena studies.
 //
 // BG:  20 x 18 tiles, the camera behind the penalty spot facing a futsal goal.
 //      Top to bottom: the kick scoreboard (rows 0-1, palette 4), the crowd (rows

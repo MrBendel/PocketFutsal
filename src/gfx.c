@@ -200,6 +200,15 @@ void win_text(uint8_t x, uint8_t y, const char *s) {
     while (*s) set_win_tile_xy(x++, y, glyph(*s++));
 }
 
+// The same, queued for vblank (gfx_vram_copy) instead of waiting on the display a
+// tile at a time: for a busy scene. Two buffers: two lines can be queued a frame.
+static uint8_t win_buf[2][20], win_buf_i;
+void win_text_queued(uint8_t x, uint8_t y, const char *s) {
+    uint8_t *b = win_buf[win_buf_i ^= 1], n = 0;
+    while (s[n] && n < 20) { b[n] = glyph(s[n]); n++; }
+    gfx_vram_copy((uint8_t *)(0x9C00 + ((uint16_t)y << 5) + x), b, n, 0);
+}
+
 void banked_memcpy(void *dst, const void *src, uint16_t n, uint8_t bank) {
     uint8_t saved = CURRENT_BANK;
     SWITCH_ROM(bank);

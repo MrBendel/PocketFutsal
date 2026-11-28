@@ -2,6 +2,7 @@
 // goalkeeping dives/timing/tell, stat scaling, full shootout completion,
 // sudden death, frame budget, and golden screens.
 import { test } from 'node:test';
+import fs from 'node:fs';
 import { assert, matchGolden, FRAME_LIMIT, set16 } from './helpers.mjs';
 import { openGame, phaseSettled, startMinigame, goLive, toResults, MG, MG_PH, MG_RUN, STAT } from './mg_helpers.mjs';
 
@@ -10,6 +11,8 @@ const P = { INTRO: 0, AIM: 1, POWER: 2, RUNUP: 3, CPURUN: 4, FLIGHT: 5, RESULT: 
 const KICK = { YOU: 0, CPU: 1 };
 const R = { NONE: 0, GOAL: 1, SAVED: 2, OVER: 3, WIDE: 4 };
 const MARK = { NONE: 0, GOAL: 1, MISS: 2 };
+const arena=JSON.parse(fs.readFileSync(new URL('../artwork/shootout/background/native-v2/arena.json',import.meta.url)));
+const keeperArt=JSON.parse(fs.readFileSync(new URL('../artwork/players/keeper-dive/study-v1/native-32x24.json',import.meta.url)));
 
 function liveShootout(seed = 4242) {
   return goLive(startMinigame(MG.SHOOTOUT, seed));
@@ -310,7 +313,15 @@ test('shootout: low/high keeper dives play every new pose, mirror, recover and r
       e.idle(1);
       const pose=e.v('mg_shootout_keeper_anim');
       if(pose!==255) {
-        if(pose-row*8===4&&!seen.has(4))e.shot(row?'shootout-high-extended':'shootout-low-extended');
+        if(pose-row*8===4&&!seen.has(4)){
+          e.shot(row?'shootout-high-extended':'shootout-low-extended');
+          const reach=keeperArt[row?'high':'low'][4].reach,sourceCol=reach.x>>3;
+          const column=col===0?3-sourceCol:sourceCol,n=6+column*2+(reach.y>=16?1:0);
+          const handX=e.read8(oam+n*4+1)-8+(col===0?7-(reach.x&7):reach.x&7);
+          const handY=e.read8(oam+n*4)-16+(reach.y>=16?8+reach.y-16:reach.y);
+          assert.equal(handX,arena.geometry.targets.x[col],'full-extension hand meets the shot column');
+          assert.equal(handY,arena.geometry.targets.y[row],'full-extension hand meets the new target height');
+        }
         seen.add(pose-row*8);
         const visible=Array.from({length:8},(_,i)=>6+i).filter(n=>e.read8(oam+n*4));
         assert.ok(visible.length>=4&&visible.length<=7,'only occupied keeper columns use OAM');
@@ -330,6 +341,27 @@ test('shootout: low/high keeper dives play every new pose, mirror, recover and r
       }
     }
     assert.deepEqual([...seen].sort(),[0,1,2,3,4,5,6,7]);
+  }
+});
+
+test('shootout arena: native palettes, aim reticle and ball endpoint agree with the new goal',()=>{
+  assert.ok(arena.tiles.length<=176,'scene tile budget');
+  assert.equal(arena.palettes.length,6,'UI palettes remain reserved');
+  for(const row of [0,1]){
+    const e=liveShootout(4242);untilPhase(e,P.AIM);
+    const paletteBase=e.symbols.addr('pal_base_bg');
+    arena.palettes.flat().forEach(([r,g,b],i)=>{
+      assert.equal(e.read8(paletteBase+i*2)|(e.read8(paletteBase+i*2+1)<<8),(r>>3)|((g>>3)<<5)|((b>>3)<<10),'runtime uses the exported arena palette');
+    });
+    e.tap('RIGHT');if(row)e.tap('UP');e.tap('A').idle(2);
+    const aim=e.symbols.addr('shadow_OAM')+14*4;
+    assert.equal(e.read8(aim+1)-8+4,arena.geometry.targets.x[2]);
+    assert.equal(e.read8(aim)-16+8,arena.geometry.targets.y[row]);
+    e.until(x=>x.v('mg_shootout_power')>=50,120,'sweet spot');e.tap('A');
+    untilPhase(e,P.FLIGHT,40);e.write8(e.symbols.addr('mg_shootout_kguess'),0);
+    untilPhase(e,P.RESULT,80);assert.equal(e.v('mg_shootout_result'),R.GOAL);
+    assert.equal(e.v('mg_shootout_by','i16')>>4,arena.geometry.goal.line-4,'ball settles behind the front goal plane');
+    assert.equal(e.v('mg_shootout_bz','i16')>>4,arena.geometry.goal.line-arena.geometry.targets.y[row]);
   }
 });
 
