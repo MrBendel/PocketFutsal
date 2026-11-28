@@ -370,6 +370,23 @@ test('powering up, you are locked: the ball still in the CPU\'s half, the d-pad 
   assert.ok(at(emu, 'pl_x', YOU, 'i16') < x, 'B called it off: you run');
 });
 
+test('a spike past the CPU that reaches the back edge is your point, not left hanging there', () => {
+  // ("If I lob it over the CPU or spike it past them, it should be my point.")
+  const emu = served(startGame());
+  emu.write8(emu.symbols.addr('phase'), PHASE_RALLY);
+  emu.write8(emu.symbols.addr('last_touch'), YOU); emu.write8(emu.symbols.addr('holder'), CPU);
+  emu.write8(emu.symbols.addr('touches'), 0); emu.write8(emu.symbols.addr('ball_landings'), 0);
+  placePlayer(emu, YOU, 80, 150); placePlayer(emu, CPU, 80, 95);  // the CPU at the net
+  ballAt(emu, 80, 64, 2, 0, -40); set16(emu, 'ball_vz', -8);
+  emu.write8(emu.symbols.addr('ball_smash'), 1);  // smashed down: it kicks up high
+  const before = at(emu, 'score', YOU);
+  emu.until((e) => px(e.v('ball_y', 'i16')) <= -15 || e.v('goal_timer'), 90, 'it flying past');
+  emu.idle(1);
+  assert.equal(at(emu, 'score', YOU), before + 1, 'your point as it goes');
+  assert.equal(emu.v('point_reason'), POINT_BOUNCE);
+  assert.equal(at(emu, 'pl_shots', CPU), 0, 'the CPU never got to it');
+});
+
 test('A then B is a lob, dropping deep behind the CPU', () => {
   const emu = quietRally();
   placePlayer(emu, CPU, 24, 40);
@@ -869,7 +886,7 @@ test('the CPU plays: it returns your serve and can win a point', () => {
 
 test('running has Mario Tennis momentum: a ramp up, a long coast when let go, a skid turning round', () => {
   const emu = quietRally();
-  ballAt(emu, 140, 20, 0, 24, 12);  // far off, coming, high, and going out wide: no run home or to it
+  ballAt(emu, 140, 20, 0, 4, 12);  // far off, coming, high, and going out wide (slowly: not to the floor's edge, the point, meanwhile): no run home or to it
   set16(emu, 'ball_vz', 60);
   emu.idle(2);
   assert.equal(at(emu, 'meet_out', YOU), 1, 'landing out: you let it go');

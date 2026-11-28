@@ -1248,9 +1248,18 @@ static void ball_update(void) {
     }
     if (ball_power && ball_speed() < POWER_FADE) ball_power = 0;
     gfx_ball_step(ball_vx,ball_vy);
-    // The floor round the court ends somewhere: the ball stops at its edge.
-    if (PX(x) < OUT_X0 || PX(x) > OUT_X1) x = ball_x, ball_vx = 0, ball_curve_t = 0;
-    if (PX(y) < OUT_Y0 || PX(y) > OUT_Y1) y = ball_y, ball_vy = 0;
+    // The floor round the court ends somewhere: the ball stops at its edge. Reaching it
+    // in a rally, it's gone past: the point, as if it had come down there. (It used to
+    // hang at the edge as it fell, 16 px behind the baseline: a spike's high kick sat
+    // there for the CPU to run back to, "catching it on rebound".)
+    if (PX(x) < OUT_X0 || PX(x) > OUT_X1 || PX(y) < OUT_Y0 || PX(y) > OUT_Y1) {
+        if (PX(x) < OUT_X0 || PX(x) > OUT_X1) x = ball_x, ball_vx = 0, ball_curve_t = 0;
+        if (PX(y) < OUT_Y0 || PX(y) > OUT_Y1) y = ball_y, ball_vy = 0;
+        if (phase == PHASE_RALLY && !goal_timer && !ball_netted) {
+            if (ball_landings) point(holder ^ 1, POINT_BOUNCE);  // in, then past them
+            else point(last_touch ^ 1, POINT_OUT);              // out on the full
+        }
+    }
     ball_x = x;
     ball_y = y;
 }
