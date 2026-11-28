@@ -190,6 +190,22 @@ void fc_net_clear(void) {
 
 uint8_t fc_gold_speed = FC_GOLD_SPEED;  // a gold strike's speed (play.c's power slam sets it for a frame)
 
+// Rally heat (play.c): a drive's pace up by fc_heat 64ths (12 at most) once it's arced,
+// its flight shortened to match, 64 / (64 + heat) of it from a table: not arced again
+// (a second division: a busy rally's frame ran past the half-frame line). 0 for the
+// mini games.
+uint8_t fc_heat;
+static const uint8_t heat_t[13] = {256, 252, 248, 245, 241, 237, 234, 231, 228, 224, 221, 218, 216};  // 256 * 64 / (64 + heat)
+static void heat_up(void) {
+    uint8_t h = fc_heat > 12 ? 12 : fc_heat;
+    ball_vx += (ball_vx * (int16_t)h) >> 6;
+    ball_vy += (ball_vy * (int16_t)h) >> 6;
+    int16_t t = (int16_t)(((uint16_t)arc_t * heat_t[h]) >> 8);
+    if (t < 12) t = 12;
+    arc_t = t;
+    ball_vz = (3 * (t + 1)) >> 3;
+    if (ball_z > 0) ball_vz -= (int16_t)(((uint16_t)ball_z * inv_t[t > 103 ? 25 : t >> 2]) >> 9);
+}
 uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_t flags) {
     uint8_t aim = flags & 3;
     uint8_t scuff = (flags & FC_F_SCUFF) != 0;
@@ -218,6 +234,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         }
         fc_launch_vel(tx - bx, land - by, speed);
         fc_arc(land, !scuff);
+        if (fc_heat) heat_up();
     } else if (kind == SHOT_LOB || kind == SHOT_DROP) {
         int16_t dist = abs16(land - by);
         dist += min16(abs16(tx - bx), dist >> 1);
@@ -247,6 +264,7 @@ uint8_t fc_strike_ball(uint8_t i, uint8_t move, int16_t tx, int16_t land, uint8_
         ball_gold = kind == SHOT_GOLD;
         fc_launch_vel(tx - bx, land - by, speed);
         fc_arc(land, !scuff);
+        if (fc_heat && !slam && !ball_gold) heat_up();
     }
     sfx_play(ball_power ? SFX_POWER : SFX_KICK);
     // Trails mark the shots that earned them: on fire, a slam, gold, a curve charged past half.

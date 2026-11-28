@@ -14,15 +14,20 @@ static int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 
 // Where side i should meet the ball: its flight traced on (gravity, a bounce, a
 // lob sitting up, not the curve) to where it first lands, then 8 frames more,
-// rising off the bounce; or where it gets to i's baseline first. Landing out (and
+// rising off the bounce (12 frames, the landing found exactly in its step); or where it gets to i's baseline first. Landing out (and
 // not yet bounced in), i lets it go: meet_out[i]. 12 frames a step (gravity over 12
 // frames: vz down 9, z up 12 vz - 58), up to 16 steps; run by want_predict.
+// (Its scratch is static, not on the stack: SDCC kept every local there, each use an
+// ldhl sp; a frame's trace, one at a time, never re-entered.)
+static int16_t x, y, z, vz, vx4, vy4, line, x0, y0, z0;
+static uint8_t down, out, cross, landed, up;
 void predict(uint8_t i) BANKED {
-    int16_t x = ball_x, y = ball_y, z = ball_z, vz = ball_vz;
-    int16_t vx4 = (ball_vx << 3) + (ball_vx << 2), vy4 = (ball_vy << 3) + (ball_vy << 2);
-    int16_t line = pl_y[i];  // your depth: meet it here if you can
-    uint8_t down = ball_landings, out = 0, cross = 0;
-    uint8_t up = ball_lob || ball_pop;  // a lob or a pop-up: met at the slam spot instead
+    x = ball_x; y = ball_y; z = ball_z; vz = ball_vz;
+    vx4 = (ball_vx << 3) + (ball_vx << 2); vy4 = (ball_vy << 3) + (ball_vy << 2);
+    line = pl_y[i];  // your depth: meet it here if you can
+    down = ball_landings; out = cross = landed = 0;
+    x0 = x; y0 = y; z0 = z;
+    up = ball_lob || ball_pop;  // a lob or a pop-up: met at the slam spot instead
     meet_flight[i] = ball_flight;
     // Still in the air, coming: it flies straight until it lands, so where (and how
     // high) it crosses your line is exact, t = (line - y) / vy frames on. Low enough
@@ -37,7 +42,7 @@ void predict(uint8_t i) BANKED {
         }
     }
     for (uint8_t k = 0; k < 16 && !cross; k++) {
-        int16_t x0 = x, y0 = y, z0 = z;
+        x0 = x; y0 = y; z0 = z;
         x += vx4;
         y += vy4;
         // Crossing your line at a height you can play it (the step's middle):
@@ -63,25 +68,41 @@ void predict(uint8_t i) BANKED {
                 break;
             }
             if (z <= 0) {
-                z = 0;
-                vz = (-vz * 3) >> 2;
                 if (!down) {
-                    down = 1;
-                    if (!IN_COURT(PX(x), PX(y))) {
-                        out = 1;
-                        break;
-                    }
-                    if (ball_lob) vx4 >>= 2, vy4 >>= 2, vz = LOB_BOUNCE;
-                    else {
-                        if (vz < BOUNCE_MIN) vz = BOUNCE_MIN;
-                        vx4 -= vx4 >> 2;
-                        vy4 -= vy4 >> 2;
-                    }
+                    landed = 1;  // in this step: worked out below, out of the loop
+                    break;
                 }
+                vz = (-vz * 3) >> 2;
+                z = 0;
             }
         }
         if (down) break;  // a step (12 frames) past the bounce: rising off it
         if (i == SIDE_CPU ? y <= TO_SUB(COURT_FAR + 4) : y >= TO_SUB(COURT_NEAR - 4)) break;
+    }
+    if (landed) {
+        // Where in the step it lands, exactly (the step's share of the way down, in
+        // sixteenths, by halves: no division): the step's end was anywhere up to 12
+        // frames past it, by when the trace started, so the ring jumped about as it
+        // was traced again ("the spot seems to move around before I get to hit it").
+        // (Out of the loop: its locals in there spilled the loop's to the stack.)
+        int16_t d = z0 - z, rem = z0, dx = x - x0, dy = y - y0;
+        x = x0; y = y0;
+        if (z0 > 0) {
+            for (uint8_t k = 0; k < 4; k++) {
+                d >>= 1; dx >>= 1; dy >>= 1;
+                if (d <= rem) { rem -= d; x += dx; y += dy; }
+            }
+        }
+        if (!IN_COURT(PX(x), PX(y))) out = 1;
+        else {
+            // Then a step on (12 frames), rising off it at its bounce's pace: where a
+            // trace from the bounce itself puts it, so the spot holds as it bounces.
+            if (ball_lob) vx4 >>= 2, vy4 >>= 2;
+            else if (ball_drop) vx4 >>= 1, vy4 >>= 1;  // a drop shot's hop, at half pace
+            else vx4 -= vx4 >> 2, vy4 -= vy4 >> 2;
+            x += vx4;
+            y += vy4;
+        }
     }
     meet_out[i] = out;
     meet_slam[i] = cross && up;

@@ -253,7 +253,7 @@ void hud_update(uint8_t busy) BANKED {
     // frame after, hud_pending, not on the serve's set-up, a full frame already).
     if (!paused && !goal_timer && !hud_pending && (phase == PHASE_SERVE) != (hud_mode == HUD_BOX)) hud_draw();
     if (paused) return;
-    meter_events();
+    if (!busy) meter_events();  // (a strike's busy frame: its sound and pips a frame on)
     glow_update();
     // Your meter: four pips in your shadow (16 px, a 3 px pip and a gap each), shown a
     // moment when a strike adds to it (playtest: "we don't need the power meter to be

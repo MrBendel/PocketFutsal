@@ -635,16 +635,13 @@ static void strike(uint8_t i, uint8_t move) {
     } else if (move == MOVE_HEADER) frames = KICK_FRAMES + 4;
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
     fc_wide = pl_wide[i];  // Control: how sharp an angle it takes
+    // Rally heat: a drive (on fire or not) goes faster, a 64th a point (a fifth at most),
+    // in its launch, arced to land where it was aimed. (A curve, a lob, a drop shot:
+    // their arcs and bends are timed; left be: fc_strike_ball heats only drives.)
+    fc_heat = !special && !slam && !scuff && phase == PHASE_RALLY ? rally_heat : 0;
     move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
     fc_wide = 4;
-    // Rally heat: a drive (on fire or not) goes faster, a 64th a point (a fifth at most),
-    // arced again to land where it was aimed. (A curve, a lob, a drop shot: their
-    // arcs and bends are timed; left be.)
-    if (rally_heat && !special && !slam && !scuff && phase == PHASE_RALLY && !ball_curve && !ball_lob && !ball_drop) {
-        ball_vx += (ball_vx * (int16_t)rally_heat) >> 6;
-        ball_vy += (ball_vy * (int16_t)rally_heat) >> 6;
-        arc(land, 1);
-    }
+    fc_heat = 0;
     if (slam && smash && !special && !was_pop && !was_lob) {
         // Out of the air at the net: driven down onto where it's aimed, steep, but over
         // the net still. Gravity's 3/4 a frame.
@@ -1026,7 +1023,9 @@ static void want_predict(uint8_t i) {
         meet_slam[i] = meet_out[i] = 0;
         return;
     }
-    if (meet_flight[i] != ball_flight || ((f >> 1) & 7) == 0) {
+    // (Now and then again while it's still to land, or curving: once it's bounced, its
+    // flight is the bounce's trace, and tracing it from further on moved the spot.)
+    if (meet_flight[i] != ball_flight || (((f >> 1) & 7) == 0 && (!ball_landings || ball_curve_t))) {
         predict_frame = f;
         predict(i);
     }
