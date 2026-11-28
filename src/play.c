@@ -1197,7 +1197,7 @@ static void ball_update(void) {
     }
     // In the air: gravity, and a bounce as it lands: three quarters as high again.
     // The first bounce in a half always gets up a playable height (a futnet ball
-    // bounces over half a metre); a drop shot's only just; a lob sits up. A pop-up can only be
+    // bounces over half a metre); a drop shot's only just; a lob carries on back. A pop-up can only be
     // slammed before it lands.
     if (ball_z || ball_vz) {
         if (++ball_fall & 3) ball_vz--;  // gravity: 3/4 SUB a frame
@@ -1220,17 +1220,18 @@ static void ball_update(void) {
                 ball_vx >>= 1;
                 ball_vy >>= 1;
             } else if (ball_lob) {
-                // Backspin: it sits up where it lands, to be turned and reached.
+                // Over their head, it carries on back off its bounce (playtest: "for
+                // lobs and smash shots they should bounce further back"; it sat up,
+                // slowed to a quarter, for the CPU to turn and reach): a court's bounce.
                 ball_lob = 0;
                 if (up < LOB_BOUNCE) up = LOB_BOUNCE;
-                ball_vx >>= 2;
-                ball_vy >>= 2;
-            } else if (ball_smash == 1) {
-                // Smashed down at the net: it kicks up high, over the head of anyone near.
-                ball_smash = 2;
-                up = SMASH_BOUNCE;
                 ball_vx -= ball_vx >> 2;
                 ball_vy -= ball_vy >> 2;
+            } else if (ball_smash == 1) {
+                // Smashed down at the net: it kicks up high, over the head of anyone
+                // near, at its full pace on back (a quarter off, it was there to return).
+                ball_smash = 2;
+                up = SMASH_BOUNCE;
             } else {
                 if (first && up < BOUNCE_MIN) up = BOUNCE_MIN;
                 ball_vx -= ball_vx >> 2;  // the court takes a quarter of its pace

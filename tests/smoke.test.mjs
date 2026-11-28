@@ -574,15 +574,28 @@ test('bursts: an impact star off a slam and sparks where it lands, dust off a sl
   assert.equal(emu.v('vfx_kind'), VFX.SPARK);
 });
 
-test('a lob sits up where it lands: slowed to a quarter, and a high bounce to turn and reach', () => {
+test('a lob and a smash carry on back off their bounce: a lob over the CPU goes out behind it, your point', () => {
+  // (Playtest: "for lobs and smash shots they should bounce further back".)
   const emu = quietRally();
   incoming(emu, 80, 120, 20, 20);
   emu.write8(emu.symbols.addr('ball_lob'), 1);
   emu.until((e) => e.v('ball_landings') === 1, 120, 'it landing');
-  assert.ok(emu.v('ball_vy', 'i16') <= 5, `slowed: vy ${emu.v('ball_vy', 'i16')}`);
+  assert.ok(emu.v('ball_vy', 'i16') >= 14, `a court's bounce, three quarters of its pace: vy ${emu.v('ball_vy', 'i16')}`);
   let top = 0;
   for (let k = 0; k < 28; k++) top = Math.max(top, px(emu.idle(1).v('ball_z', 'i16')));
   assert.ok(top >= 12, `up ${top} px`);
+  // Your lob over the CPU at the net: it lands deep and goes on out behind it.
+  const over = served(startGame());
+  over.write8(over.symbols.addr('phase'), PHASE_RALLY);
+  over.write8(over.symbols.addr('last_touch'), YOU); over.write8(over.symbols.addr('holder'), CPU);
+  over.write8(over.symbols.addr('touches'), 0); over.write8(over.symbols.addr('ball_landings'), 0);
+  placePlayer(over, YOU, 80, 150); placePlayer(over, CPU, 80, 95);
+  ballAt(over, 80, 17, 1, 0, -16); set16(over, 'ball_vz', -8);
+  over.write8(over.symbols.addr('ball_lob'), 1);
+  const mine = at(over, 'score', YOU);
+  over.until((e) => e.v('goal_timer'), 90, 'the point');
+  assert.equal(at(over, 'score', YOU), mine + 1, 'yours');
+  assert.equal(at(over, 'pl_shots', CPU), 0, 'never reached');
 });
 
 test('B then A is a drop shot, just over the net and barely bouncing: unreached, your point', () => {

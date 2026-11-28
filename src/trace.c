@@ -5,7 +5,7 @@
 #include "game.h"
 #include "trace.h"
 
-extern uint8_t ball_flight, meet_flight[2], meet_slam[2];
+extern uint8_t ball_flight, meet_flight[2], meet_slam[2], ball_smash;
 extern int16_t ball_vx, ball_vy, ball_vz;
 
 static int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
@@ -97,9 +97,8 @@ void predict(uint8_t i) BANKED {
         else {
             // Then a step on (12 frames), rising off it at its bounce's pace: where a
             // trace from the bounce itself puts it, so the spot holds as it bounces.
-            if (ball_lob) vx4 >>= 2, vy4 >>= 2;
-            else if (ball_drop) vx4 >>= 1, vy4 >>= 1;  // a drop shot's hop, at half pace
-            else vx4 -= vx4 >> 2, vy4 -= vy4 >> 2;
+            if (ball_drop) vx4 >>= 1, vy4 >>= 1;  // a drop shot's hop, at half pace
+            else if (ball_smash != 1) vx4 -= vx4 >> 2, vy4 -= vy4 >> 2;  // (a smash keeps its pace)
             x += vx4;
             y += vy4;
         }

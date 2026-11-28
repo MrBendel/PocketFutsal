@@ -464,7 +464,7 @@ slammed (the Captain Tsubasa feel).
 - **Bounces** (2026-11-22, from the playtest: some returns died where they landed): a
   bounce keeps three quarters of its height and the court takes a quarter of its pace;
   the first bounce in a half always gets up 9 px (a futnet ball bounces over half a
-  metre), a drop shot's 6 px, and a **lob sits up**: slowed to a quarter, a 16 px bounce.
+  metre), a drop shot's 6 px, and a **lob carries on back**: a 16 px bounce at three quarters of its pace, and a smash keeps all of its (2026-11-27: "they should bounce further back"; a lob had sat up, slowed to a quarter, for the CPU to reach).
 - **The arc** (2026-11-21, after the first playtest: the ball went dead in play): every
   strike arcs, to come down at a depth set by its charge (deeper the more charged), so
   the ball is in the air with its shadow under it, and it's lifted to clear the net
