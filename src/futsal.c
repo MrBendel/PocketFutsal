@@ -78,13 +78,17 @@ uint16_t fs_switches;
 #define FS_TACKLE_RANGE (18*16)  // an AI presser slides in from this near the ball
 #define FS_CARRY_SPEED 19  // SUB a tick with the ball for the AI (24 without): a defender gets back
 #define FS_YOU_CARRY 22    // yours: a red closes on you, but not in a moment
-// Against you the reds aren't instant: the kickoff's defenders stand off FS_KICKOFF_HOLD
-// ticks, and a red in range slides on 1 tick in FS_REACT (a beat to see it, pass or dodge).
+// A kickoff waits for its kick: everyone holds their place, and the kicker, rooted at the
+// centre spot, can only play it back to the mate behind (A or B; the AI's after
+// FS_KICKOFF_AI ticks). Then play is on. Against you the reds aren't instant: a red in
+// range slides on 1 tick in FS_REACT (a beat to see it, pass or dodge).
 // A slide that misses leaves the slider on the floor FS_MISS_DOWN ticks.
-#define FS_KICKOFF_HOLD 60
+#define FS_KICKOFF_AI 30
 #define FS_REACT 7
 #define FS_MISS_DOWN 20
-uint8_t fs_hold_off;       // kickoff: ticks before the defending side may slide
+uint8_t fs_kickoff_wait;   // 1 from a kickoff until its kick
+uint8_t fs_kick_grace;     // then ticks before the other side may slide (they close meanwhile)
+#define FS_KICK_GRACE 40
 uint8_t fs_slide_hit;      // a bit per player: its slide won the ball
 #define FS_TACKLE_COOL 40  // ticks before a slide again (65 before: a miss left the attack a second)
 // Strikers' shooting: hold A to charge (slowed, open to a tackle), release to shoot.
@@ -204,9 +208,9 @@ static void kickoff(uint8_t side) {
     fs_power_trail=fs_trail_n=fs_trail_i=0;
     fs_receiver=NOBODY; fs_flight_left=fs_is_shot=0; fs_ball_z=16; fs_ball_vz=0;
     fs_owner=side*2; fs_pl_x[fs_owner]=80*16; fs_pl_y[fs_owner]=112*16;
-    // Start with a usable lateral outlet, not a teammate stranded deep behind.
-    fs_pl_x[fs_owner^1]=(side?44:116)*16;
-    fs_pl_y[fs_owner^1]=(side?96:128)*16;
+    // The mate behind, for the kick back.
+    fs_pl_x[fs_owner^1]=(side?64:96)*16;
+    fs_pl_y[fs_owner^1]=(side?84:140)*16;
     fs_ball_x=fs_pl_x[fs_owner]; fs_ball_y=fs_pl_y[fs_owner]; fs_ball_vx=fs_ball_vy=0;
     fs_held_ticks=0; fs_pickup_lock=0; fs_last_kicker=NOBODY;
     fs_return_call=0;
@@ -217,7 +221,7 @@ static void kickoff(uint8_t side) {
     // every restart. Stagger perception evenly, with a seeded phase per kickoff.
     fs_kickoff_phase=rand()&7;
     fs_presser[0]=0;fs_presser[1]=2;
-    fs_ctrl=0;fs_defending=side;fs_hold_off=FS_KICKOFF_HOLD;fs_slide_hit=0;
+    fs_ctrl=0;fs_defending=side;fs_kickoff_wait=1;fs_kick_grace=0;fs_slide_hit=0;
     fs_shot_charge=fs_shot_power=fs_chain=0;fs_chain_team=side;
     fs_cut_dir=0;fs_cut_window=fs_cut_count=fs_cut_cooldown=fs_stumble_timer=0;
     fs_stumble_player=NOBODY;
@@ -476,6 +480,10 @@ static void ai(uint8_t i){
         fs_ai_act=0;fs_thought=1;return;
     }
 think:
+    if(fs_kickoff_wait){
+        if(fs_owner==i&&fs_held_ticks>FS_KICKOFF_AI){fs_ai_act=2;fs_ai_who=i;}
+        step_player(i,fs_pl_x[i],fs_pl_y[i]);return;
+    }
 
     static uint8_t mate,own,side,mark,presser,defender;
     static int16_t goal,tx,ty,pressure,mate_space,d,forward;
@@ -490,7 +498,7 @@ think:
     }
     // The presser goes in as soon as the carrier's in range, between its decisions
     // too (they come every 8 ticks or so: a carrier runs 11 px between them).
-    if(fs_owner!=NOBODY&&team(fs_owner)!=team(i)&&fs_presser[team(i)]==i&&!fs_cooldown[i]&&!fs_tackling[i]&&!fs_hold_off
+    if(fs_owner!=NOBODY&&team(fs_owner)!=team(i)&&fs_presser[team(i)]==i&&!fs_cooldown[i]&&!fs_tackling[i]&&!fs_kick_grace
        &&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<FS_TACKLE_RANGE&&(!HUMAN(fs_owner)||!(rand()&FS_REACT))){tackle(i);step_player(i,fs_ball_x,fs_ball_y);return;}
     if(fs_think[i]||fs_kicked||fs_thought){if(fs_think[i])fs_think[i]--;step_player(i,fs_ai_tx[i],fs_ai_ty[i]);return;}
     fs_thought=1;
@@ -569,7 +577,7 @@ think:
             tx=fs_ball_x+fs_ball_vx*6;ty=fs_ball_y+fs_ball_vy*6;
             if(tx<16*16)tx=16*16;else if(tx>144*16)tx=144*16;
             if(ty<12*16)ty=12*16;else if(ty>212*16)ty=212*16;
-            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&!fs_hold_off&&!HUMAN(fs_owner)&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<16*16)tackle(i);
+            if(fs_owner!=NOBODY&&!fs_cooldown[i]&&!fs_kick_grace&&!HUMAN(fs_owner)&&fs_ball_z<=6*16&&distance(i,fs_ball_x,fs_ball_y)<16*16)tackle(i);
         }
     }
     fs_ai_tx[i]=tx;fs_ai_ty[i]=ty;
@@ -756,7 +764,8 @@ void futsal_update(void) BANKED {
     // Who you play this tick, fixed for it: a switch mid-tick (a pass, B) plays
     // from the next, or the new one would take the same press again.
     human=fs_spectator?NOBODY:fs_ctrl;
-    if(fs_hold_off&&(fs_owner==NOBODY||!--fs_hold_off))fs_hold_off=0;  // (a loose ball: over)
+    if(fs_kick_grace)fs_kick_grace--;
+    if(fs_kickoff_wait&&fs_owner==NOBODY){fs_kickoff_wait=0;fs_kick_grace=FS_KICK_GRACE;}  // the kick: play on
     // A run of passes is the side's that has it: the other side winning it ends it.
     if(fs_owner!=NOBODY&&team(fs_owner)!=fs_chain_team){fs_chain=0;fs_chain_team=team(fs_owner);}
     // Alternate team order: the last team to update must not always win a
@@ -780,6 +789,11 @@ void futsal_update(void) BANKED {
             fs_pressed=joy_pressed|fs_input_pending;
             fs_pressed_pad=fs_input_pending?fs_input_pad:joy;
             fs_input_pending=0;
+            if(fs_kickoff_wait){
+                if(fs_owner==i&&(fs_pressed&(J_A|J_B)))pass(i,0,0,0);
+                if(!fs_kicked)step_player(i,fs_pl_x[i],fs_pl_y[i]);
+                continue;
+            }
             crossover(dx);
             pass_input(dx,dy);
             if(fs_owner==i) {

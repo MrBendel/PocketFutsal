@@ -8,11 +8,14 @@ import {FUTSAL_COURT as FUTSAL_PITCH,courtTile as pitchTile,courtY} from '../too
 import {GOAL_H} from '../tools/goal-art.mjs';
 import {GOAL_BG,GOAL_TILES,goalPose,PATCH_Y,PATCH_W,PATCH_H} from '../tools/goal-background.mjs';
 const PLAY=3;
-function startGame(pace=2,seed=4242) {
+// (kicked: the opening kickoff's kick taken, play on; the tests of play start there.)
+function startGame(pace=2,seed=4242,kicked=true) {
  const e=bootToTitle(); e.tap('DOWN').idle(40); settle(e,0,'menu mode');
  e.write8(e.symbols.addr('fs_pace'),pace);
  e.writeBytes(e.symbols.addr('test_seed'),[seed&255,seed>>8]);
- return settle(e.tap('START'),PLAY,'futsal mode');
+ settle(e.tap('START'),PLAY,'futsal mode');
+ if(kicked)e.write8(e.symbols.addr('fs_kickoff_wait'),0);
+ return e;
 }
 const put=(e,n,v)=>e.write8(e.symbols.addr(n),v);
 test('each player animates the correct win or lose reaction after either team wins',()=>{
@@ -202,6 +205,27 @@ function setPlayer(e,i,x,y){
  e.write8(e.symbols.addr('fs_vx')+i,0);e.write8(e.symbols.addr('fs_vy')+i,0);
 }
 const FULL=40;  // frames of A held: a full charge
+test('a kickoff waits for its kick: everyone holds, and the kicker can only play it back',()=>{
+ const e=startGame(2,4242,false);put(e,'fs_spectator',0);
+ assert.equal(e.v('fs_kickoff_wait'),1);assert.equal(e.v('fs_owner'),0,'yours to kick');
+ const where=()=>[0,1,2,3].map(i=>[at(e,'fs_pl_x',i,'i16'),at(e,'fs_pl_y',i,'i16')].join());
+ const before=where();
+ e.hold('UP',90);
+ assert.deepEqual(where(),before,'no one moves, you included, and no red comes for it');
+ assert.equal(e.v('fs_owner'),0);assert.equal(e.v('fs_tackle_count','u16'),0);
+ e.tap('A');
+ assert.equal(e.v('fs_shot_count','u16'),0,'not a shot');assert.equal(e.v('fs_receiver'),1,'back to the mate');
+ assert.ok(e.v('fs_target_y','i16')>at(e,'fs_pl_y',0,'i16'),'backward');
+ assert.equal(e.v('fs_kickoff_wait'),0,'play on');assert.equal(e.v('fs_ctrl'),1,'you play the mate');
+ e.until(e=>e.v('fs_owner')!==255,60,'the kick back arriving');
+ assert.equal(e.v('fs_owner'),1);
+ // The reds' kickoff: the AI kicker plays it back after a moment.
+ const r=startGame(2,4242,false);put(r,'fs_spectator',0);put(r,'fs_owner',2);
+ r.idle(20);assert.equal(r.v('fs_kickoff_wait'),1,'it waits a moment');
+ r.until(r=>r.v('fs_kickoff_wait')===0,40,'the red kick back');
+ assert.equal(r.v('fs_receiver'),3);assert.equal(r.v('fs_shot_count','u16'),0);
+});
+
 function humanSpace(pace=2){
  const e=startGame(pace);put(e,'fs_spectator',0);put(e,'fs_owner',0);
  setPlayer(e,0,80,180);setPlayer(e,1,112,96);setPlayer(e,2,20,20);setPlayer(e,3,30,30);

@@ -55,12 +55,16 @@ did three things by context, hidden timings, and shots whose spread was luck.
   profiles a match (its names for code in futsal's banks aren't reliable).
 
 - **Easier against you** (first played by hand: "as soon as the game starts the AI
-  runs up, steals the ball and scores"): the kickoff's defenders stand off 60 ticks
-  (FS_KICKOFF_HOLD, over once the ball's loose); a red in range of your carrier slides
+  runs up, steals the ball and scores"): a kickoff waits for its kick, as in futsal:
+  everyone holds their place, and the kicker, rooted on the spot, can only play it back
+  to the mate behind (A or B; the AI's after 30 ticks); then the other side can't slide
+  for 40 ticks (FS_KICK_GRACE) while it closes. A red in range of your carrier slides
   on 1 tick in 8 (FS_REACT), not the first, a beat to pass or dodge; you carry at 22
   (the AI 19); and a slide that misses, either side's, leaves the slider down 20 ticks
   (FS_MISS_DOWN). The scripted human (build/scratch/fshuman.mjs, four seeds): 19-12
-  before, the ball lost 17 ticks after winning it (median); 20-3 after, held 37.
+  before, the ball lost 17 ticks after winning it (median); 20-3 with a 60-tick
+  stand-off at kickoffs instead; 20-11 with the kick back (more of the ball to the reds:
+  they kick off as often, and keep it), held 35.
 
 Not done: the stadium and scoreboard behind the far goal went with the old view.
 

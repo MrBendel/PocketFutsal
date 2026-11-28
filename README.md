@@ -76,14 +76,18 @@ tackle, a pass or a shot moves it.
   full charge (two thirds of a second) is the fastest, on fire. Left/right aims at a
   corner. **Tap B** to pass, **hold B** for a lob; with the d-pad, into space that
   way. **A and B together**: a dodge, a burst no slide can stop.
-- Without it: **A** slides in (it puts the carrier down and pops the ball loose);
-  **B** switches to the other blue.
+- Without it: **A** slides in (it puts the carrier down and pops the ball loose; a
+  miss leaves you on the floor a moment); **B** switches to the other blue.
+- A kickoff waits for its kick: you stand on the spot, and A or B plays it back to
+  your mate. The reds hold their places until then, and don't slide for a moment
+  after. The reds' kickoff, they play back the same way.
 - Each completed pass in a row adds charge to the next shot (two at most); the
   reds winning the ball ends the run.
 - No keepers: what stops a shot is its aim and the defence. A snatched shot sprays
   twice as wide, a part charge half as much again; a full one is true. A volley is
-  full only within 64 px of goal. With the ball you're slower than a defender (19
-  to 24), so they get back. A carrier near goal finds the last defender out a
+  full only within 64 px of goal. With the ball you're slower than a defender (22
+  to 24; the AI's carriers 19), so they get back, and a red in range slides after a
+  beat, not at once. A carrier near goal finds the last defender out a
   quarter of the way toward them, narrowing the angle; a shot short of full is
   blocked within 11 px of a player (6 for a full one).
 
