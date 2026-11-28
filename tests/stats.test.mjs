@@ -106,3 +106,33 @@ test('Control takes your aim to the line: at 8, from mid-court, a drive lands on
   assert.ok(mid - 8 >= 16, `Control 4: well inside the sideline (${mid - 8} px)`);
   assert.ok(top - 8 >= 0 && top - 8 <= 6, `Control 8: on the line, or nearly (${top - 8} px)`);
 });
+
+/** Your drive, two presses, at a ball coming, with Power `power` and the difficulty `pace`. */
+function driveWithPower(power, pace = 1) {
+  const emu = bootToTitle();
+  emu.writeBytes(emu.symbols.addr('pl_power_lv'), [power, 4]);
+  emu.write8(emu.symbols.addr('fn_pace'), pace);
+  served(startGame(emu));
+  emu.write8(emu.symbols.addr('cpu_idle'), 1);
+  emu.write8(emu.symbols.addr('phase'), PHASE_RALLY);
+  emu.write8(emu.symbols.addr('last_touch'), CPU);
+  emu.write8(emu.symbols.addr('holder'), YOU);
+  placePlayer(emu, CPU, 20, 20);
+  placePlayer(emu, YOU, 80, 190);
+  placeBall(emu, 80, 124);
+  set16(emu, 'ball_vy', 36);
+  emu.tap('A').tap('A');
+  emu.until((e) => at(e, 'pl_shots', YOU) > 0, 60, 'the strike');
+  return emu;
+}
+
+test('Power: a stronger player drives faster, landing sooner; the difficulty moves the CPU\'s two levels', () => {
+  const pace = (e) => Math.abs(e.v('ball_vx', 'i16')) + Math.abs(e.v('ball_vy', 'i16'));
+  const weak = driveWithPower(1), mid = driveWithPower(4), strong = driveWithPower(8);
+  assert.ok(pace(weak) < pace(mid) && pace(mid) < pace(strong), `${pace(weak)} < ${pace(mid)} < ${pace(strong)}`);
+  assert.ok(weak.v('arc_t', 'i16') > mid.v('arc_t', 'i16') && mid.v('arc_t', 'i16') > strong.v('arc_t', 'i16'), 'in the air longer, weaker');
+  assert.equal(at(mid, 'pl_pace', YOU, 'i8'), 0, 'the middle level: the old tuning');
+  assert.equal(at(mid, 'pl_pace', CPU, 'i8'), 0, 'Normal: the CPU at its own level');
+  assert.equal(at(driveWithPower(4, 0), 'pl_pace', CPU, 'i8'), -12, 'Casual: two levels down');
+  assert.equal(at(driveWithPower(4, 2), 'pl_pace', CPU, 'i8'), 8, 'Expert: two up');
+});

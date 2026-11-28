@@ -88,7 +88,7 @@ test('boots to the title screen and runs one loop per frame', () => {
   assert.ok(fc >= 59 && fc <= 61, `frame_count advanced ${fc} in 60 frames`);
 });
 
-test('the title waits for START; LEFT/RIGHT switch one set and the best of three, SELECT you or the AI', () => {
+test('the title waits for START; LEFT/RIGHT step the difficulty and one set or the best of three, SELECT you or the AI', () => {
   const emu = bootToTitle();
   assert.equal(emu.v('match_sets'), 1);
   emu.tap('RIGHT');
@@ -101,6 +101,17 @@ test('the title waits for START; LEFT/RIGHT switch one set and the best of three
   assert.equal(emu.v('match_sets'), 1, 'SELECT leaves the sets alone');
   emu.tap('SELECT');
   assert.equal(emu.v('you_ai'), 0);
+  // Futnet's option steps the difficulty too: Casual, Normal (the default), Expert,
+  // each one set then the best of three, wrapping.
+  assert.equal(emu.v('fn_pace'), 1);
+  emu.tap('RIGHT').tap('RIGHT');
+  assert.deepEqual([emu.v('fn_pace'), emu.v('match_sets')], [2, 1]);
+  emu.tap('RIGHT').tap('RIGHT');
+  assert.deepEqual([emu.v('fn_pace'), emu.v('match_sets')], [0, 1], 'wrapped to Casual');
+  emu.tap('LEFT');
+  assert.deepEqual([emu.v('fn_pace'), emu.v('match_sets')], [2, 2]);
+  emu.tap('LEFT').tap('LEFT').tap('LEFT');
+  assert.deepEqual([emu.v('fn_pace'), emu.v('match_sets')], [1, 1]);
   emu.hold('UP+B', 60).idle(5);
   assert.equal(emu.v('game_state'), TITLE);
 });

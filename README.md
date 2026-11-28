@@ -187,8 +187,9 @@ extracted on first build.
 You're blue, at the bottom; the CPU is red, at the top; a net between. Futnet singles:
 two touches a side and one bounce, anything but your hands. Get the ball over the net
 and in (a line is in); a second bounce on their side is your point. Into the net, out,
-or a third touch, and it's theirs. Sets are first to 11 by two (15 at most); LEFT/RIGHT on
-the title switch between one set and the best of three.
+or a third touch, and it's theirs. Sets are first to 11 by two (15 at most). LEFT/RIGHT on
+the title step through the difficulty (Casual, Normal, Expert: how hard the CPU hits, its
+Power) and one set or the best of three.
 
 | Button | What it does |
 |---|---|

@@ -190,17 +190,19 @@ void fc_net_clear(void) {
 
 uint8_t fc_gold_speed = FC_GOLD_SPEED;  // a gold strike's speed (play.c's power slam sets it for a frame)
 
-// Rally heat (play.c): a drive's pace up by fc_heat 64ths (12 at most) once it's arced,
-// its flight shortened to match, 64 / (64 + heat) of it from a table: not arced again
-// (a second division: a busy rally's frame ran past the half-frame line). 0 for the
-// mini games.
-uint8_t fc_heat;
-static const uint8_t heat_t[13] = {256, 252, 248, 245, 241, 237, 234, 231, 228, 224, 221, 218, 216};  // 256 * 64 / (64 + heat)
+// Rally heat and the striker's Power (play.c): a drive's pace up (or down, Power low)
+// by fc_heat 64ths (-18 to 28) once it's arced, its flight changed to match, 64 / (64 +
+// heat) of it from a table: not arced again (a second division: a busy rally's frame
+// ran past the half-frame line). 0 for the mini games.
+int8_t fc_heat;
+#define HEAT_MIN (-18)
+#define HEAT_MAX 28
+static const uint16_t heat_t[HEAT_MAX - HEAT_MIN + 1] = {356, 349, 341, 334, 328, 321, 315, 309, 303, 298, 293, 287, 282, 278, 273, 269, 264, 260, 256, 252, 248, 245, 241, 237, 234, 231, 228, 224, 221, 218, 216, 213, 210, 207, 205, 202, 200, 197, 195, 193, 191, 188, 186, 184, 182, 180, 178};  // 256 * 64 / (64 + heat)
 static void heat_up(void) {
-    uint8_t h = fc_heat > 12 ? 12 : fc_heat;
+    int8_t h = fc_heat < HEAT_MIN ? HEAT_MIN : fc_heat > HEAT_MAX ? HEAT_MAX : fc_heat;
     ball_vx += (ball_vx * (int16_t)h) >> 6;
     ball_vy += (ball_vy * (int16_t)h) >> 6;
-    int16_t t = (int16_t)(((uint16_t)arc_t * heat_t[h]) >> 8);
+    int16_t t = (int16_t)(((uint16_t)arc_t * heat_t[h - HEAT_MIN]) >> 8);  // (arc_t is 100 at most)
     if (t < 12) t = 12;
     arc_t = t;
     ball_vz = (3 * (t + 1)) >> 3;

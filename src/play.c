@@ -123,6 +123,16 @@ static const int8_t control_meet[8] = { 6, 4, 2, 0, -1, -2, -3, -4 }; // + FIRE_
 // a curve more; all of it at the top, landing within a few px of the line).
 static const uint8_t control_aim_in[8] = { 28, 24, 20, 16, 13, 9, 6, 3 };  // AIM_IN at the middle
 static const uint8_t control_wide[8] = { 4, 4, 4, 4, 5, 6, 7, 8 };          // fc_wide: 4 at the middle
+// Power (2026-11-28, after measuring Mario Tennis: its drives cross in about 66 frames
+// on Easy, ours 54): how fast a player's drives, headers and serves go, in 64ths up or
+// down (rally heat on top). The difficulty (fn_pace, the title's Futnet option) moves
+// the CPU's Power two levels: Casual's drives cross in about Mario Tennis's time,
+// Expert's an eighth faster than Normal (the old fixed tuning). Lobs, drop shots,
+// curves (their arcs and bends are timed), slams and gold aren't touched.
+uint8_t pl_power_lv[2] = { STAT_MID, STAT_MID };
+static const int8_t power_pace[8] = { -18, -12, -6, 0, 4, 8, 12, 16 };
+int8_t pl_pace[2];   // power_pace for each side, the CPU's moved by the difficulty
+uint8_t fn_pace = 1; // the difficulty: 0 Casual, 1 Normal, 2 Expert
 static const uint8_t control_true[8] = { 0, 0, 0, 0, 1, 2, 3, 4 };
 uint8_t pl_fire_meet[2];  // the charge that meets a ball on fire cleanly
 uint8_t pl_aim_in[2];     // px: how far inside the sidelines a strike can be aimed (control_aim_in)
@@ -636,9 +646,10 @@ static void strike(uint8_t i, uint8_t move) {
     else if (move == MOVE_BICYCLE) frames = BICYCLE_FRAMES;
     fc_wide = pl_wide[i];  // Control: how sharp an angle it takes
     // Rally heat: a drive (on fire or not) goes faster, a 64th a point (a fifth at most),
-    // in its launch, arced to land where it was aimed. (A curve, a lob, a drop shot:
-    // their arcs and bends are timed; left be: fc_strike_ball heats only drives.)
-    fc_heat = !special && !slam && !scuff && phase == PHASE_RALLY ? rally_heat : 0;
+    // in its launch, arced to land where it was aimed; and the striker's Power, serves
+    // too. (A curve, a lob, a drop shot: their arcs and bends are timed; left be:
+    // fc_strike_ball heats only drives.)
+    fc_heat = !special && !slam && !scuff ? (phase == PHASE_RALLY ? (int8_t)rally_heat : 0) + pl_pace[i] : 0;
     move = fc_strike_ball(i, move, aim_tx, land, FC_FLAGS(aim, scuff, slam, phase != PHASE_RALLY));
     fc_wide = 4;
     fc_heat = 0;
@@ -1289,6 +1300,10 @@ void play_enter(void) BANKED {
         pl_aim_in[i] = control_aim_in[c - 1];
         pl_wide[i] = control_wide[c - 1];
         pl_true[i] = control_true[c - 1];
+        int8_t p = (int8_t)pl_power_lv[i];
+        if (p < 1 || p > 8) p = STAT_MID;
+        if (i == SIDE_CPU) p += ((int8_t)fn_pace - 1) << 1;
+        pl_pace[i] = power_pace[p < 1 ? 0 : p > 8 ? 7 : p - 1];
         pl_accel[i] = ACCEL;
         pl_grip[i] = GRIP;
     }

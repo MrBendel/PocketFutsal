@@ -46,6 +46,12 @@ static void draw_cursor(void) {
     move_sprite(0, CURSOR_X + 8, ((ROW_MODES + game_mode) << 3) + 16);
 }
 
+// Futnet's option: the difficulty (the CPU's Power), then one set or the best of three.
+static const char *const fn_line[6] = {
+    "< CASUAL  1 SET >", "< CASUAL  3 SETS >", "< NORMAL  1 SET >",
+    "< NORMAL  3 SETS >", "< EXPERT  1 SET >", "< EXPERT  3 SETS >",
+};
+
 static void draw_length(void) {
     fill_bkg_rect(0, ROW_OPT, SCREEN_TW, 1, 0);
     if (game_mode == MODE_TRAINING) {
@@ -60,16 +66,21 @@ static void draw_length(void) {
          game_mode ? (fs_pace==0 ? (fs_spectator?"< CASUAL WATCH >":"< CASUAL PLAY >")
                     :fs_pace==1 ? (fs_spectator?"< NORMAL WATCH >":"< NORMAL PLAY >")
                     :(fs_spectator?"< EXPERT WATCH >":"< EXPERT PLAY >"))
-                   : (match_sets == 1 ? "< ONE SET TO 11 >" : "< BEST OF 3 SETS >"),
+                   : fn_line[fn_pace * 2 + (match_sets == 2)],
          title_opt_tile, TITLE_PAL_TEXT);
 }
 
-static void draw_hint(void) {
+// (Each line's text takes a few frames to draw: redraw only the one that changed.)
+static void draw_aux(void) {
     fill_bkg_rect(0, ROW_OPT+1, SCREEN_TW, 1, 0);
     if(game_mode==MODE_FUTSAL)
         draw(FONT_COMPACT,TEXT_CENTER,ROW_OPT+1,"SELECT: WATCH / PLAY",title_aux_tile,TITLE_PAL_HINT);
     else if(game_mode==MODE_FUTNET)
         draw(FONT_COMPACT,TEXT_CENTER,ROW_OPT+1,you_ai?"SELECT: AI PLAYS":"SELECT: YOU PLAY",title_aux_tile,TITLE_PAL_HINT);
+}
+
+static void draw_hint(void) {
+    draw_aux();
     fill_bkg_rect(0, ROW_HINT1, SCREEN_TW, 1, 0);
     draw(FONT_COMPACT, TEXT_CENTER, ROW_HINT1,
          game_mode == MODE_TRAINING ? "5 DRILLS TO LEVEL UP"
@@ -103,7 +114,7 @@ void title_enter(void) BANKED {
     t += draw(FONT_COMPACT, TEXT_CENTER, ROW_HINT2, "UP/DN MODE  L/R OPTION", t, TITLE_PAL_HINT);
     t += draw(FONT_COMPACT, 4, 17, "v0.3", t, TITLE_PAL_HINT);
     title_opt_tile = t;
-    t += 16;  // room for the longest option line
+    t += 20;  // room for the longest option line ("< EXPERT  3 SETS >")
     title_aux_tile=t;t+=12;
     title_hint_tile = t;
     draw_length();
@@ -130,10 +141,15 @@ void title_update(void) BANKED {
             else fs_pace=fs_pace<2?fs_pace+1:0;
         }
         else if (joy_pressed & J_SELECT) you_ai = !you_ai;  // Futnet: you or the AI play
-        else match_sets = match_sets == 1 ? 2 : 1;
+        else {  // Futnet: step through fn_line, wrapping
+            uint8_t k = fn_pace * 2 + (match_sets == 2);
+            k = joy_pressed & J_LEFT ? (k ? k - 1 : 5) : (k < 5 ? k + 1 : 0);
+            fn_pace = k >> 1;
+            match_sets = (k & 1) + 1;
+        }
         sfx_play(SFX_TOUCH);
-        draw_length();
-        draw_hint();
+        if (game_mode == MODE_FUTNET && (joy_pressed & J_SELECT)) draw_aux();
+        else draw_length();
     }
     if (joy_pressed & (J_START | J_A)) {
         // The frame START lands on seeds the match: different every time for a

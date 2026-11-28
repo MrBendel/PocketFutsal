@@ -105,7 +105,7 @@ the other side. Raising one stat costs another, through the physics where it can
 (a faster player coasts further and turns wider; a harder hit strays further; a
 bigger curve travels slower) and a shared budget of points.
 
-Each player's levels are `pl_speed_lv`, `pl_control_lv` (1-8, 4 the old fixed
+Each player's levels are `pl_speed_lv`, `pl_control_lv`, `pl_power_lv` (1-8, 4 the old fixed
 tuning; play.c, "the players' stats"), turned into numbers by tables as the match
 loads. So far:
 
@@ -118,6 +118,18 @@ loads. So far:
 | Control: aimed this far inside the sidelines (px) | 28 | 16 | 3 |
 | Control: the sharpest angle (across, eighths of the way down) | 4 | 4 | 8 |
 | Control: how true across it flies (quarters) | 0 | 0 | 4 |
+| Power: a drive's, header's or serve's pace (64ths, rally heat on top) | -18 | 0 | +16 |
+
+**Power and the difficulty** (2026-11-28). Measured against Mario Tennis (GBC, an
+exhibition on Easy): its drives cross in about 66 frames, hit to hit, nearly all deep;
+ours took 54, and its players reach about 70% of the court's width in a flight to our
+50%. Asked: "ball speed is one of those things that can scale with difficulty, it can be
+based on power". So Power is a player's pace, and Futnet's difficulty (`fn_pace`, on the
+title) moves the CPU's Power two levels: Casual's drives land in 54 frames on median,
+Normal's 46 (the old tuning), Expert's 42. Lobs, drop shots, curves (timed arcs and
+bends), slams and gold aren't scaled. The built-in AI against the CPU wins 29% on
+Casual, 24% Normal, 22% Expert (12 seeds): it reads every ball, so pace matters less
+to it than to a person.
 
 **Control to the lines** (2026-11-27, from the playtest: "the aim doesn't quite go
 edge to edge, and I think if you're a player that has maxed out control, you should

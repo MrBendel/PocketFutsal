@@ -51,7 +51,7 @@ extern uint8_t pl_combo[2];
 extern uint8_t pl_flash[2];
 extern uint8_t meet_slam[2];
 extern uint8_t ball_gold;
-extern uint8_t fc_heat;  // a drive's pace up by this many 64ths (rally heat), set round a strike
+extern int8_t fc_heat;  // a drive's pace up (or down) by this many 64ths (rally heat + Power), set round a strike
 extern uint8_t fc_gold_speed;
 extern uint8_t fc_wide;  // the widest a launch angles: eighths of its length (4; play.c's Control sets it for a strike)
 extern uint8_t ball_dropped;

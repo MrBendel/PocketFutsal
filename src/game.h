@@ -110,6 +110,7 @@ extern uint8_t serve_timer;   // counts down before the server may toss (READY)
 extern uint8_t goal_timer;    // a point's celebration counts down, then the serve
 extern uint8_t point_reason;  // POINT_*: how the last point was won
 extern uint8_t sets[2];       // sets won, by side
+extern uint8_t fn_pace;       // Futnet's difficulty, the CPU's Power: 0 Casual, 1 Normal, 2 Expert
 extern uint8_t match_sets;    // sets it takes to win the match: 1, or 2 (best of three)
 extern uint8_t holder;        // the side whose half the ball is in: its touches and bounces
 extern uint8_t touches;       // the holder's touches so far
