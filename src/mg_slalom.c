@@ -259,14 +259,12 @@ static void finish_vs(uint8_t you_won) {
 }
 
 // Compute step cadence (frames between steps) from current clean streak:
-// starts slow (24 frames/step, ~2.5 steps/s) and ramps sharply down to blazing
-// top speed (3 frames/step, ~20 steps/s; 2 with high REFLEX) over ~12 clean moves!
+// starts slow (24 frames/step, ~2.5 steps/s) and gradually accelerates by 1 frame
+// per consecutive clean move down to blazing top speed (3 frames/step; 2 with high REFLEX).
 static uint8_t pace_for_streak(uint8_t streak) {
-    uint8_t p = mg_slalom_pace_start;
-    uint8_t fast_steps = streak < 9 ? streak : 9;
-    uint8_t drop = (fast_steps << 1) + (streak > 9 ? (streak - 9) : 0);
-    if (drop >= p - mg_slalom_pace_min) return mg_slalom_pace_min;
-    return p - drop;
+    uint8_t span = mg_slalom_pace_start - mg_slalom_pace_min;
+    if (streak >= span) return mg_slalom_pace_min;
+    return mg_slalom_pace_start - streak;
 }
 
 // The turf's glide after a step: visibly slow on the first few strides,
@@ -442,7 +440,7 @@ static void cpu_step(void) {
         mg_slalom_hop[1] = 0;
     } else {
         if (cpu_streak < 255) cpu_streak++;
-        uint8_t cpace = cpu_streak < 7 ? (22 - (cpu_streak << 1)) : 8;
+        uint8_t cpace = cpu_streak < 14 ? (22 - cpu_streak) : 8;
         cpu_cd = cpace + ((uint8_t)rand() & 1);
         kick_ball(1, cpu_slide, cside ? VS_CPU_R : VS_CPU_L, cpace);
     }
@@ -588,7 +586,7 @@ static void draw_scene(void) {
         }
     }
 
-    draw_ball(0, PLAYER_Y, mg_slalom_streak >= 8 ? SPR_PAL_POWER : SPR_PAL_BALL);
+    draw_ball(0, PLAYER_Y, mg_slalom_streak >= 14 ? SPR_PAL_POWER : SPR_PAL_BALL);
 
     // YOU sprite (slots 2..5): canonical back-view poses during play, animated reaction at finish.
     if (mg_run == MG_RUN_OVER) {
@@ -630,7 +628,7 @@ static void draw_scene(void) {
         int16_t rel_steps = (int16_t)mg_slalom_cdist - (int16_t)mg_slalom_dist;
         int16_t cfeet = PLAYER_Y - rel_steps * STEP_PX - (int16_t)mg_slalom_slide + (int16_t)cpu_slide;
         if (cfeet >= 20 && cfeet <= 148) {
-            draw_ball(1, cfeet, cpu_streak >= 7 ? SPR_PAL_POWER : SPR_PAL_BALL);
+            draw_ball(1, cfeet, cpu_streak >= 12 ? SPR_PAL_POWER : SPR_PAL_BALL);
 
             if (mg_run == MG_RUN_OVER) {
                 draw_reaction(1, !mg_won, mg_slalom_cx, cfeet, SPR_PAL_CPU);
@@ -782,7 +780,7 @@ void mg_slalom_update(void) BANKED {
     scroll_y -= moved;
     ball_tick(0, moved, mg_slalom_dist > 0, mg_slalom_lane ? lane_r : lane_l);
     if (mg_vs) {
-        uint8_t cpace = cpu_streak < 7 ? (22 - (cpu_streak << 1)) : 8;
+        uint8_t cpace = cpu_streak < 14 ? (22 - cpu_streak) : 8;
         ball_tick(1, glide(&cpu_slide, cpace), mg_slalom_cdist > 0, mg_slalom_clane ? VS_CPU_R : VS_CPU_L);
     }
     if (mg_slalom_drib_anim) mg_slalom_drib_anim--;

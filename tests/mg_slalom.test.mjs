@@ -152,18 +152,19 @@ test('consecutive clean moves ramp up speed; hitting a cone resets momentum with
   assert.ok(startPace >= 20 && minPace <= 4,
     `wide speed range from slow start (${startPace}) to blazing top speed (${minPace})`);
 
-  // Clear 12 steps cleanly: each consecutive good move speeds you up all the way to top speed!
+  // Clear steps cleanly: each consecutive good move gradually speeds you up by 1 frame/step all the way to top speed!
   const rows = e.symbols.addr('mg_slalom_row');
-  for (let i = 0; i < 12; i++) {
+  const rampSteps = startPace - minPace;
+  for (let i = 0; i < rampSteps; i++) {
     while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
     e.write8(rows + 1, CONE_NONE);
     const prevPace = e.v('mg_slalom_pace');
     e.tap(i & 1 ? 'RIGHT' : 'LEFT');
     assert.equal(e.v('mg_slalom_streak'), i + 1);
-    assert.ok(e.v('mg_slalom_pace') <= prevPace, `clean move ${i + 1} did not slow down (${prevPace} -> ${e.v('mg_slalom_pace')})`);
+    assert.equal(e.v('mg_slalom_pace'), prevPace - 1, `clean move ${i + 1} sped up gradually by 1 (${prevPace} -> ${e.v('mg_slalom_pace')})`);
   }
   const fastPace = e.v('mg_slalom_pace');
-  assert.equal(fastPace, minPace, `reached full top speed after 12 clean moves (${startPace} -> ${fastPace})`);
+  assert.equal(fastPace, minPace, `reached full top speed after ${rampSteps} clean moves (${startPace} -> ${fastPace})`);
   assert.ok(startPace >= fastPace * 6, `top speed is at least 6x starting speed (${startPace} -> ${fastPace})`);
 
   // Now bonk a cone: resets streak and speed back to slow, stumbles, and adds ZERO time penalty!
