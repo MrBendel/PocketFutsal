@@ -117,7 +117,8 @@ test('the field glides down after a step and passed cones slide off the bottom i
   assert.equal(ys[ys.length - 1], y0 + 16, 'eased to a stop one step further down');
   assert.equal(e.v('mg_slalom_slide'), 0, 'the turf glide finished');
 
-  // Next step: it slides on under the HUD (row -2) rather than popping out.
+  // Next step: wait for step cadence, then it slides on under the HUD (row -2) rather than popping out.
+  while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
   e.tap('RIGHT');
   const back2 = 16 + 0;
   assert.ok(shown(e, back2), 'two rows back, the cone is still drawn as it slides away');
@@ -128,6 +129,7 @@ test('cone generator never places opposite-side cones on consecutive rows withou
     const e = liveSlalom(seed, false);
     let prev = CONE_NONE;
     for (let step = 0; step < 40; step++) {
+      while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
       const r1 = e.read8(e.symbols.addr('mg_slalom_row') + 1);
       if (prev !== CONE_NONE && r1 !== CONE_NONE) {
         assert.equal(r1, prev, `seed ${seed} step ${step}: opposite cones (${prev} -> ${r1}) without open crossover gap!`);
@@ -142,19 +144,39 @@ test('cone generator never places opposite-side cones on consecutive rows withou
   }
 });
 
-test('stepping into a cone bonks it, stumbles briefly, and adds time penalty (+2.0s in Solo)', () => {
+test('consecutive clean moves ramp up speed; hitting a cone resets momentum without adding time', () => {
   const e = liveSlalom(1337, false);
-  e.write8(e.symbols.addr('mg_slalom_streak'), 5);
-  e.write8(e.symbols.addr('mg_slalom_row') + 1, CONE_RIGHT);
+  const startPace = e.v('mg_slalom_pace_start');
+  const minPace = e.v('mg_slalom_pace_min');
+  assert.equal(e.v('mg_slalom_pace'), startPace, 'starts at slow pace');
+  assert.ok(startPace > minPace, `starting pace (${startPace}) is slower than top speed (${minPace})`);
+
+  // Clear 6 steps cleanly: each consecutive good move speeds you up (lower frame pace)!
+  const rows = e.symbols.addr('mg_slalom_row');
+  for (let i = 0; i < 6; i++) {
+    while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
+    e.write8(rows + 1, CONE_NONE);
+    const prevPace = e.v('mg_slalom_pace');
+    e.tap(i & 1 ? 'RIGHT' : 'LEFT');
+    assert.equal(e.v('mg_slalom_streak'), i + 1);
+    assert.ok(e.v('mg_slalom_pace') < prevPace, `clean move ${i + 1} sped up (${prevPace} -> ${e.v('mg_slalom_pace')})`);
+  }
+  const fastPace = e.v('mg_slalom_pace');
+  assert.ok(fastPace < startPace, `built speed after 6 clean moves (${startPace} -> ${fastPace})`);
+
+  // Now bonk a cone: resets streak and speed back to slow, stumbles, and adds ZERO time penalty!
+  while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
+  e.write8(rows + 1, CONE_RIGHT);
   const tBefore = e.v('mg_slalom_tenths', 'u16');
-  const pen = e.v('mg_slalom_pen_tenths');
-  assert.equal(pen, 20);
 
   e.tap('RIGHT');
   assert.equal(e.v('mg_slalom_hits'), 1);
-  assert.equal(e.v('mg_slalom_streak'), 0);
-  assert.ok(e.v('mg_slalom_stumble') > 0);
-  assert.ok(e.v('mg_slalom_tenths', 'u16') >= tBefore + pen);
+  assert.equal(e.v('mg_slalom_streak'), 0, 'cone hit resets streak to 0');
+  assert.equal(e.v('mg_slalom_pace'), startPace, 'cone hit resets speed back to starting slow pace');
+  assert.equal(e.v('mg_slalom_bv', 'i16'), 0, 'cone hit zeroes ball forward momentum');
+  assert.ok(e.v('mg_slalom_stumble') > 0, 'cone hit triggers brief stumble');
+  assert.ok(e.v('mg_slalom_tenths', 'u16') <= tBefore + 1,
+    `cone hit adds NO time penalty (before=${tBefore}, after=${e.v('mg_slalom_tenths', 'u16')})`);
 
   e.idle(2);
   matchGolden(e, 'slalom-hit');
@@ -163,8 +185,8 @@ test('stepping into a cone bonks it, stumbles briefly, and adds time penalty (+2
 test('Solo 40m medals (GOLD / SILVER / BRONZE) and 1v1 VS CPU head-to-head race', () => {
   // 1) Solo GOLD run
   const solo = liveSlalom(4242, false);
-  for (let f = 0; f < 600 && solo.v('mg_run') === MG_RUN.LIVE; f++) {
-    if (f % 3 === 0 && solo.v('mg_slalom_stumble') === 0) {
+  for (let f = 0; f < 800 && solo.v('mg_run') === MG_RUN.LIVE; f++) {
+    if (solo.v('mg_slalom_stumble') === 0 && solo.v('mg_slalom_step_cd') === 0) {
       const r1 = solo.read8(solo.symbols.addr('mg_slalom_row') + 1);
       solo.tap(r1 === CONE_LEFT ? 'RIGHT' : 'LEFT');
     } else {
@@ -192,13 +214,13 @@ test('Solo 40m medals (GOLD / SILVER / BRONZE) and 1v1 VS CPU head-to-head race'
   assert.equal(vs.v('mg_vs'), 1);
   assert.equal(vs.v('mg_slalom_px', 'i16'), 40, 'VS YOU starts on left track (x=40)');
   assert.equal(vs.v('mg_slalom_cx', 'i16'), 96, 'VS CPU starts on right track (x=96)');
-  vs.idle(20);  // let CPU take its first step so both racers are moving!
+  vs.idle(22);  // let CPU take its first step so both racers are moving!
   assert.ok(vs.v('mg_slalom_cdist') >= 1, 'CPU racer advances down right track');
   matchGolden(vs, 'slalom-vs-live');
 
   // Sprint YOU across 40m ahead of CPU -> 1ST place win!
-  for (let f = 0; f < 600 && vs.v('mg_run') === MG_RUN.LIVE; f++) {
-    if (f % 3 === 0 && vs.v('mg_slalom_stumble') === 0) {
+  for (let f = 0; f < 800 && vs.v('mg_run') === MG_RUN.LIVE; f++) {
+    if (vs.v('mg_slalom_stumble') === 0 && vs.v('mg_slalom_step_cd') === 0) {
       const r1 = vs.read8(vs.symbols.addr('mg_slalom_row') + 1);
       vs.tap(r1 === CONE_LEFT ? 'RIGHT' : 'LEFT');
     } else {
@@ -212,10 +234,10 @@ test('Solo 40m medals (GOLD / SILVER / BRONZE) and 1v1 VS CPU head-to-head race'
   assert.ok(vs.v('mg_xp', 'u16') > 30, 'earned race XP + win bonus');
 });
 
-test('REFLEX & CONTROL scale recovery/penalty and VS 2-track race fits well inside frame budget', () => {
+test('REFLEX & CONTROL scale speed/recovery and VS 2-track race fits well inside frame budget', () => {
   const low = liveSlalom(303, false);
-  const stum1 = low.v('mg_slalom_stumble_max');
-  const pen1 = low.v('mg_slalom_pen_tenths');
+  const startLow = low.v('mg_slalom_pace_start');
+  const minLow = low.v('mg_slalom_pace_min');
 
   const high = openGame(MG.SLALOM);
   high.write8(high.symbols.addr('stat_lv') + STAT.REFLEX, 16);
@@ -226,13 +248,14 @@ test('REFLEX & CONTROL scale recovery/penalty and VS 2-track race fits well insi
   goLive(high);
 
   assert.equal(high.v('mg_vs'), 1);
-  assert.ok(high.v('mg_slalom_pen_tenths') < pen1, 'CONTROL reduces Solo penalty');
+  assert.ok(high.v('mg_slalom_pace_start') < startLow, 'CONTROL speeds up starting pace');
+  assert.ok(high.v('mg_slalom_pace_min') < minLow, 'REFLEX raises top sprint speed');
   const lowVs = liveSlalom(303, true);
   assert.ok(high.v('mg_slalom_stumble_max') < lowVs.v('mg_slalom_stumble_max'), 'stats shorten VS stumble');
 
   let worst = 0;
   for (let f = 0; f < 180 && high.v('mg_run') === MG_RUN.LIVE; f++) {
-    if (f % 3 === 0 && high.v('mg_slalom_stumble') === 0) {
+    if (high.v('mg_slalom_stumble') === 0 && high.v('mg_slalom_step_cd') === 0) {
       const r1 = high.read8(high.symbols.addr('mg_slalom_row') + 1);
       high.hold(r1 === CONE_LEFT ? 'RIGHT' : 'LEFT', 1);
     } else {
