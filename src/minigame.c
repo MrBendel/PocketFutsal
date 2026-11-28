@@ -166,7 +166,8 @@ static void brief_enter(void) {
     n = cat(line, n, "    PLAYED ");
     num(line + n, mg_plays[mg_id]);
     t += text_draw(FONT_COMPACT, TEXT_CENTER, 13, line, t, TITLE_PAL_TEXT);
-    draw(FONT_COMPACT, TEXT_CENTER, 16, "A: START     B: BACK", t, TITLE_PAL_PROMPT);
+    draw(FONT_COMPACT, TEXT_CENTER, 16,
+         has_vs[mg_id] ? "L/R: MODE  A: GO  B: BACK" : "A: START     B: BACK", t, TITLE_PAL_PROMPT);
 }
 
 static void result_enter(void) {

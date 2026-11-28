@@ -755,7 +755,8 @@ void mg_slalom_enter(void) BANKED {
     scroll_y = 0;
 
     build_course(course_you);
-    if (mg_vs) build_course(course_cpu);
+    // In VS CPU race, both tracks use the exact same 40m cone course for a fair head-to-head!
+    if (mg_vs) memcpy(course_cpu, course_you, COURSE_LEN);
     sync_window();
 
     mg_player_hide(1);

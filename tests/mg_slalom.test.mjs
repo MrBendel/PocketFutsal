@@ -235,6 +235,13 @@ test('Solo 40m medals (GOLD / SILVER / BRONZE) and 1v1 VS CPU head-to-head race'
   assert.ok(readDetail(vs).startsWith('1ST! '), `expected 1ST! detail, got "${readDetail(vs)}"`);
   toResults(vs);
   assert.ok(vs.v('mg_xp', 'u16') > 30, 'earned race XP + win bonus');
+
+  // 4) If YOU stall in VS CPU race, CPU finishes 40m first -> 2ND place loss!
+  const vsLose = liveSlalom(4242, true);
+  for (let f = 0; f < 900 && vsLose.v('mg_run') === MG_RUN.LIVE; f++) vsLose.idle(1);
+  assert.equal(vsLose.v('mg_run'), MG_RUN.OVER, 'CPU finishes the 40m course');
+  assert.equal(vsLose.v('mg_won'), 0, 'CPU crossing 40m first gives 2nd place');
+  assert.ok(readDetail(vsLose).startsWith('2ND  '), `expected 2ND detail, got "${readDetail(vsLose)}"`);
 });
 
 test('REFLEX & CONTROL scale speed/recovery and VS 2-track race fits well inside frame budget', () => {
