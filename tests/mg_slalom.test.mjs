@@ -149,20 +149,22 @@ test('consecutive clean moves ramp up speed; hitting a cone resets momentum with
   const startPace = e.v('mg_slalom_pace_start');
   const minPace = e.v('mg_slalom_pace_min');
   assert.equal(e.v('mg_slalom_pace'), startPace, 'starts at slow pace');
-  assert.ok(startPace > minPace, `starting pace (${startPace}) is slower than top speed (${minPace})`);
+  assert.ok(startPace >= 20 && minPace <= 4,
+    `wide speed range from slow start (${startPace}) to blazing top speed (${minPace})`);
 
-  // Clear 6 steps cleanly: each consecutive good move speeds you up (lower frame pace)!
+  // Clear 12 steps cleanly: each consecutive good move speeds you up all the way to top speed!
   const rows = e.symbols.addr('mg_slalom_row');
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 12; i++) {
     while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
     e.write8(rows + 1, CONE_NONE);
     const prevPace = e.v('mg_slalom_pace');
     e.tap(i & 1 ? 'RIGHT' : 'LEFT');
     assert.equal(e.v('mg_slalom_streak'), i + 1);
-    assert.ok(e.v('mg_slalom_pace') < prevPace, `clean move ${i + 1} sped up (${prevPace} -> ${e.v('mg_slalom_pace')})`);
+    assert.ok(e.v('mg_slalom_pace') <= prevPace, `clean move ${i + 1} did not slow down (${prevPace} -> ${e.v('mg_slalom_pace')})`);
   }
   const fastPace = e.v('mg_slalom_pace');
-  assert.ok(fastPace < startPace, `built speed after 6 clean moves (${startPace} -> ${fastPace})`);
+  assert.equal(fastPace, minPace, `reached full top speed after 12 clean moves (${startPace} -> ${fastPace})`);
+  assert.ok(startPace >= fastPace * 6, `top speed is at least 6x starting speed (${startPace} -> ${fastPace})`);
 
   // Now bonk a cone: resets streak and speed back to slow, stumbles, and adds ZERO time penalty!
   while (e.v('mg_slalom_step_cd') > 0) e.idle(1);
@@ -214,7 +216,7 @@ test('Solo 40m medals (GOLD / SILVER / BRONZE) and 1v1 VS CPU head-to-head race'
   assert.equal(vs.v('mg_vs'), 1);
   assert.equal(vs.v('mg_slalom_px', 'i16'), 40, 'VS YOU starts on left track (x=40)');
   assert.equal(vs.v('mg_slalom_cx', 'i16'), 96, 'VS CPU starts on right track (x=96)');
-  vs.idle(22);  // let CPU take its first step so both racers are moving!
+  vs.idle(26);  // let CPU take its first step so both racers are moving!
   assert.ok(vs.v('mg_slalom_cdist') >= 1, 'CPU racer advances down right track');
   matchGolden(vs, 'slalom-vs-live');
 
