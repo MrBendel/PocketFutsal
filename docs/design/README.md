@@ -65,6 +65,12 @@ did three things by context, hidden timings, and shots whose spread was luck.
   before, the ball lost 17 ticks after winning it (median); 20-3 with a 60-tick
   stand-off at kickoffs instead; 20-11 with the kick back (more of the ball to the reds:
   they kick off as often, and keep it), held 35.
+- **The pace is the reds' skill** (still "getting my butt kicked" on Casual): against
+  you, `ai_react`, `ai_chase`, `ai_grace` and a wider spray for their shots by
+  `fs_pace` (README, "Main menu"). A slower scripted human (build/scratch/fsnovice.mjs:
+  its input changes every 8 frames, it runs at goal and shoots inside 80 px, four
+  seeds) on Casual: 18-17 before, 20-7 after; Normal 20-13; Expert 16-16. Reacting
+  every 14 frames and shooting inside 60 px, on Casual: 20-13 before, 20-12 after.
 
 Not done: the stadium and scoreboard behind the far goal went with the old view.
 

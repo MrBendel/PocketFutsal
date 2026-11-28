@@ -23,8 +23,11 @@ plays your side with your buttons, to watch how fair the match is.
 Futsal defaults to **Casual: 75%** of the original match speed. **Normal: 87.5%**
 is the middle setting; **Expert: 100%** preserves the original pace. This scales
 players, the ball, action windows and animations together, giving more time to
-read passes and react without changing the physical relationships or AI tactics.
-These are pace settings, independent of future AI skill tiers. Quick A/B taps
+read passes and react. When you play, the setting is also the reds' skill: on Casual
+a red in range waits longest before sliding at you (1 tick in 32 against 1 in 8 on
+Normal and 1 in 4 on Expert), chases your carrier slower than you run (20 to your 22;
+23 and 24 on the others), shoots twice as wide (Normal half as much again, Expert
+true), and gives you a second after a kickoff's kick (40 and 30 ticks on the others). Quick A/B taps
 and their aim are buffered across held simulation frames; pause stays immediate.
 
 Futsal is an arcade prototype: two outfield players per team, no goalkeepers
